@@ -1,0 +1,83 @@
+JSOS - Spatial Operating System for Smart Glasses
+JSOS Core / JSOS HUD for OpenClaw and Rokid glasses
+
+COPYRIGHT AND MODIFICATION NOTICE
+
+JSOS is Whatsskill's modified fork and rebrand of the upstream Clawsses Android glasses project:
+https://github.com/dweddepohl/clawsses
+
+Original copyright:
+Copyright (C) 2026 Pohlster BV and original contributors.
+
+JSOS modifications:
+Modified by Whatsskill, 2026.
+GitHub: https://github.com/IWhatsskill
+
+The JSOS names identify Whatsskill's modified version:
+- JSOS - Spatial Operating System for Smart Glasses
+- JSOS Core
+- JSOS HUD
+
+No upstream endorsement or affiliation is implied unless stated separately.
+
+Major JSOS modifications include:
+- Project, package, app-label, theme, preference, and launcher-icon rebrand to JSOS / JSOS Core / JSOS HUD.
+- Complete visual redesign of JSOS Core and JSOS HUD for everyday smart-glasses use.
+- OpenClaw Gateway protocol version 4 support.
+- Rokid glasses HUD ghosting mitigation with tested safe-zone placement.
+- Redesigned JSOS HUD layout, display modes, menu behavior, status line, and voice/live indicators.
+- Reading-first HUD behavior where the bottom menu stays hidden while content is being read and appears only when needed.
+- OpenAI Realtime speech-to-text support with Android SpeechRecognizer fallback.
+- ElevenLabs TTS routing adjustments for glasses audio playback.
+- Rokid AI scene overlay suppression during voice input.
+- Phone-to-glasses workflow for bundled HUD APK installation and daily JSOS/OpenClaw use.
+
+LICENSE
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+When upstream-derived or core files are changed:
+- Keep existing copyright and license notices intact.
+- Record material JSOS changes in this file.
+- Keep the modified work under AGPL-3.0-or-later unless a separate valid license applies.
+- If distributing APKs or providing network interaction with the modified version, make the corresponding source available as required by AGPL-3.0.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+COMMERCIAL / CLOSED-SOURCE USE
+
+The upstream Clawsses project states that commercial use in closed-source
+products requires a separate commercial license from the upstream rights
+holder. This JSOS fork does not grant such a license.
+
+THIRD-PARTY COMPONENTS
+
+This software uses the Rokid CXR SDK, which is proprietary software provided
+by Rokid Corporation under its own license terms. The CXR SDK is not covered
+by the AGPL-3.0 license of this project and is not redistributed as part of
+the source code. Users must obtain the SDK separately from Rokid.
+
+Open-source dependencies include:
+
+- OkHttp - Copyright Square, Inc.
+- Retrofit - Copyright Square, Inc.
+- Gson - Copyright Google LLC
+- AndroidX / Jetpack libraries - Copyright Android Open Source Project
+- Kotlin Coroutines - Copyright JetBrains s.r.o.
+- dadb - Copyright Mobile.dev
+
+For Apache 2.0 components, see https://www.apache.org/licenses/LICENSE-2.0
+
+Protocol reference:
+
+- OpenClaw - Copyright Peter Steinberger (MIT License)
+  https://github.com/openclaw/openclaw

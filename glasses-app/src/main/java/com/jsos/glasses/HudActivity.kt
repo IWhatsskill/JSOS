@@ -1,0 +1,1711 @@
+package com.jsos.glasses
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Bundle
+import android.util.Base64
+import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.*
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import com.jsos.glasses.camera.CameraCapture
+import com.jsos.glasses.camera.PhotoCaptureState
+import com.jsos.glasses.input.GestureHandler
+import com.jsos.glasses.input.GestureHandler.Gesture
+import com.jsos.glasses.service.PhoneConnectionService
+import com.jsos.glasses.ui.AgentState
+import com.jsos.glasses.ui.ChatFocusArea
+import com.jsos.glasses.ui.ChatHudState
+import com.jsos.glasses.ui.DisplayMessage
+import com.jsos.glasses.ui.HudDisplaySize
+import com.jsos.glasses.ui.HudPosition
+import com.jsos.glasses.ui.HudScreen
+import com.jsos.glasses.ui.InputActionItem
+import com.jsos.glasses.ui.MenuBarItem
+import com.jsos.glasses.ui.MoreMenuItem
+import com.jsos.glasses.ui.SessionPickerInfo
+import com.jsos.glasses.ui.MAX_PHOTOS
+import com.jsos.glasses.ui.SLASH_COMMANDS
+import com.jsos.glasses.ui.VoiceInputState
+import com.jsos.glasses.ui.RecognitionMode
+import com.jsos.glasses.ui.VoiceSendMode
+import com.jsos.glasses.ui.theme.GlassesHudTheme
+import com.jsos.glasses.voice.GlassesVoiceHandler
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+import android.os.BatteryManager
+import android.os.Build
+import com.jsos.glasses.BuildConfig
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class HudActivity : ComponentActivity() {
+
+    companion object {
+        val DEBUG_MODE = BuildConfig.DEBUG && isEmulator()
+
+        const val DEBUG_HOST = "10.0.2.2"
+        const val DEBUG_PORT = 8081
+        private const val CAMERA_PERMISSION_REQUEST = 1001
+        private const val CHUNK_MESSAGE_TYPE = "chunk_part"
+        private const val CHUNK_TIMEOUT_MS = 30_000L
+
+        /** Sentinel key for the "New Session" entry in the session picker. */
+        const val NEW_SESSION_KEY = "__new_session__"
+
+        private fun isEmulator(): Boolean {
+            return (Build.FINGERPRINT.contains("generic")
+                    || Build.FINGERPRINT.contains("emulator")
+                    || Build.MODEL.contains("Emulator")
+                    || Build.MODEL.contains("Android SDK built for")
+                    || Build.MODEL.contains("sdk_gphone")
+                    || Build.MANUFACTURER.contains("Genymotion")
+                    || Build.HARDWARE.contains("goldfish")
+                    || Build.HARDWARE.contains("ranchu")
+                    || Build.PRODUCT.contains("sdk")
+                    || Build.PRODUCT.contains("emulator"))
+        }
+    }
+
+    private val hudState = MutableStateFlow(ChatHudState())
+    private lateinit var gestureHandler: GestureHandler
+    private lateinit var phoneConnection: PhoneConnectionService
+    private lateinit var voiceHandler: GlassesVoiceHandler
+    private lateinit var cameraCapture: CameraCapture
+
+    // Thumbnails to attach to the next user message echo from the server
+
+    // Coroutine to clear newPrependCount after fade-in animations complete
+    private var clearPrependJob: Job? = null
+
+    // Debug keyboard input mode
+    private var isCapturingKeyboardInput = false
+    private var keyboardInputBuffer = StringBuilder()
+
+    // Wake signal handling
+    private var clearWakeNotificationJob: Job? = null
+
+    private data class PendingChunkedMessage(
+        val total: Int,
+        val originalType: String,
+        val createdAtMs: Long,
+        val chunks: MutableMap<Int, String> = mutableMapOf()
+    )
+
+    private val pendingChunkedMessages = mutableMapOf<String, PendingChunkedMessage>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Restore saved HUD preferences (font size, screen position, voice send mode)
+        val (savedPosition, savedDisplaySize, savedVoiceSendMode) = loadHudPreferences()
+        hudState.value = hudState.value.copy(
+            hudPosition = savedPosition,
+            displaySize = savedDisplaySize,
+            voiceSendMode = savedVoiceSendMode
+        )
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        gestureHandler = GestureHandler { gesture ->
+            handleGesture(gesture)
+        }
+
+        phoneConnection = PhoneConnectionService(
+            context = this,
+            onMessageReceived = { message -> handlePhoneMessage(message) },
+            debugMode = DEBUG_MODE,
+            debugHost = DEBUG_HOST,
+            debugPort = DEBUG_PORT
+        )
+
+        Log.i(GlassesApp.TAG, "HudActivity created, debugMode=$DEBUG_MODE")
+
+        voiceHandler = GlassesVoiceHandler()
+        voiceHandler.sendToPhone = { message -> phoneConnection.sendToPhone(message) }
+        voiceHandler.initialize()
+
+        cameraCapture = CameraCapture(this)
+
+        // Observe voice state using atomic update to prevent race with stageVoiceText
+        lifecycleScope.launch {
+            voiceHandler.voiceState.collect { voiceState ->
+                // Map GlassesVoiceHandler mode to UI mode
+                fun mapMode(mode: GlassesVoiceHandler.RecognitionMode): RecognitionMode {
+                    return when (mode) {
+                        GlassesVoiceHandler.RecognitionMode.OPENAI -> RecognitionMode.OPENAI
+                        GlassesVoiceHandler.RecognitionMode.DEVICE -> RecognitionMode.DEVICE
+                    }
+                }
+
+                val newVoiceState = when (voiceState) {
+                    is GlassesVoiceHandler.VoiceState.Idle -> VoiceInputState.Idle
+                    is GlassesVoiceHandler.VoiceState.Listening -> VoiceInputState.Listening(mapMode(voiceState.mode))
+                    is GlassesVoiceHandler.VoiceState.Recognizing -> VoiceInputState.Recognizing(mapMode(voiceState.mode))
+                    is GlassesVoiceHandler.VoiceState.Processing -> VoiceInputState.Processing(mapMode(voiceState.mode))
+                    is GlassesVoiceHandler.VoiceState.Error -> VoiceInputState.Error(voiceState.message)
+                }
+                val newVoiceText = when (voiceState) {
+                    is GlassesVoiceHandler.VoiceState.Recognizing -> voiceState.partialText
+                    else -> ""
+                }
+                // Use atomic update to avoid overwriting concurrent state changes
+                // Don't force staging area open — the SDK AI scene shows recognized text.
+                // Staging area opens when voice_result arrives (stageVoiceText).
+                // If staging is already open (from previous input), the cursor animation
+                // still shows via the Processing voice state in HudScreen.
+                hudState.update { current ->
+                    current.copy(
+                        voiceState = newVoiceState,
+                        voiceText = newVoiceText
+                    )
+                }
+            }
+        }
+
+        // Observe camera capture state
+        lifecycleScope.launch {
+            cameraCapture.state.collect { photoState ->
+                when (photoState) {
+                    is PhotoCaptureState.Captured -> {
+                        val current = hudState.value
+                        if (current.photoThumbnails.size < MAX_PHOTOS) {
+                            hudState.value = current.copy(
+                                photoThumbnails = current.photoThumbnails + photoState.thumbnail
+                            )
+                        } else {
+                            Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring capture")
+                        }
+                    }
+                    is PhotoCaptureState.Error -> {
+                        Log.e(GlassesApp.TAG, "Photo capture error (redacted)")
+                        lifecycleScope.launch {
+                            delay(3000)
+                            cameraCapture.clearPhoto()
+                        }
+                    }
+                    is PhotoCaptureState.Idle -> { /* no-op for list-based photos */ }
+                    is PhotoCaptureState.Capturing -> { /* capture in progress */ }
+                }
+            }
+        }
+
+        setContent {
+            GlassesHudTheme {
+                val state by hudState.collectAsState()
+                HudScreen(
+                    state = state,
+                    onTap = { handleGesture(Gesture.TAP) },
+                    onDoubleTap = { handleGesture(Gesture.DOUBLE_TAP) },
+                    onLongPress = { handleGesture(Gesture.LONG_PRESS) },
+                    onScrolledToEndChanged = { atEnd ->
+                        val current = hudState.value
+                        if (current.isScrolledToEnd != atEnd) {
+                            hudState.value = current.copy(isScrolledToEnd = atEnd)
+                        }
+                    }
+                )
+            }
+        }
+
+        lifecycleScope.launch {
+            phoneConnection.startListening()
+        }
+
+        // Observe connection state and request current state when phone connects.
+        // This fires on first connect AND on reconnect (e.g. after glasses app restart,
+        // the phone auto-reconnects and the bridge fires onConnected or we detect
+        // the connection via message receipt / ARTC status).
+        lifecycleScope.launch {
+            phoneConnection.connectionState.collect { state ->
+                val isConnected = state is PhoneConnectionService.ConnectionState.Connected
+                val current = hudState.value
+                if (current.isConnected != isConnected) {
+                    hudState.value = current.copy(isConnected = isConnected)
+                    if (isConnected) {
+                        phoneConnection.sendToPhone("""{"type":"request_state"}""")
+                    }
+                }
+            }
+        }
+
+        // Poll battery level every 5 seconds (reads cached kernel value, negligible cost)
+        lifecycleScope.launch {
+            val batteryManager = getSystemService(BATTERY_SERVICE) as? BatteryManager
+            while (true) {
+                val level = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    ?.takeIf { it in 0..100 }
+                val charging = batteryManager?.isCharging == true
+                val current = hudState.value
+                if (current.batteryLevel != level || current.batteryCharging != charging) {
+                    hudState.value = current.copy(batteryLevel = level, batteryCharging = charging)
+                }
+                delay(5_000)
+            }
+        }
+
+        // Update current time every minute (HH:MM, 24-hour format)
+        lifecycleScope.launch {
+            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            while (true) {
+                val time = timeFormat.format(Date())
+                val current = hudState.value
+                if (current.currentTime != time) {
+                    hudState.value = current.copy(currentTime = time)
+                }
+                // Calculate delay until next minute boundary for precise updates
+                val now = System.currentTimeMillis()
+                val delayMs = 60_000 - (now % 60_000)
+                delay(delayMs)
+            }
+        }
+    }
+
+    override fun onTouchEvent(event: MotionEvent?): Boolean {
+        event?.let { gestureHandler.onTouchEvent(it) }
+        return super.onTouchEvent(event)
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent?): Boolean {
+        event?.let {
+            if (gestureHandler.onTouchEvent(it)) {
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // If capturing keyboard input for simulated voice, handle specially
+        if (isCapturingKeyboardInput) {
+            return handleKeyboardCapture(keyCode, event)
+        }
+
+        if (event?.repeatCount ?: 0 > 0) return true
+
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_VOLUME_UP -> {
+                handleGesture(Gesture.SWIPE_FORWARD)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                handleGesture(Gesture.SWIPE_BACKWARD)
+                return true
+            }
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> {
+                handleGesture(Gesture.TAP)
+                return true
+            }
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
+                handleGesture(Gesture.DOUBLE_TAP)
+                return true
+            }
+            KeyEvent.KEYCODE_M, KeyEvent.KEYCODE_DEL -> {
+                handleGesture(Gesture.DOUBLE_TAP)
+                return true
+            }
+            else -> {
+                if (DEBUG_MODE) {
+                    val char = event?.unicodeChar?.toChar()
+                    if (char != null && char.code > 0 && !char.isISOControl()) {
+                        startKeyboardCapture(char)
+                        return true
+                    }
+                }
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    private fun startKeyboardCapture(initialChar: Char? = null) {
+        isCapturingKeyboardInput = true
+        keyboardInputBuffer.clear()
+        if (initialChar != null) {
+            keyboardInputBuffer.append(initialChar)
+        }
+        hudState.value = hudState.value.copy(
+            voiceState = if (initialChar != null) VoiceInputState.Recognizing() else VoiceInputState.Listening(),
+            voiceText = initialChar?.toString() ?: ""
+        )
+    }
+
+    private fun handleKeyboardCapture(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_ENTER -> {
+                val text = keyboardInputBuffer.toString().trim()
+                isCapturingKeyboardInput = false
+                keyboardInputBuffer.clear()
+                if (text.isNotEmpty()) {
+                    voiceHandler.simulateVoiceInput(text) { result ->
+                        handleVoiceResult(result)
+                    }
+                } else {
+                    hudState.value = hudState.value.copy(
+                        voiceState = VoiceInputState.Idle,
+                        voiceText = ""
+                    )
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BACK -> {
+                isCapturingKeyboardInput = false
+                keyboardInputBuffer.clear()
+                hudState.value = hudState.value.copy(
+                    voiceState = VoiceInputState.Idle,
+                    voiceText = ""
+                )
+                return true
+            }
+            KeyEvent.KEYCODE_DEL -> {
+                if (keyboardInputBuffer.isNotEmpty()) {
+                    keyboardInputBuffer.deleteCharAt(keyboardInputBuffer.length - 1)
+                    updateKeyboardCaptureDisplay()
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_SPACE -> {
+                keyboardInputBuffer.append(' ')
+                updateKeyboardCaptureDisplay()
+                return true
+            }
+            else -> {
+                val char = event?.unicodeChar?.toChar()
+                if (char != null && char.code > 0 && !char.isISOControl()) {
+                    keyboardInputBuffer.append(char)
+                    updateKeyboardCaptureDisplay()
+                    return true
+                }
+            }
+        }
+        return true
+    }
+
+    private fun updateKeyboardCaptureDisplay() {
+        val text = keyboardInputBuffer.toString()
+        hudState.value = hudState.value.copy(
+            voiceState = if (text.isEmpty()) VoiceInputState.Listening() else VoiceInputState.Recognizing(),
+            voiceText = text
+        )
+    }
+
+    // ============== Simplified 3-Area Gesture Handling ==============
+
+    private fun handleGesture(gesture: Gesture) {
+        val current = hudState.value
+        val isVoiceActive = voiceHandler.isListening()
+
+        Log.d(GlassesApp.TAG, "Gesture: $gesture, Area: ${current.focusedArea}")
+
+        // If overlays are open, handle gestures for them
+        if (current.showExitConfirm) {
+            handleExitConfirmGesture(gesture)
+            return
+        }
+        if (current.showSlashMenu) {
+            handleSlashMenuGesture(gesture)
+            return
+        }
+        if (current.showMoreMenu) {
+            handleMoreMenuGesture(gesture)
+            return
+        }
+        if (current.showSessionPicker) {
+            handleSessionPickerGesture(gesture)
+            return
+        }
+
+        // If voice is active, TAP cancels
+        if (isVoiceActive && gesture == Gesture.TAP) {
+            voiceHandler.cancel()
+            return
+        }
+
+        // Route by focused area
+        when (current.focusedArea) {
+            ChatFocusArea.CONTENT -> handleContentGesture(gesture)
+            ChatFocusArea.INPUT -> handleInputGesture(gesture)
+            ChatFocusArea.MENU -> handleMenuGesture(gesture)
+        }
+    }
+
+    // CONTENT area gestures
+    private fun handleContentGesture(gesture: Gesture) {
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> scrollUp()
+            Gesture.SWIPE_BACKWARD -> {
+                val current = hudState.value
+                val maxScroll = maxOf(0, current.messages.size - 1)
+                if (current.scrollPosition >= maxScroll && current.isScrolledToEnd) {
+                    // Push through: CONTENT → INPUT (if staging or photos) → MENU
+                    if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
+                        // Default focus on last visible item in combined row
+                        val lastIndex = if (current.stagingText.isNotEmpty()) {
+                            current.photoThumbnails.size + 1  // Send button
+                        } else {
+                            maxOf(0, current.photoThumbnails.size - 1)  // last photo
+                        }
+                        hudState.value = current.copy(
+                            focusedArea = ChatFocusArea.INPUT,
+                            inputActionIndex = lastIndex
+                        )
+                    } else {
+                        hudState.value = current.copy(
+                            focusedArea = ChatFocusArea.MENU,
+                            menuBarIndex = 0
+                        )
+                    }
+                } else if (current.scrollPosition >= maxScroll) {
+                    scrollToBottom()
+                } else {
+                    scrollDown()
+                }
+            }
+            Gesture.TAP -> scrollToBottom()
+            Gesture.DOUBLE_TAP -> {
+                val current = hudState.value
+                if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
+                    val lastIndex = if (current.stagingText.isNotEmpty()) {
+                        current.photoThumbnails.size + 1  // Send button
+                    } else {
+                        maxOf(0, current.photoThumbnails.size - 1)  // last photo
+                    }
+                    hudState.value = current.copy(
+                        focusedArea = ChatFocusArea.INPUT,
+                        inputActionIndex = lastIndex
+                    )
+                } else {
+                    hudState.value = current.copy(
+                        focusedArea = ChatFocusArea.MENU,
+                        menuBarIndex = 0
+                    )
+                }
+            }
+            Gesture.LONG_PRESS -> startVoice()
+        }
+    }
+
+    // INPUT staging area gestures
+    // Combined row: [photo0..N-1, CLEAR, SEND] when text is staged
+    // Combined row: [photo0..N-1] when only photos (buttons hidden)
+    // inputActionIndex maps into this combined row.
+    private fun handleInputGesture(gesture: Gesture) {
+        val current = hudState.value
+        val photoCount = current.photoThumbnails.size
+        val hasText = current.stagingText.isNotEmpty()
+        val clearIndex = photoCount       // CLEAR is right after photos
+        val sendIndex = photoCount + 1    // SEND is rightmost
+        val totalItems = if (hasText) photoCount + 2 else photoCount  // buttons only when text staged
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                if (current.inputActionIndex == 0) {
+                    // Push through: INPUT → CONTENT
+                    hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+                } else {
+                    hudState.value = current.copy(inputActionIndex = current.inputActionIndex - 1)
+                }
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                if (current.inputActionIndex >= totalItems - 1) {
+                    // Push through: INPUT → MENU
+                    hudState.value = current.copy(
+                        focusedArea = ChatFocusArea.MENU,
+                        menuBarIndex = 0
+                    )
+                } else {
+                    hudState.value = current.copy(inputActionIndex = current.inputActionIndex + 1)
+                }
+            }
+            Gesture.TAP -> {
+                val idx = current.inputActionIndex
+                when {
+                    idx < photoCount -> {
+                        // Tap on photo — remove it
+                        val newThumbnails = current.photoThumbnails.toMutableList().apply { removeAt(idx) }
+                        val newPhotoCount = newThumbnails.size
+                        // After removal, keep focus on same position but clamp
+                        val newIndex = if (newThumbnails.isEmpty() && !current.showInputStaging) {
+                            // No photos left and no staging text — go to MENU
+                            hudState.value = current.copy(
+                                photoThumbnails = emptyList(),
+                                inputActionIndex = 0,
+                                focusedArea = ChatFocusArea.MENU,
+                                menuBarIndex = 0
+                            )
+                            phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
+                            return
+                        } else if (hasText) {
+                            // Text staged: buttons visible, move focus to Send
+                            newPhotoCount + 1
+                        } else {
+                            // No text: buttons hidden, clamp to last photo
+                            maxOf(0, newPhotoCount - 1)
+                        }
+                        hudState.value = current.copy(
+                            photoThumbnails = newThumbnails,
+                            inputActionIndex = newIndex
+                        )
+                        phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
+                    }
+                    idx == clearIndex -> {
+                        // Clear staged text and dismiss
+                        hudState.value = current.copy(
+                            showInputStaging = false,
+                            stagingText = "",
+                            inputActionIndex = 0,
+                            focusedArea = ChatFocusArea.CONTENT
+                        )
+                    }
+                    idx == sendIndex -> {
+                        // Submit the staged text and dismiss
+                        val text = current.stagingText.trim()
+                        if (text.isNotEmpty()) {
+                            hudState.value = current.copy(inputText = text)
+                            submitInput()
+                        }
+                        hudState.value = hudState.value.copy(
+                            showInputStaging = false,
+                            stagingText = "",
+                            inputActionIndex = 0
+                        )
+                    }
+                }
+            }
+            Gesture.DOUBLE_TAP -> {
+                // Go back to CONTENT
+                hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+            }
+            Gesture.LONG_PRESS -> startVoice()
+        }
+    }
+
+    // MENU area gestures
+    private fun handleMenuGesture(gesture: Gesture) {
+        val current = hudState.value
+        val items = MenuBarItem.entries
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                if (current.menuBarIndex == 0) {
+                    // Push through: MENU → INPUT (if staging or photos) → CONTENT
+                    if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
+                        // Focus on last visible item in combined row
+                        val lastIndex = if (current.stagingText.isNotEmpty()) {
+                            current.photoThumbnails.size + 1  // Send button
+                        } else {
+                            maxOf(0, current.photoThumbnails.size - 1)  // last photo
+                        }
+                        hudState.value = current.copy(
+                            focusedArea = ChatFocusArea.INPUT,
+                            inputActionIndex = lastIndex
+                        )
+                    } else {
+                        hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+                    }
+                } else {
+                    hudState.value = current.copy(menuBarIndex = current.menuBarIndex - 1)
+                }
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                // Next menu item
+                val newIndex = minOf(items.size - 1, current.menuBarIndex + 1)
+                hudState.value = current.copy(menuBarIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                // Execute selected menu item
+                executeMenuItem(items[current.menuBarIndex])
+            }
+            Gesture.DOUBLE_TAP -> {
+                // Show exit confirmation dialog
+                hudState.value = current.copy(showExitConfirm = true)
+            }
+            Gesture.LONG_PRESS -> startVoice()
+        }
+    }
+
+    // ============== Exit Confirmation Gestures ==============
+
+    private fun handleExitConfirmGesture(gesture: Gesture) {
+        val current = hudState.value
+        when (gesture) {
+            Gesture.DOUBLE_TAP -> {
+                // Second double-tap confirms exit
+                finishAffinity()
+            }
+            else -> {
+                // Any other input dismisses the dialog
+                hudState.value = current.copy(showExitConfirm = false)
+            }
+        }
+    }
+
+    // ============== Menu Item Actions ==============
+
+    private fun executeMenuItem(item: MenuBarItem) {
+        val current = hudState.value
+
+        when (item) {
+            MenuBarItem.PHOTO -> {
+                if (current.photoThumbnails.size >= MAX_PHOTOS) {
+                    Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring photo request")
+                } else if (DEBUG_MODE) {
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        cameraCapture.capture()
+                    } else {
+                        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
+                    }
+                } else {
+                    phoneConnection.sendToPhone("""{"type":"take_photo"}""")
+                    Log.d(GlassesApp.TAG, "Requested photo capture from phone")
+                }
+            }
+            MenuBarItem.SESSION -> {
+                requestSessionList()
+            }
+            MenuBarItem.SIZE -> {
+                val nextPosition = when (current.hudPosition) {
+                    HudPosition.FULL -> HudPosition.BOTTOM_HALF
+                    HudPosition.BOTTOM_HALF -> HudPosition.TOP_HALF
+                    HudPosition.TOP_HALF -> HudPosition.FULL
+                }
+                hudState.value = current.copy(
+                    hudPosition = nextPosition,
+                    scrollTrigger = current.scrollTrigger + 1
+                )
+            }
+            MenuBarItem.MORE -> {
+                hudState.value = current.copy(
+                    showMoreMenu = true,
+                    selectedMoreIndex = 0
+                )
+            }
+        }
+    }
+
+    // ============== Submit Input ==============
+
+    private fun submitInput() {
+        val current = hudState.value
+        val text = current.inputText.trim()
+        if (text.isEmpty()) return
+
+        val thumbnails = current.photoThumbnails.toList()
+        Log.d(GlassesApp.TAG, "submitInput: textLength=${text.length}, photos=${thumbnails.size}, focusArea=${current.focusedArea}")
+
+        // Add user message to display immediately (optimistic update)
+        val userMsg = DisplayMessage(
+            id = "local-${System.currentTimeMillis()}",
+            role = "user",
+            content = text,
+            isStreaming = false,
+            thumbnails = thumbnails
+        )
+        val messages = current.messages.toMutableList()
+        messages.add(userMsg)
+
+        // Send user_input to phone
+        val json = JSONObject().apply {
+            put("type", "user_input")
+            put("text", text)
+        }
+        phoneConnection.sendToPhone(json.toString())
+
+        // Tell phone to clear its photos too
+        if (thumbnails.isNotEmpty()) {
+            phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
+        }
+        hudState.value = current.copy(
+            messages = messages,
+            inputText = "",
+            photoThumbnails = emptyList(),
+            focusedArea = ChatFocusArea.CONTENT,
+            scrollPosition = messages.size - 1,
+            scrollTrigger = current.scrollTrigger + 1,
+            showInputStaging = false,
+            stagingText = "",
+            inputActionIndex = 0
+        )
+    }
+
+    // ============== Session Picker Gestures ==============
+
+    private fun handleSessionPickerGesture(gesture: Gesture) {
+        val current = hudState.value
+        val totalOptions = current.availableSessions.size
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = maxOf(0, current.selectedSessionIndex - 1)
+                hudState.value = current.copy(selectedSessionIndex = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = minOf(totalOptions - 1, current.selectedSessionIndex + 1)
+                hudState.value = current.copy(selectedSessionIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                if (totalOptions > 0) {
+                    val selected = current.availableSessions[current.selectedSessionIndex]
+                    if (selected.key == NEW_SESSION_KEY) {
+                        createNewSession()
+                        hudState.value = current.copy(
+                            showSessionPicker = false,
+                            currentSessionName = null
+                        )
+                    } else {
+                        switchToSession(selected.key)
+                        hudState.value = current.copy(
+                            showSessionPicker = false,
+                            currentSessionName = selected.name
+                        )
+                    }
+                } else {
+                    hudState.value = current.copy(showSessionPicker = false)
+                }
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(showSessionPicker = false)
+            }
+            Gesture.LONG_PRESS -> {}
+        }
+    }
+
+    private fun createNewSession() {
+        phoneConnection.sendToPhone("""{"type":"create_session"}""")
+    }
+
+    // ============== More Menu Gestures ==============
+
+    private fun handleMoreMenuGesture(gesture: Gesture) {
+        val current = hudState.value
+        val items = MoreMenuItem.entries
+        val itemCount = items.size
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = if (current.selectedMoreIndex > 0) current.selectedMoreIndex - 1 else itemCount - 1
+                hudState.value = current.copy(selectedMoreIndex = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = if (current.selectedMoreIndex < itemCount - 1) current.selectedMoreIndex + 1 else 0
+                hudState.value = current.copy(selectedMoreIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                val selectedItem = items[current.selectedMoreIndex]
+                // Close more menu first, then execute (which may open a submenu)
+                hudState.value = current.copy(
+                    showMoreMenu = false,
+                    selectedMoreIndex = 0
+                )
+                executeMoreMenuItem(selectedItem)
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(
+                    showMoreMenu = false,
+                    selectedMoreIndex = 0
+                )
+            }
+            Gesture.LONG_PRESS -> {}
+        }
+    }
+
+    private fun executeMoreMenuItem(item: MoreMenuItem) {
+        val current = hudState.value
+
+        if (item.displaySize != null) {
+            hudState.value = current.copy(
+                displaySize = item.displaySize,
+                scrollTrigger = current.scrollTrigger + 1
+            )
+            return
+        }
+
+        when (item) {
+            MoreMenuItem.VOICE_SEND -> {
+                val newMode = when (current.voiceSendMode) {
+                    VoiceSendMode.ASK -> VoiceSendMode.AUTO
+                    VoiceSendMode.AUTO -> VoiceSendMode.ASK
+                }
+                hudState.value = current.copy(voiceSendMode = newMode)
+                Log.d(GlassesApp.TAG, "Voice send mode: $newMode")
+            }
+            MoreMenuItem.SLASH -> {
+                hudState.value = current.copy(
+                    showMoreMenu = false,
+                    showSlashMenu = true,
+                    selectedSlashIndex = 0
+                )
+            }
+            MoreMenuItem.VOICE -> {
+                // Toggle TTS and notify phone
+                val newEnabled = !current.ttsEnabled
+                hudState.value = current.copy(ttsEnabled = newEnabled)
+                val json = JSONObject().apply {
+                    put("type", "tts_toggle")
+                    put("enabled", newEnabled)
+                }
+                phoneConnection.sendToPhone(json.toString())
+                Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
+            }
+            else -> {}
+        }
+    }
+
+    private fun appendToInput(char: String) {
+        val current = hudState.value
+        hudState.value = current.copy(inputText = current.inputText + char)
+    }
+
+    // ============== Slash Command Menu Gestures ==============
+
+    private fun handleSlashMenuGesture(gesture: Gesture) {
+        val current = hudState.value
+        val commands = SLASH_COMMANDS
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = maxOf(0, current.selectedSlashIndex - 1)
+                hudState.value = current.copy(selectedSlashIndex = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = minOf(commands.size - 1, current.selectedSlashIndex + 1)
+                hudState.value = current.copy(selectedSlashIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                val item = commands[current.selectedSlashIndex]
+                // Send slash command to phone
+                val json = JSONObject().apply {
+                    put("type", "slash_command")
+                    put("command", item.command)
+                }
+                phoneConnection.sendToPhone(json.toString())
+                hudState.value = current.copy(
+                    showSlashMenu = false,
+                    selectedSlashIndex = 0
+                )
+                Log.d(GlassesApp.TAG, "Slash command: ${item.command}")
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(
+                    showSlashMenu = false,
+                    selectedSlashIndex = 0
+                )
+            }
+            Gesture.LONG_PRESS -> {}
+        }
+    }
+
+    // ============== Scroll Helpers ==============
+
+    private fun scrollToBottom() {
+        val current = hudState.value
+        val lastIndex = maxOf(0, current.messages.size - 1)
+        hudState.value = current.copy(
+            scrollPosition = lastIndex,
+            scrollTrigger = current.scrollTrigger + 1
+        )
+    }
+
+    private fun scrollUp() {
+        val current = hudState.value
+        val newPosition = maxOf(0, current.scrollPosition - 5) // scroll by 5 messages
+        hudState.value = current.copy(scrollPosition = newPosition)
+
+        // If we've scrolled to the top and there might be more history, request it
+        if (newPosition == 0 && current.hasMoreHistory && !current.isLoadingMoreHistory && current.messages.isNotEmpty()) {
+            requestMoreHistory()
+        }
+    }
+
+    private fun requestMoreHistory() {
+        val current = hudState.value
+        if (current.isLoadingMoreHistory || !current.hasMoreHistory || current.messages.isEmpty()) return
+
+        hudState.value = current.copy(isLoadingMoreHistory = true)
+
+        val json = JSONObject().apply {
+            put("type", "request_more_history")
+            put("currentCount", current.messages.size)
+        }
+        phoneConnection.sendToPhone(json.toString())
+        Log.d(GlassesApp.TAG, "Requesting more history (currentCount=${current.messages.size})")
+    }
+
+    private fun scrollDown() {
+        val current = hudState.value
+        val maxScroll = maxOf(0, current.messages.size - 1)
+        val newPosition = minOf(maxScroll, current.scrollPosition + 5)
+        hudState.value = current.copy(scrollPosition = newPosition)
+    }
+
+    // ============== Voice Recognition ==============
+
+    private fun startVoice() {
+        if (voiceHandler.isListening()) {
+            voiceHandler.cancel()
+        } else {
+            // Don't pass a result callback — voice_result messages from the phone
+            // are handled directly in handlePhoneMessage to avoid the AI key path
+            // issue where onResult is never set because startVoice() isn't called.
+            voiceHandler.startListening { /* handled in handlePhoneMessage */ }
+        }
+    }
+
+    /**
+     * Append voice text to the staging area and show it.
+     * Also clears voice UI state to prevent race condition with voice state collector.
+     */
+    private fun stageVoiceText(text: String) {
+        Log.d(GlassesApp.TAG, "Staging voice text (${text.length} chars)")
+        // Use atomic update to avoid race with concurrent state changes
+        hudState.update { current ->
+            val newStagingText = if (current.stagingText.isEmpty()) {
+                text
+            } else {
+                "${current.stagingText} $text"
+            }
+            current.copy(
+                stagingText = newStagingText,
+                showInputStaging = true,
+                focusedArea = ChatFocusArea.INPUT,
+                inputActionIndex = current.photoThumbnails.size + 1,  // Default to Send
+                scrollTrigger = current.scrollTrigger + 1,
+                voiceState = VoiceInputState.Idle,
+                voiceText = ""
+            )
+        }
+    }
+
+    private fun handleVoiceResult(result: GlassesVoiceHandler.VoiceResult) {
+        // Called from onResult callback (start_voice path) and simulateVoiceInput (keyboard).
+        // For phone-originated voice_result messages, staging is handled in handlePhoneMessage.
+        when (result) {
+            is GlassesVoiceHandler.VoiceResult.Text -> {
+                val text = result.text.trim()
+                if (text.isNotEmpty()) {
+                    stageVoiceText(text)
+                }
+            }
+            is GlassesVoiceHandler.VoiceResult.Command -> {
+                handleVoiceCommand(result.command)
+            }
+            is GlassesVoiceHandler.VoiceResult.Error -> {
+                Log.e(GlassesApp.TAG, "Voice error (redacted)")
+                lifecycleScope.launch {
+                    delay(3000)
+                    val current = hudState.value
+                    if (current.voiceState is VoiceInputState.Error) {
+                        hudState.value = current.copy(
+                            voiceState = VoiceInputState.Idle,
+                            voiceText = ""
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleVoiceCommand(command: String) {
+        when (command) {
+            "scroll up" -> scrollUp()
+            "scroll down" -> scrollDown()
+            "clear" -> {
+                // Clear staging area if visible, otherwise clear inputText
+                val current = hudState.value
+                if (current.showInputStaging) {
+                    hudState.value = current.copy(
+                        showInputStaging = false,
+                        stagingText = "",
+                        inputActionIndex = 0,
+                        focusedArea = ChatFocusArea.CONTENT
+                    )
+                } else {
+                    hudState.value = current.copy(inputText = "")
+                }
+            }
+            "send", "enter" -> {
+                // Submit staging text if visible, otherwise submit inputText
+                val current = hudState.value
+                if (current.showInputStaging && current.stagingText.isNotBlank()) {
+                    hudState.value = current.copy(inputText = current.stagingText.trim())
+                    submitInput()
+                    hudState.value = hudState.value.copy(
+                        showInputStaging = false,
+                        stagingText = "",
+                        inputActionIndex = 0
+                    )
+                } else {
+                    submitInput()
+                }
+            }
+            else -> {
+                // Treat as text input — stage it
+                val text = command.trim()
+                if (text.isNotEmpty()) {
+                    stageVoiceText(text)
+                }
+            }
+        }
+    }
+
+    // ============== Wake Signal Handling ==============
+    // The Rokid micro-LED display is woken from the PHONE side via CXR-M SDK
+    // (setGlassBrightness + setScreenOffTimeout). Android PowerManager on the
+    // glasses does NOT control the hardware display. The glasses side only
+    // handles the notification UI and sends wake_ack back to the phone.
+
+    /**
+     * Show a brief wake notification in the HUD to alert the user
+     * that content is arriving. Auto-dismisses after 2 seconds.
+     */
+    private fun showWakeNotification(reason: String) {
+        clearWakeNotificationJob?.cancel()
+
+        hudState.update { current ->
+            current.copy(
+                showWakeNotification = true,
+                wakeReason = reason
+            )
+        }
+
+        // Auto-dismiss after 2 seconds
+        clearWakeNotificationJob = lifecycleScope.launch {
+            delay(2000)
+            hudState.update { current ->
+                current.copy(
+                    showWakeNotification = false,
+                    wakeReason = null
+                )
+            }
+        }
+    }
+
+    // ============== Phone Communication ==============
+
+    private fun requestSessionList() {
+        phoneConnection.sendToPhone("""{"type":"list_sessions"}""")
+    }
+
+    private fun switchToSession(sessionKey: String) {
+        val json = JSONObject().apply {
+            put("type", "switch_session")
+            put("sessionKey", sessionKey)
+        }
+        phoneConnection.sendToPhone(json.toString())
+    }
+
+    // ============== Phone Message Handling ==============
+
+    private fun handlePhoneMessage(json: String) {
+        try {
+            Log.d(GlassesApp.TAG, "handlePhoneMessage: ${json.length} chars")
+            val msg = JSONObject(json)
+            val type = msg.optString("type", "")
+
+            if (type == CHUNK_MESSAGE_TYPE) {
+                handleChunkPart(msg)
+                return
+            }
+
+            when (type) {
+                "chat_message" -> {
+                    // Complete message (user echo or finished assistant message)
+                    val id = msg.optString("id", "")
+                    val role = msg.optString("role", "assistant")
+                    val content = unwrapContent(msg.optString("content", ""))
+
+                    var current = hudState.value
+                    val messages = current.messages.toMutableList()
+
+                    if (role == "user") {
+                        // Check if submitInput already added this message optimistically
+                        val existingLocal = messages.indexOfLast { it.role == "user" && it.content == content }
+                        if (existingLocal >= 0) {
+                            Log.d(GlassesApp.TAG, "User echo already displayed, skipping duplicate")
+                            // Clear any lingering photos (belt-and-suspenders)
+                            if (current.photoThumbnails.isNotEmpty()) {
+                                hudState.value = current.copy(
+                                    photoThumbnails = emptyList()
+                                )
+                            }
+                            return
+                        }
+                        // Phone-originated user message — grab photos from strip if any
+                        val thumbnails = current.photoThumbnails.toList()
+                        val displayMsg = DisplayMessage(
+                            id = id,
+                            role = role,
+                            content = content,
+                            isStreaming = false,
+                            thumbnails = thumbnails
+                        )
+                        messages.add(displayMsg)
+                        hudState.value = current.copy(
+                            messages = messages,
+                            agentState = AgentState.IDLE,
+                            photoThumbnails = emptyList(),
+                            scrollPosition = messages.size - 1,
+                            scrollTrigger = current.scrollTrigger + 1
+                        )
+                        Log.d(GlassesApp.TAG, "User message received from phone (${content.length} chars, photos=${thumbnails.size})")
+                    } else {
+                        // Assistant message
+                        val existingIndex = messages.indexOfFirst { it.id == id }
+                        val displayMsg = DisplayMessage(
+                            id = id,
+                            role = role,
+                            content = content,
+                            isStreaming = false
+                        )
+
+                        if (existingIndex >= 0) {
+                            messages[existingIndex] = displayMsg
+                        } else {
+                            messages.add(displayMsg)
+                        }
+
+                        hudState.value = current.copy(
+                            messages = messages,
+                            agentState = AgentState.IDLE,
+                            scrollPosition = messages.size - 1,
+                            scrollTrigger = current.scrollTrigger + 1
+                        )
+                        Log.d(GlassesApp.TAG, "Assistant message received (${content.length} chars)")
+                    }
+                }
+
+                "chat_history" -> {
+                    // Parse message list
+                    val messagesArray = msg.optJSONArray("messages")
+                    val isLoadMore = msg.optBoolean("isLoadMore", false)
+                    val hasMore = msg.optBoolean("hasMore", true)
+                    val messages = mutableListOf<DisplayMessage>()
+
+                    if (messagesArray != null) {
+                        for (i in 0 until messagesArray.length()) {
+                            val msgObj = messagesArray.optJSONObject(i) ?: continue
+                            val id = msgObj.optString("id", "")
+                            val role = msgObj.optString("role", "assistant")
+                            val content = unwrapContent(msgObj.optString("content", ""))
+                            messages.add(DisplayMessage(
+                                id = id,
+                                role = role,
+                                content = content,
+                                isStreaming = false
+                            ))
+                        }
+                    }
+
+                    val current = hudState.value
+
+                    if (isLoadMore && current.isLoadingMoreHistory) {
+                        // Load-more response: older messages were prepended by phone.
+                        // Calculate how many were prepended and shift scroll to stay in place.
+                        val oldCount = current.messages.size
+                        val prependedCount = (messages.size - oldCount).coerceAtLeast(0)
+
+                        if (prependedCount == 0) {
+                            // No new messages — beginning of conversation reached
+                            hudState.value = current.copy(
+                                messages = messages,
+                                isLoadingMoreHistory = false,
+                                hasMoreHistory = false,
+                                newPrependCount = 0
+                            )
+                            Log.d(GlassesApp.TAG, "No more history available")
+                        } else {
+                            hudState.value = current.copy(
+                                messages = messages,
+                                scrollPosition = current.scrollPosition + prependedCount,
+                                isLoadingMoreHistory = false,
+                                hasMoreHistory = hasMore,
+                                newPrependCount = prependedCount
+                            )
+                            // Clear fade-in state after animations have had time to play
+                            clearPrependJob?.cancel()
+                            clearPrependJob = lifecycleScope.launch {
+                                delay(5000)
+                                hudState.update { it.copy(newPrependCount = 0) }
+                            }
+                            Log.d(GlassesApp.TAG, "Load-more: prepended $prependedCount messages (total=${messages.size}, hasMore=$hasMore)")
+                        }
+                    } else {
+                        // Normal history load (initial or session switch) — scroll to bottom
+                        hudState.value = current.copy(
+                            messages = messages,
+                            agentState = AgentState.IDLE,
+                            scrollPosition = maxOf(0, messages.size - 1),
+                            scrollTrigger = current.scrollTrigger + 1,
+                            isLoadingMoreHistory = false,
+                            hasMoreHistory = true  // Reset — new session may have more
+                        )
+                        Log.d(GlassesApp.TAG, "Loaded ${messages.size} history messages")
+                    }
+                }
+
+                "agent_thinking" -> {
+                    // Agent acknowledged request, waiting for first chunk
+                    val current = hudState.value
+                    hudState.value = current.copy(agentState = AgentState.THINKING)
+                    Log.d(GlassesApp.TAG, "Agent thinking")
+                }
+
+                "chat_stream" -> {
+                    // Streaming text chunk from agent
+                    val id = msg.optString("id", "")
+                    val chunk = msg.optString("chunk", "")
+
+                    val current = hudState.value
+                    val messages = current.messages.toMutableList()
+
+                    val existingIndex = messages.indexOfFirst { it.id == id }
+                    if (existingIndex >= 0) {
+                        // Append chunk to existing streaming message
+                        val existing = messages[existingIndex]
+                        val newContent = existing.content + chunk
+                        messages[existingIndex] = existing.copy(
+                            content = newContent,
+                            isStreaming = true
+                        )
+                    } else {
+                        // Create new streaming message
+                        messages.add(DisplayMessage(
+                            id = id,
+                            role = "assistant",
+                            content = chunk,
+                            isStreaming = true
+                        ))
+                    }
+
+                    // Auto-scroll to bottom during streaming (unless user scrolled up)
+                    val shouldAutoScroll = current.focusedArea != ChatFocusArea.CONTENT ||
+                        current.scrollPosition >= current.messages.size - 2
+
+                    hudState.value = current.copy(
+                        messages = messages,
+                        agentState = AgentState.STREAMING,
+                        scrollPosition = if (shouldAutoScroll) messages.size - 1 else current.scrollPosition,
+                        scrollTrigger = if (shouldAutoScroll) current.scrollTrigger + 1 else current.scrollTrigger
+                    )
+                }
+
+                "chat_stream_end" -> {
+                    // Streaming complete — unwrap soft line breaks now that full content is available
+                    val id = msg.optString("id", "")
+
+                    val current = hudState.value
+                    val messages = current.messages.toMutableList()
+
+                    val existingIndex = messages.indexOfFirst { it.id == id }
+                    if (existingIndex >= 0) {
+                        val existing = messages[existingIndex]
+                        messages[existingIndex] = existing.copy(
+                            content = unwrapContent(existing.content),
+                            isStreaming = false
+                        )
+                    }
+
+                    hudState.value = current.copy(
+                        messages = messages,
+                        agentState = AgentState.IDLE
+                    )
+
+                    Log.d(GlassesApp.TAG, "Stream ended for $id")
+                }
+
+                "connection_update" -> {
+                    val connected = msg.optBoolean("connected", false)
+                    val sessionKey = msg.optString("sessionId", "")
+                    val sessionName = msg.optString("sessionName", "")
+
+                    val current = hudState.value
+                    val newSessionKey = sessionKey.ifEmpty { current.currentSessionKey }
+                    val newSessionName = sessionName.ifEmpty { current.currentSessionName }
+                    val sessionChanged = newSessionKey != current.currentSessionKey
+                    hudState.value = current.copy(
+                        isConnected = connected,
+                        currentSessionKey = newSessionKey,
+                        currentSessionName = newSessionName,
+                        showSessionPicker = if (sessionChanged) false else current.showSessionPicker
+                    )
+
+                    Log.d(GlassesApp.TAG, "Connection update: connected=$connected, sessionKeyLength=${sessionKey.length}, sessionNameLength=${sessionName.length}")
+                }
+
+                "session_list" -> {
+                    // Session list from phone
+                    val sessionsArray = msg.optJSONArray("sessions")
+                    val currentSessionKey = msg.optString("currentSessionKey", "")
+                    val unreadArray = msg.optJSONArray("unreadSessionKeys")
+                    val unreadKeys = mutableSetOf<String>()
+                    if (unreadArray != null) {
+                        for (i in 0 until unreadArray.length()) {
+                            unreadKeys.add(unreadArray.optString(i, ""))
+                        }
+                    }
+                    val sessions = mutableListOf<SessionPickerInfo>()
+
+                    if (sessionsArray != null) {
+                        for (i in 0 until sessionsArray.length()) {
+                            val sessionObj = sessionsArray.optJSONObject(i)
+                            if (sessionObj != null) {
+                                val key = sessionObj.optString("key", "")
+                                val label = sessionObj.optString("label", "")
+                                val displayName = sessionObj.optString("displayName", "")
+                                val derivedTitle = sessionObj.optString("derivedTitle", "")
+                                val kind = sessionObj.optString("kind", "")
+                                val updatedAt = if (sessionObj.has("updatedAt")) sessionObj.optLong("updatedAt", 0L).takeIf { it > 0 } else null
+                                // Use best available name: label > displayName > derivedTitle > key
+                                val name = label.ifEmpty { displayName.ifEmpty { derivedTitle.ifEmpty { key } } }
+                                sessions.add(SessionPickerInfo(
+                                    key = key,
+                                    name = name,
+                                    kind = kind.ifEmpty { null },
+                                    hasUnread = key in unreadKeys,
+                                    updatedAt = updatedAt
+                                ))
+                            }
+                        }
+                    }
+
+                    // Insert "New Session" as the first option
+                    val sessionsWithNew = listOf(
+                        SessionPickerInfo(
+                            key = NEW_SESSION_KEY,
+                            name = "+ New Session"
+                        )
+                    ) + sessions
+
+                    val current = hudState.value
+                    // Default selection to the current session (offset by 1 for the New Session entry)
+                    val currentIndex = sessionsWithNew.indexOfFirst { it.key == currentSessionKey }
+                        .coerceAtLeast(0)
+                    // Extract the current session's name from the list
+                    val resolvedSessionName = sessions.firstOrNull { it.key == currentSessionKey }?.name
+                        ?: current.currentSessionName
+                    hudState.value = current.copy(
+                        showSessionPicker = true,
+                        availableSessions = sessionsWithNew,
+                        currentSessionKey = currentSessionKey.ifEmpty { current.currentSessionKey },
+                        currentSessionName = resolvedSessionName,
+                        selectedSessionIndex = currentIndex
+                    )
+
+                    Log.d(GlassesApp.TAG, "Sessions: ${sessions.size}, currentSessionKeyLength=${currentSessionKey.length}")
+                }
+
+                "voice_state" -> {
+                    val state = msg.optString("state", "")
+                    val text = msg.optString("text", "")
+                    val mode = if (msg.has("mode")) msg.optString("mode", null) else null
+                    voiceHandler.handleVoiceState(state, text, mode)
+                }
+
+                "voice_result" -> {
+                    val resultType = msg.optString("result_type", "text")
+                    val text = msg.optString("text", "")
+                    // Stage text FIRST, then update voice handler state.
+                    // stageVoiceText atomically updates staging AND clears voice UI,
+                    // preventing a race where the voice state collector overwrites
+                    // the staging text by reading stale state.
+                    when (resultType) {
+                        "text" -> {
+                            val trimmed = text.trim()
+                            if (trimmed.isNotEmpty()) {
+                                if (hudState.value.voiceSendMode == VoiceSendMode.AUTO) {
+                                    hudState.update { current ->
+                                        current.copy(
+                                            inputText = trimmed,
+                                            showInputStaging = false,
+                                            stagingText = "",
+                                            voiceState = VoiceInputState.Idle,
+                                            voiceText = ""
+                                        )
+                                    }
+                                    submitInput()
+                                } else {
+                                    stageVoiceText(trimmed)
+                                }
+                            }
+                        }
+                        "command" -> handleVoiceCommand(text)
+                    }
+                    // Clear callback and ensure voice handler knows we're done
+                    voiceHandler.handleVoiceResult(resultType, text)
+                }
+
+                "photo_result" -> {
+                    val status = msg.optString("status", "")
+                    if (status == "captured") {
+                        val thumbnailBase64 = msg.optString("thumbnail", "")
+                        if (thumbnailBase64.isNotEmpty()) {
+                            val current = hudState.value
+                            if (current.photoThumbnails.size >= MAX_PHOTOS) {
+                                Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring photo_result")
+                            } else {
+                                val bytes = Base64.decode(thumbnailBase64, Base64.DEFAULT)
+                                val thumbnail = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                hudState.value = current.copy(
+                                    photoThumbnails = current.photoThumbnails + thumbnail
+                                )
+                                Log.d(GlassesApp.TAG, "Photo captured, thumbnail added (total: ${current.photoThumbnails.size + 1})")
+                            }
+                        }
+                    } else {
+                        Log.e(GlassesApp.TAG, "Photo capture failed (redacted)")
+                    }
+                }
+
+                "remove_photo" -> {
+                    val all = msg.optBoolean("all", false)
+                    val current = hudState.value
+                    if (all) {
+                        hudState.value = current.copy(
+                            photoThumbnails = emptyList()
+                        )
+                    } else {
+                        val index = msg.optInt("index", -1)
+                        if (index in current.photoThumbnails.indices) {
+                            val updated = current.photoThumbnails.toMutableList().apply { removeAt(index) }
+                            // Clamp inputActionIndex: buttons only exist when text is staged
+                            val maxIndex = if (current.stagingText.isNotEmpty()) {
+                                updated.size + 1  // Send index
+                            } else {
+                                maxOf(0, updated.size - 1)  // last photo index
+                            }
+                            hudState.value = current.copy(
+                                photoThumbnails = updated,
+                                inputActionIndex = minOf(current.inputActionIndex, maxIndex)
+                            )
+                        }
+                    }
+                    Log.d(GlassesApp.TAG, "Photo removed from phone request")
+                }
+
+                "wake_signal" -> {
+                    // Phone is sending a wake signal — display wake is handled by the
+                    // phone via CXR SDK (setGlassBrightness). Glasses side just shows
+                    // the notification and sends ack.
+                    val reason = msg.optString("reason", "")
+                    val bufferedCount = msg.optInt("bufferedCount", 0)
+                    Log.i(GlassesApp.TAG, "Wake signal received: reason=$reason, buffered=$bufferedCount")
+
+                    // Show wake notification briefly
+                    showWakeNotification(reason)
+
+                    // Send acknowledgment back to phone
+                    phoneConnection.sendToPhone("""{"type":"wake_ack","ready":true,"timestamp":${System.currentTimeMillis()}}""")
+                    Log.d(GlassesApp.TAG, "Sent wake_ack to phone")
+                }
+
+                "tts_state" -> {
+                    // TTS state sync from phone
+                    val enabled = msg.optBoolean("enabled", false)
+                    val voiceName = if (msg.has("voiceName") && !msg.isNull("voiceName")) {
+                        msg.optString("voiceName", null)
+                    } else null
+                    hudState.update { current ->
+                        current.copy(ttsEnabled = enabled)
+                    }
+                    Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName")
+                }
+
+                else -> {
+                    Log.d(GlassesApp.TAG, "Unknown message type: $type")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(GlassesApp.TAG, "Error parsing message", e)
+        }
+    }
+
+    private fun handleChunkPart(msg: JSONObject) {
+        val now = System.currentTimeMillis()
+        pruneExpiredChunks(now)
+
+        val id = msg.optString("id", "")
+        val index = msg.optInt("index", -1)
+        val total = msg.optInt("total", 0)
+        val originalType = msg.optString("originalType", "?")
+        val data = msg.optString("data", "")
+
+        if (id.isEmpty() || index !in 0 until total || total <= 0 || data.isEmpty()) {
+            Log.w(GlassesApp.TAG, "Invalid chunk: id=$id index=$index total=$total originalType=$originalType")
+            return
+        }
+
+        val pending = pendingChunkedMessages.getOrPut(id) {
+            PendingChunkedMessage(
+                total = total,
+                originalType = originalType,
+                createdAtMs = now
+            )
+        }
+
+        if (pending.total != total) {
+            Log.w(GlassesApp.TAG, "Chunk total mismatch for $id: expected=${pending.total}, got=$total")
+            pendingChunkedMessages.remove(id)
+            return
+        }
+
+        pending.chunks[index] = data
+        Log.d(GlassesApp.TAG, "Chunk received: type=$originalType id=$id ${pending.chunks.size}/$total")
+
+        if (pending.chunks.size == pending.total) {
+            val encodedBuilder = StringBuilder()
+            for (i in 0 until pending.total) {
+                val part = pending.chunks[i]
+                if (part == null) {
+                    Log.w(GlassesApp.TAG, "Missing chunk $i for $id")
+                    return
+                }
+                encodedBuilder.append(part)
+            }
+
+            pendingChunkedMessages.remove(id)
+
+            try {
+                val bytes = Base64.decode(encodedBuilder.toString(), Base64.NO_WRAP)
+                val fullJson = String(bytes, Charsets.UTF_8)
+                Log.i(GlassesApp.TAG, "Reassembled chunked message: type=${pending.originalType}, chars=${fullJson.length}")
+                handlePhoneMessage(fullJson)
+            } catch (e: Exception) {
+                Log.e(GlassesApp.TAG, "Failed to decode chunked message: type=${pending.originalType}", e)
+            }
+        }
+    }
+
+    private fun pruneExpiredChunks(now: Long) {
+        val expired = pendingChunkedMessages
+            .filterValues { now - it.createdAtMs > CHUNK_TIMEOUT_MS }
+            .keys
+            .toList()
+        expired.forEach { id ->
+            val pending = pendingChunkedMessages.remove(id)
+            Log.w(GlassesApp.TAG, "Dropped expired chunked message: id=$id type=${pending?.originalType}")
+        }
+    }
+
+    /**
+     * Unwrap soft line breaks from AI model output so Compose can re-wrap
+     * to the actual widget width. Preserves paragraph breaks (blank lines),
+     * list items, and other structural markdown.
+     *
+     * A single `\n` between two non-empty, non-structural lines is treated
+     * as a soft wrap inserted by the model and replaced with a space.
+     */
+    private fun unwrapContent(text: String): String {
+        val lines = text.split("\n")
+        if (lines.size <= 1) return text
+
+        val result = StringBuilder()
+        for (i in lines.indices) {
+            val line = lines[i]
+            result.append(line)
+            if (i < lines.lastIndex) {
+                val next = lines[i + 1]
+                // Keep newline (don't join) when:
+                // - current line is blank → paragraph break
+                // - next line is blank → paragraph break
+                // - next line starts with markdown structure (list, heading, code fence, blockquote)
+                val keepNewline = line.isBlank() ||
+                    next.isBlank() ||
+                    next.trimStart().let {
+                        it.startsWith("- ") ||
+                        it.startsWith("* ") ||
+                        it.startsWith("+ ") ||
+                        it.matches(Regex("^\\d+[.)].+")) ||
+                        it.startsWith("#") ||
+                        it.startsWith("```") ||
+                        it.startsWith("> ")
+                    }
+
+                if (keepNewline) {
+                    result.append("\n")
+                } else {
+                    // Join with space (soft wrap from model)
+                    if (line.isNotEmpty()) result.append(" ")
+                }
+            }
+        }
+        return result.toString()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                cameraCapture.capture()
+            } else {
+                Log.w(GlassesApp.TAG, "Camera permission denied")
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        saveHudPreferences()
+        cameraCapture.cleanup()
+        voiceHandler.cleanup()
+        phoneConnection.stop()
+        clearWakeNotificationJob?.cancel()
+        // Kill the process so the next launch starts completely fresh.
+        // The CXR native layer may hold global state from the previous
+        // CXRServiceBridge that prevents a second bridge in the same process
+        // from working correctly. The CXR system service maintains the BT
+        // connection independently, so the next launch can re-establish it.
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
+    private fun saveHudPreferences() {
+        try {
+            val state = hudState.value
+            getSharedPreferences("hud_prefs", MODE_PRIVATE).edit()
+                .putString("hudPosition", state.hudPosition.name)
+                .putString("displaySize", state.displaySize.name)
+                .putString("voiceSendMode", state.voiceSendMode.name)
+                .commit()
+        } catch (e: Exception) {
+            Log.w(GlassesApp.TAG, "Failed to save HUD preferences", e)
+        }
+    }
+
+    private fun loadHudPreferences(): Triple<HudPosition, HudDisplaySize, VoiceSendMode> {
+        try {
+            val prefs = getSharedPreferences("hud_prefs", MODE_PRIVATE)
+            val position = prefs.getString("hudPosition", null)
+                ?.let { name -> HudPosition.entries.find { it.name == name } }
+                ?: HudPosition.FULL
+            val displaySize = prefs.getString("displaySize", null)
+                ?.let { name -> HudDisplaySize.entries.find { it.name == name } }
+                ?: HudDisplaySize.NORMAL
+            val voiceSendMode = prefs.getString("voiceSendMode", null)
+                ?.let { name -> VoiceSendMode.entries.find { it.name == name } }
+                ?: VoiceSendMode.ASK
+            return Triple(position, displaySize, voiceSendMode)
+        } catch (e: Exception) {
+            Log.w(GlassesApp.TAG, "Failed to load HUD preferences, using defaults", e)
+            return Triple(HudPosition.FULL, HudDisplaySize.NORMAL, VoiceSendMode.ASK)
+        }
+    }
+}
