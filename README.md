@@ -1,4 +1,6 @@
-﻿# JSOS - Spatial Operating System for Smart Glasses
+﻿# JSOS
+
+**Spatial Operating System for Smart Glasses**
 
 **JSOS** is an Android-based smart-glasses interface for a local or private **OpenClaw Gateway** and **Rokid glasses**.
 
