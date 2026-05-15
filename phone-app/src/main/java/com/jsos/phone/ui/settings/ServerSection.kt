@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jsos.phone.openclaw.GatewayUrl
 import com.jsos.phone.openclaw.OpenClawClient
 import com.jsos.phone.ui.theme.JsosPalette
 
@@ -62,6 +63,7 @@ fun ServerSection(
     }
 
     val isDirty = formHost != initialHost || formPort != initialPort || formToken != initialToken
+    val displayUrl = GatewayUrl.displayUrl(formHost, formPort)
 
     Column(modifier = modifier.padding(horizontal = 16.dp)) {
         Surface(
@@ -148,15 +150,24 @@ fun ServerSection(
 
         Spacer(Modifier.height(12.dp))
 
-        ConnectionStatusRow(connectionState, formHost, formPort)
+        ConnectionStatusRow(connectionState, displayUrl)
+
+        if (GatewayUrl.isCleartext(displayUrl)) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Cleartext gateway link. Use only over localhost, trusted LAN, or VPN/Tailnet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = JsosPalette.Yellow,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
     }
 }
 
 @Composable
 private fun ConnectionStatusRow(
     state: OpenClawClient.ConnectionState,
-    host: String,
-    port: String,
+    displayUrl: String,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -190,7 +201,7 @@ private fun ConnectionStatusRow(
                 color = JsosPalette.Text,
             )
             Text(
-                text = buildDisplayUrl(host, port),
+                text = displayUrl,
                 style = MaterialTheme.typography.bodySmall,
                 color = JsosPalette.Muted,
             )
@@ -210,13 +221,3 @@ private fun settingsTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = JsosPalette.Card,
     unfocusedContainerColor = JsosPalette.Card,
 )
-
-private fun buildDisplayUrl(host: String, port: String): String {
-    val trimmed = host.trimEnd('/')
-    return when {
-        trimmed.startsWith("ws://") || trimmed.startsWith("wss://") -> {
-            if (trimmed.contains(Regex(":\\d+$"))) trimmed else "$trimmed:$port"
-        }
-        else -> "ws://$trimmed:$port"
-    }
-}

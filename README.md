@@ -129,7 +129,7 @@ Do not commit or publish `local.properties`.
 
 ## OpenClaw Gateway Setup
 
-JSOS Core connects to an OpenClaw Gateway over WebSocket. In JSOS Core, the gateway host may be entered as a full `ws://` or `wss://` URL, or as a host plus port.
+JSOS Core connects to an OpenClaw Gateway over WebSocket. In JSOS Core, the gateway host may be entered as a full `ws://` or `wss://` URL, or as a host plus port. Bare host entries stay compatible with local OpenClaw setups and resolve to `ws://host:port`; enter a full `wss://` URL when your gateway supports TLS.
 
 Typical local gateway token setup:
 
@@ -144,7 +144,7 @@ openclaw config set gateway.host 0.0.0.0
 openclaw gateway restart
 ```
 
-For remote access, use a private VPN such as Tailscale instead of exposing the gateway directly to the public internet.
+For remote access, use a private VPN such as Tailscale instead of exposing the gateway directly to the public internet. `ws://` is cleartext at the app layer and should only be used over localhost, trusted LAN, or VPN/Tailnet links.
 
 On first connection, OpenClaw may require device approval:
 
@@ -445,7 +445,7 @@ The README references selected JSOS assets and screenshots.
 - Check the gateway host, port, and token in JSOS Core.
 - Make sure the gateway is reachable from the phone. For LAN testing, the gateway usually needs to bind to a LAN-reachable address, not only `127.0.0.1`.
 - Keep remote access private. Use a VPN such as Tailscale instead of exposing the gateway directly to the public internet.
-- If you use a full gateway URL, use `ws://` for local/private cleartext setups or `wss://` when your gateway supports TLS.
+- If you use a full gateway URL, use `ws://` only for local/private cleartext setups such as localhost, trusted LAN, or VPN/Tailnet; use `wss://` when your gateway supports TLS.
 
 ### Pairing Required Or First Connection Fails
 
@@ -517,7 +517,7 @@ Do not publish:
 
 Additional notes:
 
-- `ws://` / cleartext traffic is intended for local or private OpenClaw setups. Prefer trusted LAN/VPN access and use `wss://` when your gateway supports it.
+- `ws://` / cleartext traffic is intended for local or private OpenClaw setups. Bare host entries intentionally remain `ws://host:port` for compatibility with local gateways. Prefer trusted LAN/VPN/Tailnet access and use an explicit `wss://` URL when your gateway supports TLS.
 - Do not expose an OpenClaw Gateway directly to the public internet just to use JSOS.
 - Do not distribute APKs built with real Rokid, OpenAI, ElevenLabs, OpenClaw, or signing credentials.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage. Non-secret UI preferences and some Rokid pairing metadata remain local app data.

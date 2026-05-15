@@ -110,25 +110,16 @@ class OpenClawClient(
     private var challengeNonce: String? = null
 
     fun connect(host: String, port: Int, token: String) {
-        this.host = host.trimEnd('/')
+        val trimmedHost = host.trim().trimEnd('/')
+        this.host = trimmedHost
         this.port = port
         this.token = token
         this.shouldReconnect = true
 
-        // Build URL: use host as-is if it starts with ws:// or wss://, otherwise prepend ws://
-        val url = when {
-            host.startsWith("ws://") || host.startsWith("wss://") -> {
-                // User provided full URL - append port if not already in URL
-                val trimmed = host.trimEnd('/')
-                if (trimmed.contains(Regex(":\\d+$"))) trimmed else "$trimmed:$port"
-            }
-            else -> "ws://${host.trimEnd('/')}:$port"
-        }
-        val originHost = host
-            .removePrefix("ws://")
-            .removePrefix("wss://")
-            .trimEnd('/')
-        val originUrl = "http://$originHost" + (if (originHost.contains(Regex(":\\d+$"))) "" else ":$port")
+        // Bare hosts stay ws:// for local/private gateway compatibility.
+        // Enter a full wss:// URL to use TLS when the gateway supports it.
+        val url = GatewayUrl.webSocketUrl(trimmedHost, port)
+        val originUrl = GatewayUrl.originUrl(url)
 
         Log.i(TAG, "Connecting to OpenClaw Gateway: $url")
         _connectionState.value = ConnectionState.Connecting
