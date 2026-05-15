@@ -599,10 +599,18 @@ class OpenClawClient(
 
         val json = request.toJson()
         Log.d(TAG, "Sending request: method=$method id=$id params=${params != null}")
-        webSocket?.send(json) ?: throw IllegalStateException("Not connected")
 
-        return withTimeout(30_000) {
-            deferred.await()
+        try {
+            val socket = webSocket ?: throw IllegalStateException("Not connected")
+            if (!socket.send(json)) {
+                throw IllegalStateException("Failed to send request")
+            }
+
+            return withTimeout(30_000) {
+                deferred.await()
+            }
+        } finally {
+            pendingRequests.remove(id)
         }
     }
 
