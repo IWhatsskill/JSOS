@@ -1,6 +1,7 @@
 package com.jsos.phone.tts
 
 import android.content.Context
+import com.jsos.phone.security.SecurePrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,8 +12,11 @@ import kotlinx.coroutines.flow.asStateFlow
 class TtsSettingsManager(context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val securePrefs = SecurePrefs(context).also {
+        it.migrateString(prefs, KEY_API_KEY)
+    }
 
-    private val _apiKey = MutableStateFlow(prefs.getString(KEY_API_KEY, "") ?: "")
+    private val _apiKey = MutableStateFlow(securePrefs.getString(KEY_API_KEY, "") ?: "")
     val apiKey: StateFlow<String> = _apiKey.asStateFlow()
 
     private val _selectedVoiceId = MutableStateFlow(prefs.getString(KEY_VOICE_ID, null))
@@ -29,7 +33,7 @@ class TtsSettingsManager(context: Context) {
 
     fun setApiKey(key: String) {
         _apiKey.value = key
-        prefs.edit().putString(KEY_API_KEY, key).apply()
+        securePrefs.putString(KEY_API_KEY, key)
     }
 
     fun setSelectedVoice(id: String, name: String) {

@@ -89,6 +89,7 @@ import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.glasses.WakeSignalManager
 import com.jsos.phone.openclaw.DeviceIdentity
 import com.jsos.phone.openclaw.OpenClawClient
+import com.jsos.phone.security.SecurePrefs
 import com.jsos.phone.talk.LiveTalkState
 import com.jsos.phone.talk.OpenClawTalkManager
 import com.jsos.phone.ui.settings.SettingsScreen
@@ -194,8 +195,9 @@ fun MainScreen() {
         formatLinkDuration((gatewayLinkNowMs - connectedSince).coerceAtLeast(0L))
     } ?: "--"
 
-    // Persist OpenClaw settings in SharedPreferences
+    // Persist non-sensitive OpenClaw settings in SharedPreferences.
     val prefs = remember { context.getSharedPreferences("jsos", android.content.Context.MODE_PRIVATE) }
+    val securePrefs = remember { SecurePrefs(context).also { it.migrateString(prefs, "openclaw_token") } }
     var openClawHost by remember {
         mutableStateOf(prefs.getString("openclaw_host", "10.0.2.2") ?: "10.0.2.2")
     }
@@ -203,7 +205,7 @@ fun MainScreen() {
         mutableStateOf(prefs.getString("openclaw_port", "18789") ?: "18789")
     }
     var openClawToken by remember {
-        mutableStateOf(prefs.getString("openclaw_token", "") ?: "")
+        mutableStateOf(securePrefs.getString("openclaw_token", "") ?: "")
     }
     val phoneLoadingMore by openClawClient.isLoadingMoreHistory.collectAsState()
     var inputText by remember { mutableStateOf("") }
@@ -1097,8 +1099,9 @@ fun MainScreen() {
                 prefs.edit()
                     .putString("openclaw_host", host)
                     .putString("openclaw_port", port)
-                    .putString("openclaw_token", token)
+                    .remove("openclaw_token")
                     .apply()
+                securePrefs.putString("openclaw_token", token)
                 val portNum = port.toIntOrNull() ?: 18789
                 openClawClient.disconnect()
                 openClawClient.connect(host, portNum, token)

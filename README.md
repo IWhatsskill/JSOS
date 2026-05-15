@@ -30,7 +30,7 @@ Development-preview areas:
 - Rokid device behavior depends on the proprietary Rokid CXR SDK and device firmware.
 - OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version.
 - Release signing is intentionally local-only and requires private signing properties that must not be published.
-- Runtime secret storage is local app storage today; a future hardening pass should move sensitive runtime values to encrypted storage.
+- Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage.
 
 ## Project Lineage And JSOS Changes
 
@@ -520,7 +520,7 @@ Additional notes:
 - `ws://` / cleartext traffic is intended for local or private OpenClaw setups. Prefer trusted LAN/VPN access and use `wss://` when your gateway supports it.
 - Do not expose an OpenClaw Gateway directly to the public internet just to use JSOS.
 - Do not distribute APKs built with real Rokid, OpenAI, ElevenLabs, OpenClaw, or signing credentials.
-- Runtime OpenClaw, OpenAI, ElevenLabs, device identity, and Rokid pairing values are currently local app data. A future security hardening pass should migrate sensitive runtime values to encrypted storage.
+- Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage. Non-secret UI preferences and some Rokid pairing metadata remain local app data.
 - Avoid publishing logs, screenshots, or APKs that contain transcripts, session keys, API keys, device identifiers, or account data.
 
 ## Attribution And License

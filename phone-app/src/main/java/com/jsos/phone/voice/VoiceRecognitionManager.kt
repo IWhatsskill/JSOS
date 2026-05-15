@@ -2,6 +2,7 @@ package com.jsos.phone.voice
 
 import android.content.Context
 import android.util.Log
+import com.jsos.phone.security.SecurePrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +44,9 @@ class VoiceRecognitionManager(private val context: Context) {
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val securePrefs = SecurePrefs(context).also {
+        it.migrateString(prefs, KEY_OPENAI_API_KEY)
+    }
 
     private val openAIClient = OpenAIRealtimeClient()
     private val fallbackHandler = VoiceCommandHandler(context)
@@ -79,14 +83,14 @@ class VoiceRecognitionManager(private val context: Context) {
      * Get the stored OpenAI API key.
      */
     fun getOpenAIApiKey(): String {
-        return prefs.getString(KEY_OPENAI_API_KEY, "") ?: ""
+        return securePrefs.getString(KEY_OPENAI_API_KEY, "") ?: ""
     }
 
     /**
      * Store the OpenAI API key securely.
      */
     fun setOpenAIApiKey(apiKey: String) {
-        prefs.edit().putString(KEY_OPENAI_API_KEY, apiKey).apply()
+        securePrefs.putString(KEY_OPENAI_API_KEY, apiKey)
         Log.i(TAG, "OpenAI API key ${if (apiKey.isNotEmpty()) "saved" else "cleared"}")
     }
 

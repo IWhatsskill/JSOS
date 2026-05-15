@@ -3,6 +3,7 @@ package com.jsos.phone.openclaw
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.jsos.phone.security.SecurePrefs
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
@@ -17,7 +18,7 @@ import java.util.Base64
  *
  * Uses BouncyCastle's Ed25519 implementation directly since Android's
  * built-in crypto providers don't reliably support Ed25519 across devices.
- * Keys are persisted as base64 in SharedPreferences.
+ * Private key material and device tokens are persisted in encrypted app storage.
  */
 class DeviceIdentity(context: Context) {
 
@@ -29,8 +30,9 @@ class DeviceIdentity(context: Context) {
         private const val KEY_PUBLIC_KEY = "ed25519_public_key_raw"
     }
 
-    private val prefs: SharedPreferences =
+    private val plainPrefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val securePrefs = SecurePrefs(context)
 
     private lateinit var privateKeyParams: Ed25519PrivateKeyParameters
     private lateinit var publicKeyParams: Ed25519PublicKeyParameters
@@ -43,14 +45,17 @@ class DeviceIdentity(context: Context) {
 
     /** Persisted device token from a successful pairing (null if not yet paired) */
     var deviceToken: String?
-        get() = prefs.getString(KEY_DEVICE_TOKEN, null)
+        get() = securePrefs.getString(KEY_DEVICE_TOKEN, null)
         set(value) {
-            prefs.edit().putString(KEY_DEVICE_TOKEN, value).apply()
+            securePrefs.putString(KEY_DEVICE_TOKEN, value)
         }
 
     init {
-        val storedPriv = prefs.getString(KEY_PRIVATE_KEY, null)
-        val storedPub = prefs.getString(KEY_PUBLIC_KEY, null)
+        securePrefs.migrateString(plainPrefs, KEY_PRIVATE_KEY)
+        securePrefs.migrateString(plainPrefs, KEY_DEVICE_TOKEN)
+
+        val storedPriv = securePrefs.getString(KEY_PRIVATE_KEY, null)
+        val storedPub = plainPrefs.getString(KEY_PUBLIC_KEY, null)
 
         if (storedPriv != null && storedPub != null) {
             try {
@@ -59,7 +64,7 @@ class DeviceIdentity(context: Context) {
                 if (privBytes.size == 32 && pubBytes.size == 32) {
                     privateKeyParams = Ed25519PrivateKeyParameters(privBytes, 0)
                     publicKeyParams = Ed25519PublicKeyParameters(pubBytes, 0)
-                    Log.d(TAG, "Restored Ed25519 keypair from SharedPreferences")
+                    Log.d(TAG, "Restored Ed25519 keypair from encrypted storage")
                 } else {
                     Log.w(TAG, "Stored key has wrong size (priv=${privBytes.size}, pub=${pubBytes.size}), regenerating")
                     throw IllegalStateException("Wrong key size")
@@ -130,11 +135,14 @@ class DeviceIdentity(context: Context) {
         privateKeyParams = keyPair.private as Ed25519PrivateKeyParameters
         publicKeyParams = keyPair.public as Ed25519PublicKeyParameters
 
-        // Persist raw 32-byte keys
-        prefs.edit()
-            .putString(KEY_PRIVATE_KEY, Base64.getEncoder().encodeToString(privateKeyParams.encoded))
+        securePrefs.putString(KEY_PRIVATE_KEY, Base64.getEncoder().encodeToString(privateKeyParams.encoded))
+        securePrefs.removeString(KEY_DEVICE_TOKEN) // Clear stale token since deviceId changes
+
+        // The public key is not secret and remains in regular app preferences.
+        plainPrefs.edit()
             .putString(KEY_PUBLIC_KEY, Base64.getEncoder().encodeToString(publicKeyParams.encoded))
-            .remove(KEY_DEVICE_TOKEN) // Clear stale token since deviceId changes
+            .remove(KEY_PRIVATE_KEY)
+            .remove(KEY_DEVICE_TOKEN)
             .apply()
 
         Log.i(TAG, "Generated and persisted new Ed25519 keypair")
