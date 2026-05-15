@@ -529,7 +529,7 @@ JSOS is based on the upstream [Clawsses](https://github.com/dweddepohl/clawsses)
 
 Original upstream copyright remains with Pohlster BV and the original contributors. JSOS modifications are by Whatsskill, 2026.
 
-This project is distributed under the GNU Affero General Public License, version 3 or later, as noted in the project notices. See `LICENSE` and `COPYRIGHT`.
+This project is distributed under the GNU Affero General Public License, version 3. See `LICENSE` and `COPYRIGHT`.
 
 Modified versions distributed as APKs or made available over a network must follow the AGPL terms, including preserving notices and making corresponding source available where required.
 

@@ -35,9 +35,8 @@ Major JSOS modifications include:
 LICENSE
 
 This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+it under the terms of the GNU Affero General Public License version 3 as
+published by the Free Software Foundation.
 
 When upstream-derived or core files are changed:
 - Keep existing copyright and license notices intact.
