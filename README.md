@@ -34,7 +34,7 @@ Development-preview areas:
 
 ## Project Lineage And JSOS Changes
 
-JSOS started as an AGPL-3.0-or-later fork of Clawsses by Pohlster BV / dweddepohl. This repository keeps the original attribution and license requirements while developing a JSOS-specific smart-glasses workflow.
+JSOS started as an AGPL-3.0 fork of Clawsses by Pohlster BV / dweddepohl. This repository keeps the original attribution and license requirements while developing a JSOS-specific smart-glasses workflow.
 
 JSOS keeps the core idea of a phone-to-glasses Android bridge and expands it into a development-preview spatial interface built around OpenClaw, Rokid glasses, voice input, sessions, and a dedicated HUD experience.
 

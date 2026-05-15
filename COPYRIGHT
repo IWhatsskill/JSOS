@@ -30,7 +30,7 @@ Major JSOS modifications include:
 - OpenAI Realtime speech-to-text support with Android SpeechRecognizer fallback.
 - ElevenLabs TTS routing adjustments for glasses audio playback.
 - Rokid AI scene overlay suppression during voice input.
-- Phone-to-glasses workflow for bundled HUD APK installation and daily JSOS/OpenClaw use.
+- Separate JSOS Core and JSOS HUD install flow for daily JSOS/OpenClaw use; JSOS HUD is installed separately through Hi Rokid / APK Manager.
 
 LICENSE
 
@@ -42,7 +42,7 @@ the Free Software Foundation, either version 3 of the License, or
 When upstream-derived or core files are changed:
 - Keep existing copyright and license notices intact.
 - Record material JSOS changes in this file.
-- Keep the modified work under AGPL-3.0-or-later unless a separate valid license applies.
+- Keep the modified work under AGPL-3.0 unless a separate valid license applies.
 - If distributing APKs or providing network interaction with the modified version, make the corresponding source available as required by AGPL-3.0.
 
 This program is distributed in the hope that it will be useful,
