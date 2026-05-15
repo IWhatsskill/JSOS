@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.InputStream
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
@@ -22,6 +24,8 @@ class DebugGlassesServer(private val port: Int = 8081) {
     companion object {
         private const val TAG = "DebugGlassesServer"
         const val DEFAULT_PORT = 8081
+        private const val MAX_HANDSHAKE_BYTES = 8 * 1024
+        private const val MAX_FRAME_PAYLOAD_BYTES = 10 * 1024 * 1024
     }
 
     private var serverSocket: ServerSocket? = null
@@ -51,9 +55,9 @@ class DebugGlassesServer(private val port: Int = 8081) {
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope?.launch {
             try {
-                serverSocket = ServerSocket(port)
+                serverSocket = ServerSocket(port, 1, InetAddress.getByName("127.0.0.1"))
                 _isRunning.value = true
-                Log.i(TAG, "Debug glasses server started on port $port")
+                Log.i(TAG, "Debug glasses server started on loopback port $port")
 
                 while (isActive && _isRunning.value) {
                     try {
@@ -119,14 +123,20 @@ class DebugGlassesServer(private val port: Int = 8081) {
         }
     }
 
-    private fun performHandshake(input: java.io.InputStream, output: java.io.OutputStream): Boolean {
+    private fun performHandshake(input: InputStream, output: java.io.OutputStream): Boolean {
         // Read HTTP request byte-by-byte to avoid buffering WebSocket data
         val requestBuilder = StringBuilder()
         var prevByte = 0
         var crlfCount = 0
+        var headerBytes = 0
         while (true) {
             val b = input.read()
             if (b == -1) return false
+            headerBytes++
+            if (headerBytes > MAX_HANDSHAKE_BYTES) {
+                Log.w(TAG, "Rejecting oversized WebSocket handshake")
+                return false
+            }
             requestBuilder.append(b.toChar())
 
             // Check for end of headers (\r\n\r\n)
@@ -145,6 +155,7 @@ class DebugGlassesServer(private val port: Int = 8081) {
         // Find WebSocket key
         val keyLine = request.lines().find { it.startsWith("Sec-WebSocket-Key:", ignoreCase = true) }
         val key = keyLine?.substringAfter(":")?.trim() ?: return false
+        if (key.isBlank()) return false
 
         // Generate accept key
         val acceptKey = generateAcceptKey(key)
@@ -169,53 +180,77 @@ class DebugGlassesServer(private val port: Int = 8081) {
         return Base64.getEncoder().encodeToString(hash)
     }
 
-    private fun readWebSocketFrame(input: java.io.InputStream): String? {
+    private fun readWebSocketFrame(input: InputStream): String? {
         return try {
-            val firstByte = input.read()
-            if (firstByte == -1) return null
+            val firstByte = readByte(input) ?: return null
 
-            val secondByte = input.read()
-            if (secondByte == -1) return null
+            val opcode = firstByte and 0x0F
+            if (opcode == 0x08) return null  // Close frame
+            if (opcode != 0x01) {
+                Log.w(TAG, "Rejecting unsupported WebSocket opcode $opcode")
+                return null
+            }
+
+            val secondByte = readByte(input) ?: return null
 
             val isMasked = (secondByte and 0x80) != 0
+            if (!isMasked) {
+                Log.w(TAG, "Rejecting unmasked client WebSocket frame")
+                return null
+            }
+
             var payloadLength = (secondByte and 0x7F).toLong()
 
             if (payloadLength == 126L) {
-                payloadLength = ((input.read() shl 8) or input.read()).toLong()
+                val b1 = readByte(input) ?: return null
+                val b2 = readByte(input) ?: return null
+                payloadLength = ((b1 shl 8) or b2).toLong()
             } else if (payloadLength == 127L) {
                 payloadLength = 0
                 for (i in 0..7) {
-                    payloadLength = (payloadLength shl 8) or input.read().toLong()
+                    val next = readByte(input) ?: return null
+                    payloadLength = (payloadLength shl 8) or next.toLong()
+                    if (payloadLength > MAX_FRAME_PAYLOAD_BYTES) {
+                        Log.w(TAG, "Rejecting oversized WebSocket frame: $payloadLength bytes")
+                        return null
+                    }
                 }
             }
 
-            val mask = if (isMasked) {
-                ByteArray(4).also { input.read(it) }
-            } else null
+            if (payloadLength < 0 || payloadLength > MAX_FRAME_PAYLOAD_BYTES) {
+                Log.w(TAG, "Rejecting oversized WebSocket frame: $payloadLength bytes")
+                return null
+            }
 
+            val mask = ByteArray(4)
+            if (!readFully(input, mask)) return null
             val payload = ByteArray(payloadLength.toInt())
-            var bytesRead = 0
-            while (bytesRead < payloadLength) {
-                val read = input.read(payload, bytesRead, (payloadLength - bytesRead).toInt())
-                if (read == -1) return null
-                bytesRead += read
-            }
+            if (!readFully(input, payload)) return null
 
-            if (mask != null) {
-                for (i in payload.indices) {
-                    payload[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
-                }
+            for (i in payload.indices) {
+                payload[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
             }
-
-            // Check for close frame
-            val opcode = firstByte and 0x0F
-            if (opcode == 0x08) return null  // Close frame
 
             String(payload, Charsets.UTF_8)
         } catch (e: Exception) {
             Log.e(TAG, "Error reading WebSocket frame", e)
             null
         }
+    }
+
+    private fun readByte(input: InputStream): Int? {
+        val value = input.read()
+        return if (value == -1) null else value
+    }
+
+    private fun readFully(input: InputStream, buffer: ByteArray): Boolean {
+        var bytesRead = 0
+        while (bytesRead < buffer.size) {
+            val read = input.read(buffer, bytesRead, buffer.size - bytesRead)
+            if (read <= 0) return false
+            bytesRead += read
+        }
+        return true
     }
 
     fun sendToGlasses(message: String): Boolean {

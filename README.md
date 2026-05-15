@@ -334,7 +334,7 @@ JSOS HUD targets the Rokid glasses portrait display used by this project:
 
 JSOS includes a debug WebSocket bridge for emulator-style testing without a live Bluetooth/CXR glasses connection.
 
-- JSOS Core can enable Debug Mode from Settings. This starts a phone-side WebSocket server on port `8081`.
+- JSOS Core can enable Debug Mode from Settings. This starts a loopback-only phone-side WebSocket server on port `8081`.
 - JSOS HUD detects emulator/debug conditions and connects to `10.0.2.2:8081`.
 - The settings UI exposes the ADB forwarding helper:
 
