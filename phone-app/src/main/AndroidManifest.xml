@@ -17,6 +17,7 @@
 
     <!-- Audio for voice commands -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Keep app alive when screen off -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />

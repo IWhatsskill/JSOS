@@ -22,13 +22,13 @@ Current state:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, optional ElevenLabs TTS, wake signaling, and HUD deployment code are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, and HUD deployment code are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview areas:
 
 - Rokid device behavior depends on the proprietary Rokid CXR SDK and device firmware.
-- OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version.
+- OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version and audio route.
 - Release signing is intentionally local-only and requires private signing properties that must not be published.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage.
 
@@ -279,15 +279,12 @@ JSOS HUD is responsible for:
 
 Voice input can be started from the glasses HUD with a long press on the temple touchpad. JSOS Core handles recognition and sends `voice_state` / `voice_result` updates back to JSOS HUD.
 
-JSOS has two local recognition paths:
+JSOS separates normal speech-to-text from bidirectional OpenClaw Live Talk:
 
-- **OpenAI Realtime speech-to-text** when an API key is configured and voice recognition is enabled.
-- **Android SpeechRecognizer** as fallback when OpenAI voice is unavailable, disabled, or not configured.
-
-JSOS also contains an experimental phone-side voice mode switch for the glasses voice button:
-
-- **CMD** routes to normal command/input speech recognition.
-- **LIVE** routes to OpenClaw Live Talk code paths when supported by the connected gateway.
+- **OpenAI Realtime speech-to-text** and **Android SpeechRecognizer** recognize voice input and submit text to OpenClaw.
+- **Core Live Talk** starts OpenClaw Live Talk directly from the phone and routes output to the phone speaker.
+- **Glasses Voice Button / CMD** routes the glasses voice button to normal command/input speech recognition.
+- **Glasses Voice Button / LIVE TALK** routes the glasses voice button to OpenClaw Live Talk and Rokid communication audio.
 
 ### HUD Controls
 
@@ -397,7 +394,7 @@ Common glasses-to-phone messages:
 - `wake_ack`
 - `tts_toggle`
 
-Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime runs phone-side; OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths.
+Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime speech-to-text runs phone-side. OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths and can be started either from Core Live Talk on the phone or from the glasses voice button in `LIVE TALK` mode.
 
 Large phone-to-glasses JSON payloads are split into `chunk_part` messages and reassembled on JSOS HUD.
 
@@ -483,6 +480,7 @@ After approval, reconnect from JSOS Core. The device token is stored locally by 
 - Configure an ElevenLabs API key and voice in JSOS Core.
 - Make sure voice responses / TTS are enabled in JSOS Core or from the HUD toggle path.
 - Check the phone audio route and volume. The TTS playback path is phone-side.
+- For bidirectional Live Talk audio on the phone, use `Voice` -> `Core Live Talk` -> `START PHONE LIVE`. The normal phone mic / Realtime Whisper path is speech-to-text and returns text unless TTS is enabled.
 - If TTS is disabled, JSOS still displays text responses on the phone and HUD.
 
 ### Glasses HUD Does Not Wake Or Update

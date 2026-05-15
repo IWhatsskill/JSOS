@@ -84,6 +84,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jsos.phone.R
+import com.jsos.phone.audio.LiveTalkAudioRouteManager
 import com.jsos.phone.glasses.GlassesConnectionManager
 import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.glasses.WakeSignalManager
@@ -139,6 +140,11 @@ private enum class DashboardIconStyle {
     Diagnostics,
 }
 
+private enum class LiveTalkSource {
+    Phone,
+    Glasses,
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
@@ -156,6 +162,7 @@ fun MainScreen() {
     val ttsSettingsManager = remember { TtsSettingsManager(context) }
     val elevenLabsClient = remember { ElevenLabsClient() }
     val ttsPlaybackManager = remember { TtsPlaybackManager(context, elevenLabsClient, ttsSettingsManager) }
+    val liveTalkAudioRouteManager = remember { LiveTalkAudioRouteManager(context) }
 
     // State
     val glassesState by glassesManager.connectionState.collectAsState()
@@ -215,6 +222,7 @@ fun MainScreen() {
     var showSessionPicker by remember { mutableStateOf(false) }
     var pendingPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
     var ignoreAiExitUntilMs by remember { mutableLongStateOf(0L) }
+    var liveTalkSource by remember { mutableStateOf<LiveTalkSource?>(null) }
     var glassesVoiceButtonMode by remember {
         mutableStateOf(GlassesVoiceButtonMode.fromPref(prefs.getString("glasses_voice_button_mode", "command")))
     }
@@ -226,6 +234,8 @@ fun MainScreen() {
     val setGlassesVoiceButtonMode: (GlassesVoiceButtonMode) -> Unit = { mode ->
         if (mode == GlassesVoiceButtonMode.Command && liveTalkManager.isActive) {
             liveTalkManager.stop()
+            liveTalkAudioRouteManager.clear()
+            liveTalkSource = null
         }
         glassesVoiceButtonMode = mode
         prefs.edit().putString("glasses_voice_button_mode", mode.prefValue).apply()
@@ -426,15 +436,20 @@ fun MainScreen() {
         }
         glassesManager.sendRawMessage(resultMsg.toString())
     }
-    fun stopLiveTalkFromGlasses() {
+    fun stopLiveTalk() {
         liveTalkManager.stop()
-        RokidSdkManager.clearCommunicationDevice()
+        liveTalkAudioRouteManager.clear()
+        liveTalkSource = null
         sendVoiceState("idle")
     }
-    fun startLiveTalkFromGlasses() {
+
+    fun startLiveTalk(source: LiveTalkSource) {
         if (liveTalkManager.isActive) {
-            stopLiveTalkFromGlasses()
-            return
+            if (liveTalkSource == source) {
+                stopLiveTalk()
+                return
+            }
+            stopLiveTalk()
         }
         if (openClawState !is OpenClawClient.ConnectionState.Connected) {
             sendVoiceError("OpenClaw gateway offline")
@@ -442,11 +457,20 @@ fun MainScreen() {
             return
         }
 
-        android.util.Log.d("MainScreen", "Glasses requested OpenClaw Live Talk")
-        ignoreAiExitUntilMs = System.currentTimeMillis() + 1200L
-        dismissRokidAiSceneBurst()
-        RokidSdkManager.setCommunicationDevice()
-        RokidSdkManager.sendAsrContent("LIVE TALK")
+        liveTalkSource = source
+        when (source) {
+            LiveTalkSource.Glasses -> {
+                android.util.Log.d("MainScreen", "Glasses requested OpenClaw Live Talk")
+                ignoreAiExitUntilMs = System.currentTimeMillis() + 1200L
+                dismissRokidAiSceneBurst()
+                liveTalkAudioRouteManager.routeToGlasses()
+                RokidSdkManager.sendAsrContent("LIVE TALK")
+            }
+            LiveTalkSource.Phone -> {
+                android.util.Log.d("MainScreen", "Phone requested OpenClaw Live Talk")
+                liveTalkAudioRouteManager.routeToPhoneSpeaker()
+            }
+        }
         sendVoiceState("listening", text = "Live Talk")
 
         liveTalkManager.start(sessionKey = currentSessionKey ?: "main") { transcript ->
@@ -466,12 +490,18 @@ fun MainScreen() {
             }
         }
     }
+
+    fun startLiveTalkFromGlasses() = startLiveTalk(LiveTalkSource.Glasses)
+    fun toggleLiveTalkFromPhone() = startLiveTalk(LiveTalkSource.Phone)
+
     LaunchedEffect(liveTalkState) {
         when (val state = liveTalkState) {
             is LiveTalkState.Connecting -> sendVoiceState("processing", text = "Connecting Live Talk")
             is LiveTalkState.Listening -> sendVoiceState("listening", text = "Live Talk")
             is LiveTalkState.Speaking -> sendVoiceState("processing", text = "JSOS")
             is LiveTalkState.Error -> {
+                liveTalkAudioRouteManager.clear()
+                liveTalkSource = null
                 sendVoiceError(state.message)
                 sendVoiceState("idle")
             }
@@ -503,9 +533,9 @@ fun MainScreen() {
         }
         glassesManager.onAiExit = {
             val now = System.currentTimeMillis()
-            if (liveTalkManager.isActive && now >= ignoreAiExitUntilMs) {
+            if (liveTalkManager.isActive && liveTalkSource == LiveTalkSource.Glasses && now >= ignoreAiExitUntilMs) {
                 android.util.Log.d("MainScreen", "AI scene exited on glasses - stopping Live Talk")
-                mainHandler.post { stopLiveTalkFromGlasses() }
+                mainHandler.post { stopLiveTalk() }
             } else {
                 android.util.Log.d("MainScreen", "AI scene exited on glasses (ignored; guard active or no Live Talk)")
             }
@@ -593,7 +623,7 @@ fun MainScreen() {
                     "cancel_voice", "stop_voice", "voice_stop", "end_voice" -> {
                         android.util.Log.d("MainScreen", "Glasses requested voice stop: $type")
                         if (liveTalkManager.isActive) {
-                            stopLiveTalkFromGlasses()
+                            stopLiveTalk()
                             return@handler
                         }
                         voiceRecognitionManager.stopListening()
@@ -725,6 +755,7 @@ fun MainScreen() {
     DisposableEffect(Unit) {
         onDispose {
             liveTalkManager.stop()
+            liveTalkAudioRouteManager.clear()
             glassesManager.disconnect()
             openClawClient.cleanup()
             voiceHandler.cleanup()
@@ -1040,6 +1071,8 @@ fun MainScreen() {
                         ttsEnabled = ttsEnabled,
                         glassesVoiceButtonMode = glassesVoiceButtonMode,
                         liveTalkState = liveTalkState,
+                        liveTalkSource = liveTalkSource,
+                        onTogglePhoneLiveTalk = ::toggleLiveTalkFromPhone,
                         onGlassesVoiceButtonModeChange = setGlassesVoiceButtonMode,
                         onOpenSettings = openSettings,
                     )
@@ -1585,7 +1618,7 @@ private fun VoiceModeQuickSwitch(
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "VOICE MODE",
+                    "GLASSES BUTTON",
                     color = JsosPalette.Muted,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
@@ -2100,6 +2133,8 @@ private fun VoiceDeck(
     ttsEnabled: Boolean,
     glassesVoiceButtonMode: GlassesVoiceButtonMode,
     liveTalkState: LiveTalkState,
+    liveTalkSource: LiveTalkSource?,
+    onTogglePhoneLiveTalk: () -> Unit,
     onGlassesVoiceButtonModeChange: (GlassesVoiceButtonMode) -> Unit,
     onOpenSettings: (SettingsTarget) -> Unit,
 ) {
@@ -2120,6 +2155,11 @@ private fun VoiceDeck(
             ),
             onClick = { onOpenSettings(SettingsTarget.Voice) },
         )
+        CoreLiveTalkCard(
+            liveTalkState = liveTalkState,
+            liveTalkSource = liveTalkSource,
+            onTogglePhoneLiveTalk = onTogglePhoneLiveTalk,
+        )
         GlassesVoiceButtonCard(
             mode = glassesVoiceButtonMode,
             liveTalkState = liveTalkState,
@@ -2136,7 +2176,89 @@ private fun VoiceDeck(
             ),
             onClick = { onOpenSettings(SettingsTarget.ResponseVoice) },
         )
-        TabHint("The glasses voice button can stay classic STT or switch into OpenClaw Live Talk.")
+        TabHint("Core Live Talk uses the phone speaker. The glasses voice button can stay classic STT or route Live Talk to Rokid.")
+    }
+}
+
+@Composable
+private fun CoreLiveTalkCard(
+    liveTalkState: LiveTalkState,
+    liveTalkSource: LiveTalkSource?,
+    onTogglePhoneLiveTalk: () -> Unit,
+) {
+    val phoneActive = liveTalkSource == LiveTalkSource.Phone && liveTalkState !is LiveTalkState.Idle
+    val glassesActive = liveTalkSource == LiveTalkSource.Glasses && liveTalkState !is LiveTalkState.Idle
+    val accent = if (phoneActive) Color(0xFF63F45C) else Color(0xFF22D3EE)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = JsosPalette.Card,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.70f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Core Live Talk",
+                    color = JsosPalette.Text,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = when {
+                        phoneActive -> liveTalkStateLabel(liveTalkState)
+                        glassesActive -> "ROKID"
+                        else -> "IDLE"
+                    },
+                    color = if (phoneActive || glassesActive) Color(0xFF63F45C) else Color(0xFF8EA99B),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .clickable(onClick = onTogglePhoneLiveTalk),
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (phoneActive) Color(0xFF16321D) else Color(0xFF071010),
+                    border = BorderStroke(1.dp, accent),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = when {
+                                phoneActive -> "STOP PHONE LIVE"
+                                glassesActive -> "SWITCH TO PHONE"
+                                else -> "START PHONE LIVE"
+                            },
+                            color = accent,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
+            Text(
+                text = "Output: phone speaker",
+                color = JsosPalette.Muted,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+            )
+        }
     }
 }
 
