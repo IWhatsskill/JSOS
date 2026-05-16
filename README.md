@@ -57,7 +57,7 @@ Main JSOS changes include:
 - Integrated a Hi Rokid / CXR-L HUD deployment flow in JSOS Core so the phone app can select a JSOS HUD APK and hand installation to Hi Rokid when Hi Rokid is installed and already connected to the glasses.
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
 - Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
-- Added JSOS HUD `AR PIC` and `AR REC` options that trigger Rokid AR picture / mixed-recording scene commands from the glasses app, based on Anezium's OverlayRec reference with permission.
+- Added JSOS HUD `AR PIC` and `AR REC` options that trigger Rokid AR picture / mixed-recording scene commands from the glasses app.
 - Chunked phone-to-glasses message transport for larger JSON payloads.
 - Wake acknowledgments and status messages between phone and HUD.
 - Public-readiness cleanup: neutral assets, README rewrite, safer `.gitignore`, redacted sensitive logs, local-only signing, and clearer security notes.
@@ -553,14 +553,7 @@ This fork does not grant a separate commercial or closed-source license. Commerc
 
 Thanks to:
 
-- [dweddepohl](https://github.com/dweddepohl) for the upstream Clawsses project.
-- [OpenClaw](https://github.com/openclaw/openclaw) for the OpenClaw project.
-- [Anezium](https://github.com/Anezium) for public Rokid APK Manager / CXR-L workflow notes, OverlayRec reference work, and permission to reference that work during JSOS HUD deployment and AR picture/record integration.
-- [Rokid](https://github.com/rokid) for the Rokid glasses platform and SDK ecosystem.
-
-## Links
-
-- [Upstream Clawsses](https://github.com/dweddepohl/clawsses)
+- [dweddepohl](https://github.com/dweddepohl)
 - [OpenClaw](https://github.com/openclaw/openclaw)
-- [Rokid APK Manager / CXR-L workflow reference](https://github.com/Anezium/Rokid-APKs)
-- [OverlayRec reference by Anezium](https://github.com/Anezium/OverlayRec)
+- [Anezium](https://github.com/Anezium)
+- [Rokid](https://github.com/rokid)
