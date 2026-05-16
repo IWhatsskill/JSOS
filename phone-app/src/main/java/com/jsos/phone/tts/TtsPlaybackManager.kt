@@ -5,10 +5,14 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.util.Log
 import com.jsos.phone.glasses.RokidSdkManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -22,6 +26,9 @@ class TtsPlaybackManager(
     private val settings: TtsSettingsManager
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val playbackLock = Any()
+    private var playbackGeneration = 0
+    private var synthesisJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
     private var currentTempFile: File? = null
 
@@ -48,10 +55,9 @@ class TtsPlaybackManager(
             return
         }
 
-        // Stop any current playback
-        stop()
+        val generation = beginNewPlayback()
 
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 Log.d(TAG, "Synthesizing TTS (${text.length} chars)")
 
@@ -59,37 +65,95 @@ class TtsPlaybackManager(
                 val result = client.synthesize(apiKey, voiceId, text, speed)
 
                 result.onSuccess { inputStream ->
+                    if (!isCurrentGeneration(generation)) {
+                        inputStream.close()
+                        return@onSuccess
+                    }
+
                     // Write to temp file for MediaPlayer
                     val tempFile = File.createTempFile("tts_", ".mp3", context.cacheDir)
-                    currentTempFile = tempFile
 
-                    FileOutputStream(tempFile).use { output ->
-                        inputStream.copyTo(output)
+                    try {
+                        FileOutputStream(tempFile).use { output ->
+                            inputStream.copyTo(output)
+                        }
+                    } finally {
+                        inputStream.close()
                     }
-                    inputStream.close()
+
+                    if (!isCurrentGeneration(generation)) {
+                        tempFile.delete()
+                        return@onSuccess
+                    }
+
+                    synchronized(playbackLock) {
+                        if (generation == playbackGeneration) {
+                            currentTempFile = tempFile
+                        }
+                    }
 
                     Log.d(TAG, "Audio saved to temp file: ${tempFile.absolutePath}")
 
                     // Play on main thread
-                    launch(Dispatchers.Main) {
-                        playAudioFile(tempFile)
+                    withContext(Dispatchers.Main) {
+                        if (isCurrentGeneration(generation)) {
+                            playAudioFile(tempFile, generation)
+                        } else {
+                            tempFile.delete()
+                        }
                     }
                 }.onFailure { error ->
-                    Log.e(TAG, "TTS synthesis failed", error)
+                    if (isCurrentGeneration(generation)) {
+                        Log.e(TAG, "TTS synthesis failed", error)
+                    }
                 }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "TTS synthesis cancelled")
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Error during TTS", e)
+                if (isCurrentGeneration(generation)) {
+                    Log.e(TAG, "Error during TTS", e)
+                }
             }
         }
+
+        synchronized(playbackLock) {
+            if (generation == playbackGeneration) {
+                synthesisJob = job
+            } else {
+                job.cancel()
+            }
+        }
+        job.start()
     }
 
-    private fun playAudioFile(file: File) {
+    private fun beginNewPlayback(): Int {
+        val generation = synchronized(playbackLock) {
+            playbackGeneration += 1
+            synthesisJob?.cancel()
+            synthesisJob = null
+            playbackGeneration
+        }
+        stopPlaybackResources()
+        return generation
+    }
+
+    private fun isCurrentGeneration(generation: Int): Boolean =
+        synchronized(playbackLock) { generation == playbackGeneration }
+
+    private fun playAudioFile(file: File, generation: Int) {
+        if (!isCurrentGeneration(generation)) {
+            file.delete()
+            return
+        }
+
         try {
             mediaPlayer?.release()
+            mediaPlayer = null
 
             RokidSdkManager.setCommunicationDevice()
 
-            mediaPlayer = MediaPlayer().apply {
+            val player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
@@ -99,20 +163,31 @@ class TtsPlaybackManager(
                 setDataSource(file.absolutePath)
                 setOnCompletionListener {
                     Log.d(TAG, "Playback completed")
-                    cleanup()
+                    cleanup(generation)
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                    cleanup()
+                    cleanup(generation)
                     true
                 }
                 prepare()
-                start()
+            }
+
+            if (isCurrentGeneration(generation)) {
+                mediaPlayer = player
+                player.start()
                 Log.d(TAG, "Playback started")
+            } else {
+                player.release()
+                file.delete()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error playing audio file", e)
-            cleanup()
+            if (isCurrentGeneration(generation)) {
+                Log.e(TAG, "Error playing audio file", e)
+                cleanup(generation)
+            } else {
+                file.delete()
+            }
         }
     }
 
@@ -120,6 +195,15 @@ class TtsPlaybackManager(
      * Stop current playback and cleanup.
      */
     fun stop() {
+        synchronized(playbackLock) {
+            playbackGeneration += 1
+            synthesisJob?.cancel()
+            synthesisJob = null
+        }
+        stopPlaybackResources()
+    }
+
+    private fun stopPlaybackResources() {
         try {
             mediaPlayer?.let {
                 if (it.isPlaying) {
@@ -135,7 +219,9 @@ class TtsPlaybackManager(
         deleteTempFile()
     }
 
-    private fun cleanup() {
+    private fun cleanup(generation: Int? = null) {
+        if (generation != null && !isCurrentGeneration(generation)) return
+
         mediaPlayer?.release()
         mediaPlayer = null
         RokidSdkManager.clearCommunicationDevice()
