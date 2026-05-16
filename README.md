@@ -315,6 +315,7 @@ JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene comma
 
 - `AR PIC` asks the Rokid system to capture an AR picture of the glasses view.
 - `AR REC` asks the Rokid system to start an AR mixed recording.
+- `AR STOP` asks the Rokid system to stop the AR mixed recording.
 
 This path does not merge media inside JSOS. It delegates capture/processing to Rokid's glasses-side system flow; availability depends on the target Rokid firmware and services.
 

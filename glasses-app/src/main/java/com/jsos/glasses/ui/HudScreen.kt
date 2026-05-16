@@ -126,6 +126,7 @@ enum class MoreMenuItem(val icon: String, val label: String, val displaySize: Hu
     SLASH("/", "Slash Cmds"),
     AR_PICTURE("PIC", "AR Picture"),
     AR_RECORD("REC", "AR Record"),
+    AR_STOP("STOP", "AR Stop"),
     VOICE("\uD83D\uDD0A", "Voice"),  // speaker icon - label is dynamic
 }
 
@@ -1670,6 +1671,7 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.SLASH -> "SLASH CMDS"
                         MoreMenuItem.AR_PICTURE -> "AR PIC"
                         MoreMenuItem.AR_RECORD -> "AR REC"
+                        MoreMenuItem.AR_STOP -> "AR STOP"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "VOICE ON" else "VOICE OFF"
                     }
                     val activeMark = if (isActive) "*" else " "

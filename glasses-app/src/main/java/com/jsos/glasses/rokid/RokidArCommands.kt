@@ -11,20 +11,24 @@ object RokidArCommands {
     private const val SCENE_MIX_RECORD = "mix_record"
 
     fun startArScreenshot(context: Context) {
-        sendScene(context, SCENE_AR_PICTURE)
+        sendScene(context, SCENE_AR_PICTURE, open = true)
     }
 
     fun startArRecord(context: Context) {
-        sendScene(context, SCENE_MIX_RECORD)
+        sendScene(context, SCENE_MIX_RECORD, open = true)
     }
 
-    private fun sendScene(context: Context, scene: String) {
+    fun stopArRecord(context: Context) {
+        sendScene(context, SCENE_MIX_RECORD, open = false)
+    }
+
+    private fun sendScene(context: Context, scene: String, open: Boolean) {
         val intent = Intent(ACTION_CMD).apply {
             putExtra("cmd_type", "control_scene")
             putExtra("scene", scene)
-            putExtra("open", "true")
+            putExtra("open", if (open) "true" else "false")
         }
         context.sendBroadcast(intent)
-        Log.i(GlassesApp.TAG, "Rokid AR scene command sent: $scene")
+        Log.i(GlassesApp.TAG, "Rokid AR scene command sent: scene=$scene open=$open")
     }
 }

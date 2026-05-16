@@ -66,6 +66,7 @@ class HudActivity : ComponentActivity() {
         const val DEBUG_PORT = 8081
         private const val CHUNK_MESSAGE_TYPE = "chunk_part"
         private const val CHUNK_TIMEOUT_MS = 30_000L
+        private const val ROKID_AR_COMMAND_COOLDOWN_MS = 1_200L
 
         /** Sentinel key for the "New Session" entry in the session picker. */
         const val NEW_SESSION_KEY = "__new_session__"
@@ -109,6 +110,7 @@ class HudActivity : ComponentActivity() {
 
     // Wake signal handling
     private var clearWakeNotificationJob: Job? = null
+    private var lastRokidArCommandAtMs = 0L
 
     private data class PendingChunkedMessage(
         val total: Int,
@@ -865,10 +867,19 @@ class HudActivity : ComponentActivity() {
                 )
             }
             MoreMenuItem.AR_PICTURE -> {
-                RokidArCommands.startArScreenshot(this)
+                runRokidArCommand("picture") {
+                    RokidArCommands.startArScreenshot(this)
+                }
             }
             MoreMenuItem.AR_RECORD -> {
-                RokidArCommands.startArRecord(this)
+                runRokidArCommand("record_start") {
+                    RokidArCommands.startArRecord(this)
+                }
+            }
+            MoreMenuItem.AR_STOP -> {
+                runRokidArCommand("record_stop") {
+                    RokidArCommands.stopArRecord(this)
+                }
             }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
@@ -883,6 +894,16 @@ class HudActivity : ComponentActivity() {
             }
             else -> {}
         }
+    }
+
+    private fun runRokidArCommand(name: String, action: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (now - lastRokidArCommandAtMs < ROKID_AR_COMMAND_COOLDOWN_MS) {
+            Log.d(GlassesApp.TAG, "Rokid AR command ignored during cooldown: $name")
+            return
+        }
+        lastRokidArCommandAtMs = now
+        action()
     }
 
     private fun appendToInput(char: String) {
