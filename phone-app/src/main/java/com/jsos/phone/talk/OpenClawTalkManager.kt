@@ -21,6 +21,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 sealed class LiveTalkState {
     object Idle : LiveTalkState()
@@ -66,6 +67,7 @@ class OpenClawTalkManager(
     private var activeSessionKey: String? = null
     private var onTranscript: (LiveTalkTranscript) -> Unit = {}
     private val pendingToolRuns = ConcurrentHashMap<String, ToolRunWaiter>()
+    private val sessionGeneration = AtomicLong(0L)
 
     val isActive: Boolean
         get() = activeSessionId != null || _state.value is LiveTalkState.Connecting
@@ -74,20 +76,22 @@ class OpenClawTalkManager(
         sessionKey: String?,
         onTranscript: (LiveTalkTranscript) -> Unit,
     ) {
-        stop()
+        stopInternal(closeRemote = true, advanceGeneration = true)
+        val generation = sessionGeneration.incrementAndGet()
         this.onTranscript = onTranscript
 
         val talkScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope = talkScope
         _state.value = LiveTalkState.Connecting
 
-        openClawClient.onTalkEvent = { payload -> handleTalkEvent(payload) }
-        openClawClient.onRawChatEvent = { payload -> handleRawChatEvent(payload) }
+        openClawClient.onTalkEvent = { payload -> handleTalkEvent(payload, generation) }
+        openClawClient.onRawChatEvent = { payload -> handleRawChatEvent(payload, generation) }
 
         talkScope.launch {
             try {
                 val effectiveSessionKey = sessionKey?.takeIf { it.isNotBlank() } ?: "main"
                 val response = openClawClient.createTalkSession(effectiveSessionKey)
+                if (!isCurrentGeneration(generation)) return@launch
                 if (!response.ok) {
                     throw IllegalStateException(response.error?.get("message")?.asString ?: "talk.session.create failed")
                 }
@@ -103,22 +107,31 @@ class OpenClawTalkManager(
                     ?: payload.objectValue("session")?.stringValue("relaySessionId")
                 activeSessionKey = effectiveSessionKey
 
-                startPlayback()
-                startAudioCapture(sessionId)
-                _state.value = LiveTalkState.Listening
+                startPlayback(generation)
+                startAudioCapture(sessionId, generation)
+                if (isCurrentGeneration(generation)) {
+                    _state.value = LiveTalkState.Listening
+                }
             } catch (e: Exception) {
+                if (!isCurrentGeneration(generation)) return@launch
                 Log.e(TAG, "Failed to start Live Talk", e)
+                val errorMessage = e.message ?: "Live Talk failed"
                 stopInternal(closeRemote = false)
-                _state.value = LiveTalkState.Error(e.message ?: "Live Talk failed")
+                if (isCurrentGeneration(generation)) {
+                    _state.value = LiveTalkState.Error(errorMessage)
+                }
             }
         }
     }
 
     fun stop() {
-        stopInternal(closeRemote = true)
+        stopInternal(closeRemote = true, advanceGeneration = true)
     }
 
-    private fun stopInternal(closeRemote: Boolean) {
+    private fun stopInternal(closeRemote: Boolean, advanceGeneration: Boolean = false) {
+        if (advanceGeneration) {
+            sessionGeneration.incrementAndGet()
+        }
         val sessionId = activeSessionId
         activeSessionId = null
         activeRelaySessionId = null
@@ -144,11 +157,12 @@ class OpenClawTalkManager(
         _state.value = LiveTalkState.Idle
     }
 
-    private fun handleTalkEvent(payload: JsonObject) {
+    private fun handleTalkEvent(payload: JsonObject, generation: Long) {
+        if (!isCurrentGeneration(generation)) return
         val type = payload.stringValue("type") ?: return
         val payloadSessionId = payload.stringValue("sessionId")
-        val sessionId = activeSessionId
-        if (payloadSessionId != null && sessionId != null && payloadSessionId != sessionId) return
+        val sessionId = activeSessionId ?: return
+        if (payloadSessionId != null && payloadSessionId != sessionId) return
 
         when (type) {
             "ready" -> _state.value = LiveTalkState.Listening
@@ -169,7 +183,7 @@ class OpenClawTalkManager(
                 }
                 if (isFinal) _state.value = LiveTalkState.Listening
             }
-            "toolCall" -> handleToolCall(payload)
+            "toolCall" -> handleToolCall(payload, generation)
             "error" -> {
                 val message = payload.stringValue("message") ?: "Live Talk error"
                 Log.e(TAG, "Talk error (redacted)")
@@ -179,7 +193,8 @@ class OpenClawTalkManager(
         }
     }
 
-    private fun handleToolCall(payload: JsonObject) {
+    private fun handleToolCall(payload: JsonObject, generation: Long) {
+        if (!isCurrentGeneration(generation)) return
         val sessionId = activeSessionId ?: return
         val callId = payload.stringValue("callId") ?: return
         val name = payload.stringValue("name") ?: return
@@ -189,6 +204,7 @@ class OpenClawTalkManager(
 
         scope?.launch {
             try {
+                if (!isCurrentGeneration(generation)) return@launch
                 val response = openClawClient.runTalkToolCall(
                     sessionKey = sessionKey,
                     relaySessionId = relaySessionId,
@@ -208,6 +224,7 @@ class OpenClawTalkManager(
                         ?: response.payload?.stringValue("content")
                         ?: "OK"
                 }
+                if (!isCurrentGeneration(generation)) return@launch
 
                 val result = JsonObject().apply {
                     addProperty("text", resultText)
@@ -215,6 +232,7 @@ class OpenClawTalkManager(
                 }
                 openClawClient.submitTalkToolResult(sessionId, callId, result)
             } catch (e: Exception) {
+                if (!isCurrentGeneration(generation)) return@launch
                 Log.e(TAG, "Talk tool call failed", e)
                 val result = JsonObject().apply {
                     addProperty("error", e.message ?: "Tool call failed")
@@ -236,7 +254,8 @@ class OpenClawTalkManager(
         }
     }
 
-    private fun handleRawChatEvent(payload: JsonObject) {
+    private fun handleRawChatEvent(payload: JsonObject, generation: Long) {
+        if (!isCurrentGeneration(generation)) return
         val runId = payload.stringValue("runId") ?: return
         val waiter = pendingToolRuns[runId] ?: return
         val state = payload.stringValue("state") ?: return
@@ -282,7 +301,7 @@ class OpenClawTalkManager(
     }
 
     @Suppress("MissingPermission")
-    private fun startAudioCapture(sessionId: String) {
+    private fun startAudioCapture(sessionId: String, generation: Long) {
         val minBuffer = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -309,7 +328,7 @@ class OpenClawTalkManager(
 
         recordingJob = scope?.launch {
             val readBuffer = ByteArray(SEND_FRAME_BYTES)
-            while (isActive && activeSessionId == sessionId) {
+            while (isActive && isCurrentGeneration(generation) && activeSessionId == sessionId) {
                 val bytesRead = record.read(readBuffer, 0, readBuffer.size)
                 if (bytesRead > 0) {
                     val audioBase64 = Base64.encodeToString(readBuffer.copyOf(bytesRead), Base64.NO_WRAP)
@@ -331,7 +350,7 @@ class OpenClawTalkManager(
         audioRecord = null
     }
 
-    private fun startPlayback() {
+    private fun startPlayback(generation: Long) {
         val minBuffer = AudioTrack.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_OUT_MONO,
@@ -368,6 +387,7 @@ class OpenClawTalkManager(
         audioOutputQueue = queue
         audioPlaybackJob = scope?.launch {
             for (audio in queue) {
+                if (!isCurrentGeneration(generation)) break
                 writeAudio(audio)
             }
         }
@@ -439,6 +459,9 @@ class OpenClawTalkManager(
             }
         }
     }
+
+    private fun isCurrentGeneration(generation: Long): Boolean =
+        generation == sessionGeneration.get()
 }
 
 private fun JsonObject.stringValue(name: String): String? =

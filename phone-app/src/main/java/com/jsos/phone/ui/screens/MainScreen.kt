@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.DropdownMenu
@@ -436,6 +437,31 @@ fun MainScreen() {
         }
         glassesManager.sendRawMessage(resultMsg.toString())
     }
+    fun stopGlassesVoiceRecognition() {
+        android.util.Log.d("MainScreen", "Stopping glasses voice recognition")
+        voiceRecognitionManager.stopListening()
+        RokidSdkManager.clearCommunicationDevice()
+        sendVoiceState("idle")
+        mainHandler.postDelayed({ RokidSdkManager.sendExitEvent() }, 100)
+    }
+    fun submitChatMessage(text: String, photosToSend: List<String>, clearInputOnSuccess: Boolean = false) {
+        if (text.isBlank()) return
+        openClawClient.sendMessage(text, photosToSend.ifEmpty { null }) { success ->
+            mainHandler.post {
+                if (success) {
+                    if (clearInputOnSuccess && inputText == text) {
+                        inputText = ""
+                    }
+                    if (photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
+                        pendingPhotos = emptyList()
+                        glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                    }
+                } else {
+                    android.widget.Toast.makeText(context, "Send failed", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     fun stopLiveTalk() {
         liveTalkManager.stop()
         liveTalkAudioRouteManager.clear()
@@ -515,6 +541,10 @@ fun MainScreen() {
                 if (glassesVoiceButtonMode == GlassesVoiceButtonMode.LiveTalk) {
                     startLiveTalkFromGlasses()
                 } else {
+                    if (voiceRecognitionManager.isListening.value) {
+                        stopGlassesVoiceRecognition()
+                        return@post
+                    }
                     dismissRokidAiSceneBurst()
                     RokidSdkManager.setCommunicationDevice()
                     startVoiceRecognitionWithManager(
@@ -551,12 +581,9 @@ fun MainScreen() {
                 when (type) {
                     "user_input" -> {
                         val text = json.optString("text", "")
-                        val images = pendingPhotos.ifEmpty { null }
-                        android.util.Log.d("MainScreen", "Received user input from glasses (${text.length} chars, photos=${pendingPhotos.size})")
-                        if (text.isNotEmpty()) {
-                            openClawClient.sendMessage(text, images)
-                        }
-                        pendingPhotos = emptyList()
+                        val photosToSend = pendingPhotos
+                        android.util.Log.d("MainScreen", "Received user input from glasses (${text.length} chars, photos=${photosToSend.size})")
+                        submitChatMessage(text, photosToSend)
                     }
                     "start_voice" -> {
                         if (glassesVoiceButtonMode == GlassesVoiceButtonMode.LiveTalk) {
@@ -626,13 +653,7 @@ fun MainScreen() {
                             stopLiveTalk()
                             return@handler
                         }
-                        voiceRecognitionManager.stopListening()
-                        com.jsos.phone.glasses.RokidSdkManager.clearCommunicationDevice()
-                        val stateMsg = org.json.JSONObject().apply {
-                            put("type", "voice_state")
-                            put("state", "idle")
-                        }
-                        glassesManager.sendRawMessage(stateMsg.toString())
+                        stopGlassesVoiceRecognition()
                     }
                     "list_sessions" -> {
                         android.util.Log.d("MainScreen", "Requesting session list for glasses")
@@ -861,13 +882,11 @@ fun MainScreen() {
                     keyboardActions = KeyboardActions(
                         onSend = {
                             if (inputText.isNotBlank()) {
-                                val hadPhotos = pendingPhotos.isNotEmpty()
-                                openClawClient.sendMessage(inputText, pendingPhotos.ifEmpty { null })
-                                inputText = ""
-                                pendingPhotos = emptyList()
-                                if (hadPhotos) {
-                                    glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
-                                }
+                                submitChatMessage(
+                                    text = inputText,
+                                    photosToSend = pendingPhotos,
+                                    clearInputOnSuccess = true
+                                )
                             }
                         }
                     ),
@@ -958,17 +977,15 @@ fun MainScreen() {
                 IconButton(
                     onClick = {
                         if (inputText.isNotBlank()) {
-                            val hadPhotos = pendingPhotos.isNotEmpty()
-                            openClawClient.sendMessage(inputText, pendingPhotos.ifEmpty { null })
-                            inputText = ""
-                            pendingPhotos = emptyList()
-                            if (hadPhotos) {
-                                glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
-                            }
+                            submitChatMessage(
+                                text = inputText,
+                                photosToSend = pendingPhotos,
+                                clearInputOnSuccess = true
+                            )
                         }
                     }
                 ) {
-                    Icon(Icons.Default.Send, "Send", tint = JsosPalette.Cyan)
+                    Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = JsosPalette.Cyan)
                 }
             }
             }

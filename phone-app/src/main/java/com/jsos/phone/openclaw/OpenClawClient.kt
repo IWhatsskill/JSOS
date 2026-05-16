@@ -178,19 +178,9 @@ class OpenClawClient(
     /**
      * Send a user message to OpenClaw and trigger an agent run.
      */
-    fun sendMessage(text: String, images: List<String>? = null) {
+    fun sendMessage(text: String, images: List<String>? = null, onResult: ((Boolean) -> Unit)? = null) {
         scope.launch {
             try {
-                // Add user message to local chat
-                val userMsgId = UUID.randomUUID().toString()
-                val userMsg = ChatMessage(
-                    id = userMsgId,
-                    role = "user",
-                    content = text
-                )
-                addChatMessage(userMsg)
-                onChatMessage?.invoke(userMsg)
-
                 // Send to OpenClaw as chat.send
                 val idempotencyKey = UUID.randomUUID().toString()
                 val params = JsonObject().apply {
@@ -213,6 +203,7 @@ class OpenClawClient(
                     }
                 }
 
+                val userMsgId = UUID.randomUUID().toString()
                 val assistantMsgId = UUID.randomUUID().toString()
                 activeMessageId = assistantMsgId
                 activeSessionKey = _currentSessionKey.value
@@ -220,19 +211,35 @@ class OpenClawClient(
 
                 val response = sendRequest(OpenClawMethods.CHAT_SEND, params)
                 if (response.ok) {
+                    // Add the local user message only after the gateway accepts the send.
+                    val userMsg = ChatMessage(
+                        id = userMsgId,
+                        role = "user",
+                        content = text
+                    )
+                    addChatMessage(userMsg)
+                    onChatMessage?.invoke(userMsg)
+
                     // Extract runId from response
                     activeRunId = response.payload?.get("runId")?.asString
                     Log.d(TAG, "Agent run started: runId=$activeRunId")
                     // Notify glasses that agent is thinking
                     onAgentThinking?.invoke(AgentThinking(id = assistantMsgId))
+                    onResult?.invoke(true)
                 } else {
                     val errorMsg = response.error?.get("message")?.asString ?: "Agent run failed"
                     Log.e(TAG, "Agent run failed: $errorMsg")
                     activeRunId = null
                     activeMessageId = null
+                    activeSessionKey = null
+                    onResult?.invoke(false)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending message", e)
+                activeRunId = null
+                activeMessageId = null
+                activeSessionKey = null
+                onResult?.invoke(false)
             }
         }
     }
