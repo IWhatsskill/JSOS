@@ -11,8 +11,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -63,7 +63,6 @@ class HudActivity : ComponentActivity() {
 
         const val DEBUG_HOST = "10.0.2.2"
         const val DEBUG_PORT = 8081
-        private const val CAMERA_PERMISSION_REQUEST = 1001
         private const val CHUNK_MESSAGE_TYPE = "chunk_part"
         private const val CHUNK_TIMEOUT_MS = 30_000L
 
@@ -89,6 +88,14 @@ class HudActivity : ComponentActivity() {
     private lateinit var phoneConnection: PhoneConnectionService
     private lateinit var voiceHandler: GlassesVoiceHandler
     private lateinit var cameraCapture: CameraCapture
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                cameraCapture.capture()
+            } else {
+                Log.w(GlassesApp.TAG, "Camera permission denied")
+            }
+        }
 
     // Thumbnails to attach to the next user message echo from the server
 
@@ -673,7 +680,7 @@ class HudActivity : ComponentActivity() {
                     if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                         cameraCapture.capture()
                     } else {
-                        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }
                 } else {
                     phoneConnection.sendToPhone("""{"type":"take_photo"}""")
@@ -1648,18 +1655,6 @@ class HudActivity : ComponentActivity() {
             }
         }
         return result.toString()
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_REQUEST) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                cameraCapture.capture()
-            } else {
-                Log.w(GlassesApp.TAG, "Camera permission denied")
-            }
-        }
     }
 
     override fun onDestroy() {
