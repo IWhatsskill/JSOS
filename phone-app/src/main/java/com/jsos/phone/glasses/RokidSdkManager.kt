@@ -35,6 +35,7 @@ import javax.crypto.spec.SecretKeySpec
 object RokidSdkManager {
 
     private const val TAG = "RokidSdkManager"
+    private const val BLUETOOTH_CLIENT_NAME = "JSOS Core"
 
     private var isInitialized = false
     private var cxrApi: CxrApi? = null
@@ -278,7 +279,7 @@ object RokidSdkManager {
     /**
      * Connect using socketUuid and macAddress from onConnectionInfo.
      *
-     * SDK signature: connectBluetooth(context, socketUuid, macAddress, callback, snEncryptContent, clientSecret)
+     * SDK signature: connectBluetooth(context, socketUuid, macAddress, bluetoothClientName, callback, snEncryptContent, clientSecret)
      *
      * The SDK performs an SN verification after BT connects:
      * 1. Gets glasses SN via getGlassInfo
@@ -315,6 +316,7 @@ object RokidSdkManager {
                 context,
                 socketUuid,
                 macAddress,
+                BLUETOOTH_CLIENT_NAME,
                 bluetoothCallback,
                 encryptContent,
                 clientSecret
