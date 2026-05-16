@@ -40,8 +40,8 @@ android {
         applicationId = "com.jsos.phone"
         minSdk = 28  // Required by CXR-M SDK
         targetSdk = 34
-        versionCode = 25
-        versionName = "1.0.24"
+        versionCode = 26
+        versionName = "1.0.25"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -107,6 +107,7 @@ dependencies {
 
     // Rokid CXR-M SDK (Phone side): Bluetooth bridge, device control, camera, wake, voice events
     implementation("com.rokid.cxr:client-m:1.2.1")
+    implementation(files("libs/client-l-1.0.1-jsos-stripped.aar"))
 
     // Android Core
     implementation("androidx.core:core-ktx:1.12.0")

@@ -9,10 +9,12 @@ JSOS Core and JSOS HUD are treated as separate APKs:
 1. Build the phone app.
 2. Build the glasses app.
 3. Install JSOS Core on the phone.
-4. Install JSOS HUD on the glasses through Hi Rokid / APK Manager.
+4. Install JSOS HUD on the glasses through JSOS Core's HUD Deployment section, or manually through Hi Rokid / APK Manager.
 
 JSOS Core no longer bundles the glasses APK into `phone-app/src/main/assets/`.
-JSOS does not currently document direct `CxrApi.startUploadApk()` installation as the supported public path.
+The integrated JSOS Core deployment flow requires Hi Rokid to be installed on the phone and already connected to the glasses. JSOS Core selects the JSOS HUD APK and hands installation to Hi Rokid / CXR-L.
+
+Manual Hi Rokid / APK Manager installation remains the fallback path when the integrated deployment flow is unavailable or unstable on a device.
 
 ## Build Outputs
 
@@ -30,7 +32,37 @@ glasses-app/build/outputs/apk/debug/glasses-app-debug.apk
 ```
 
 Install JSOS Core on the phone with your normal Android workflow, then install
-the JSOS HUD APK on the glasses through Hi Rokid / APK Manager.
+the JSOS HUD APK on the glasses from JSOS Core or through Hi Rokid / APK
+Manager.
+
+## JSOS Core HUD Deployment Flow
+
+The JSOS Core HUD Deployment section can drive the install without opening a
+separate APK Manager app manually.
+
+Requirements:
+
+- Hi Rokid installed on the phone.
+- Rokid glasses already connected inside Hi Rokid.
+- Phone Wi-Fi enabled, because the Hi Rokid / CXR-L path uses the glasses link.
+- A locally built JSOS HUD APK selected from JSOS Core.
+- Hi Rokid authorization approved when JSOS Core asks for it.
+
+Flow:
+
+1. Open JSOS Core.
+2. Go to the HUD Deployment section.
+3. Select the locally built JSOS HUD APK.
+4. Authorize Hi Rokid if needed.
+5. Tap `Install via Hi Rokid`.
+
+JSOS Core resets the CXR-L link before each install attempt, waits for both the
+CXR-L service and glasses Bluetooth callbacks, waits briefly for a stable link,
+then starts the upload/install handoff.
+
+If the link drops or the wait times out, JSOS Core should stop the attempt and
+show a retry-friendly status message. Open Hi Rokid, confirm the glasses are
+connected, then retry the same selected APK.
 
 Do not publish debug or release APKs built with real local Rokid, OpenClaw,
 OpenAI, ElevenLabs, or signing credentials.
@@ -52,6 +84,9 @@ That entry is kept as a safety net for older local worktrees.
 ## Related Code
 
 - `phone-app/build.gradle.kts`
+- `phone-app/libs/README.md`
+- `phone-app/libs/client-l-1.0.1-jsos-stripped.aar`
+- `phone-app/src/main/java/com/jsos/phone/deployment/HiRokidHudDeploymentManager.kt`
 - `phone-app/src/main/java/com/jsos/phone/ui/settings/SoftwareUpdateSection.kt`
 - `phone-app/src/main/java/com/jsos/phone/ui/screens/MainScreen.kt`
 - `glasses-app/build.gradle.kts`
@@ -59,3 +94,4 @@ That entry is kept as a safety net for older local worktrees.
 ## External Reference
 
 - [Rokid-APKs by Anezium](https://github.com/Anezium/Rokid-APKs)
+- [OverlayRec by Anezium](https://github.com/Anezium/OverlayRec)

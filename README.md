@@ -22,7 +22,7 @@ Current state:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, and HUD deployment code are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, and Hi Rokid / CXR-L HUD deployment code are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview areas:
@@ -54,6 +54,9 @@ Main JSOS changes include:
 - OpenClaw Gateway protocol updates used by JSOS, including protocol v4 handling and Live Talk related code paths.
 - OpenAI Realtime voice input path with Android SpeechRecognizer fallback.
 - Updated the existing ElevenLabs TTS, Rokid CXR transport, and HUD camera request flows for the JSOS codebase, current dependencies, JSOS UI, and public-safe logging.
+- Integrated a Hi Rokid / CXR-L HUD deployment flow in JSOS Core so the phone app can select a JSOS HUD APK and hand installation to Hi Rokid when Hi Rokid is installed and already connected to the glasses.
+- Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
+- Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
 - Chunked phone-to-glasses message transport for larger JSON payloads.
 - Wake acknowledgments and status messages between phone and HUD.
 - Public-readiness cleanup: neutral assets, README rewrite, safer `.gitignore`, redacted sensitive logs, local-only signing, and clearer security notes.
@@ -81,7 +84,7 @@ adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 ```
 
 5. Use JSOS Core to configure OpenClaw, approve the phone device on the gateway if required, and pair the Rokid glasses.
-6. Install the separate JSOS HUD APK on the glasses through Hi Rokid / APK Manager.
+6. Install the separate JSOS HUD APK on the glasses either from JSOS Core's HUD Deployment section, which uses Hi Rokid / CXR-L, or manually through Hi Rokid / APK Manager.
 
 ## Architecture
 
@@ -163,7 +166,7 @@ ship official APK releases, private signing keys, or device/API credentials.
 JSOS Core and JSOS HUD are built and installed as separate Android apps:
 
 - JSOS Core is installed on the phone.
-- JSOS HUD is installed on the glasses through Hi Rokid / APK Manager.
+- JSOS HUD is installed on the glasses through Hi Rokid. JSOS Core can drive this from its HUD Deployment section when Hi Rokid is installed and the glasses are already connected there; manual Hi Rokid / APK Manager installation remains a fallback.
 
 ### Debug Builds
 
@@ -194,7 +197,7 @@ Install JSOS Core on the phone:
 adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 ```
 
-Install JSOS HUD as a separate APK on the glasses through Hi Rokid / APK Manager.
+Install JSOS HUD as a separate APK on the glasses from JSOS Core's HUD Deployment section, or manually through Hi Rokid / APK Manager. The JSOS Core deployment flow still depends on Hi Rokid being installed on the phone and already connected to the glasses.
 
 Do not publish private debug APKs built with real local credentials.
 
@@ -234,7 +237,7 @@ signing key.
 2. Open JSOS Core and configure the gateway host, port, and token in the System Link area.
 3. Connect to OpenClaw. If the gateway reports pairing required, approve the pending device on the gateway and reconnect.
 4. Put the Rokid glasses into their normal Bluetooth pairing mode, then scan and connect from the JSOS Core HUD Link area.
-5. Install JSOS HUD on the glasses through Hi Rokid / APK Manager.
+5. Install JSOS HUD on the glasses through JSOS Core's HUD Deployment section, or manually through Hi Rokid / APK Manager.
 6. Launch JSOS HUD on the glasses. The HUD should show connection/session status once the phone bridge is connected.
 
 ## What Runs Where
@@ -253,7 +256,7 @@ JSOS Core is responsible for:
 - Android SpeechRecognizer fallback.
 - Optional ElevenLabs TTS settings and playback path.
 - Photo capture handoff from the glasses to the phone/OpenClaw flow.
-- HUD deployment guidance for installing the separate JSOS HUD APK through Hi Rokid / APK Manager.
+- HUD deployment flow for selecting a separate JSOS HUD APK and handing installation to Hi Rokid / CXR-L.
 
 ### JSOS HUD glasses app
 
@@ -465,8 +468,10 @@ After approval, reconnect from JSOS Core. The device token is stored locally by 
 ### Glasses App Installation Fails
 
 - Rebuild `:glasses-app:assembleDebug` so you have a fresh JSOS HUD debug APK.
-- Install the JSOS HUD APK on the glasses through Hi Rokid / APK Manager.
-- If installation keeps failing after a device reconnect, unpair and pair the glasses again, then retry.
+- In JSOS Core, select the JSOS HUD APK in the HUD Deployment section, authorize Hi Rokid when prompted, and install through the Hi Rokid / CXR-L flow.
+- Hi Rokid must be installed on the phone and already connected to the glasses before JSOS Core can hand off the install.
+- If the JSOS Core deployment flow times out or reports that the Hi Rokid/glasses link dropped, open Hi Rokid, confirm the glasses connection, then retry the same selected APK.
+- Manual Hi Rokid / APK Manager installation remains a fallback if the integrated deployment flow is not stable on a device.
 
 ### Voice Recognition Not Working
 
@@ -531,7 +536,7 @@ This project is distributed under the GNU Affero General Public License, version
 
 Modified versions distributed as APKs or made available over a network must follow the AGPL terms, including preserving notices and making corresponding source available where required.
 
-The Rokid CXR SDK is proprietary software from Rokid and is licensed separately by Rokid. It is not covered by the AGPL license of this repository and must be obtained under Rokid's own terms.
+The Rokid CXR SDK is proprietary software from Rokid and is licensed separately by Rokid. It is not covered by the AGPL license of this repository and must be obtained under Rokid's own terms. JSOS includes a small CXR-L compatibility AAR derived from Rokid's public Maven `client-l:1.0.1` artifact for the Hi Rokid deployment flow; see `phone-app/libs/README.md`.
 
 This fork does not grant a separate commercial or closed-source license. Commercial permissions for upstream rights must be obtained from the original rights holders.
 
@@ -541,11 +546,12 @@ Thanks to:
 
 - [dweddepohl](https://github.com/dweddepohl) for the upstream Clawsses project.
 - [OpenClaw](https://github.com/openclaw/openclaw) for the OpenClaw project.
-- [Anezium](https://github.com/Anezium) for Rokid APK Manager workflow notes used during HUD installation work.
+- [Anezium](https://github.com/Anezium) for public Rokid APK Manager / CXR-L workflow notes and permission to reference that work during JSOS HUD deployment integration.
 - [Rokid](https://github.com/rokid) for the Rokid glasses platform and SDK ecosystem.
 
 ## Links
 
 - [Upstream Clawsses](https://github.com/dweddepohl/clawsses)
 - [OpenClaw](https://github.com/openclaw/openclaw)
-- [Rokid APK Manager workflow used for HUD installation notes](https://github.com/Anezium/Rokid-APKs)
+- [Rokid APK Manager / CXR-L workflow reference](https://github.com/Anezium/Rokid-APKs)
+- [OverlayRec reference by Anezium](https://github.com/Anezium/OverlayRec)

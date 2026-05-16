@@ -30,7 +30,7 @@ Major JSOS modifications include:
 - OpenAI Realtime speech-to-text support with Android SpeechRecognizer fallback.
 - ElevenLabs TTS routing adjustments for glasses audio playback.
 - Rokid AI scene overlay suppression during voice input.
-- Separate JSOS Core and JSOS HUD install flow for daily JSOS/OpenClaw use; JSOS HUD is installed separately through Hi Rokid / APK Manager.
+- Separate JSOS Core and JSOS HUD install flow for daily JSOS/OpenClaw use; JSOS Core can hand JSOS HUD installation to Hi Rokid / CXR-L when Hi Rokid is installed and already connected to the glasses.
 
 LICENSE
 
@@ -62,8 +62,14 @@ THIRD-PARTY COMPONENTS
 
 This software uses the Rokid CXR SDK, which is proprietary software provided
 by Rokid Corporation under its own license terms. The CXR SDK is not covered
-by the AGPL-3.0 license of this project and is not redistributed as part of
-the source code. Users must obtain the SDK separately from Rokid.
+by the AGPL-3.0 license of this project.
+
+JSOS includes `phone-app/libs/client-l-1.0.1-jsos-stripped.aar`, a small
+CXR-L compatibility artifact derived from Rokid's public Maven
+`com.rokid.cxr:client-l:1.0.1` artifact. It removes only duplicate classes
+and native libraries already supplied by `com.rokid.cxr:client-m:1.2.1`.
+See `phone-app/libs/README.md` for the artifact details. Rokid SDKs, APIs,
+trademarks, and documentation remain governed by Rokid's own terms.
 
 Open-source dependencies include:
 
