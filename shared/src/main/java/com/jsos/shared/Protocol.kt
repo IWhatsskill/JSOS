@@ -216,7 +216,38 @@ data class SessionInfo(
     @SerializedName("kind") val kind: String? = null
 ) {
     /** Best available display name for this session */
-    val name: String get() = label ?: displayName ?: derivedTitle ?: key
+    val name: String get() = stableSessionDisplayName(key, label, displayName, derivedTitle)
+}
+
+fun stableSessionDisplayName(
+    key: String,
+    label: String? = null,
+    displayName: String? = null,
+    derivedTitle: String? = null
+): String {
+    return when (key) {
+        "agent:main:main" -> "Web-JARVIS"
+        "agent:coding-lab:main" -> "Web-Coding-Lab"
+        "agent:codex-lab:main" -> "Web-Codex-Lab"
+        "agent:codex-cli-lab:main" -> "Web-CLI-Lab"
+        "agent:discord-gpt-5:main" -> "Web-GPT-5"
+        "agent:discord-qwen-397b:main" -> "Web-Qwen397b"
+        "agent:discord-general:main" -> "Web-General"
+        "agent:main:discord:channel:1500568623918616607" -> "DC-JARVIS"
+        "agent:discord-general:discord:channel:1500344381067235371" -> "DC-General"
+        "agent:coding-lab:discord:channel:1500344381067235371" -> "DC-Coding-Lab"
+        "agent:discord-gpt-5:discord:channel:1500358984887046344" -> "DC-GPT-5"
+        "agent:discord-qwen-397b:discord:channel:1500359031427039323" -> "DC-Qwen397b"
+        "agent:codex-lab:discord:channel:1500618054072012952" -> "DC-Codex-Lab"
+        "agent:codex-cli-lab:discord:channel:1501628003766112366" -> "DC-CLI-Lab"
+        else -> when {
+            key.startsWith("agent:main:whatsapp:direct:") -> "WhatsApp"
+            !label.isNullOrBlank() -> label
+            !displayName.isNullOrBlank() -> displayName
+            !derivedTitle.isNullOrBlank() -> derivedTitle
+            else -> key
+        }
+    }
 }
 
 // ============================================

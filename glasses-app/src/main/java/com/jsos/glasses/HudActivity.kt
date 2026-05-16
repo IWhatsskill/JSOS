@@ -41,6 +41,7 @@ import com.jsos.glasses.ui.RecognitionMode
 import com.jsos.glasses.ui.VoiceSendMode
 import com.jsos.glasses.ui.theme.GlassesHudTheme
 import com.jsos.glasses.voice.GlassesVoiceHandler
+import com.jsos.shared.stableSessionDisplayName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1374,8 +1375,7 @@ class HudActivity : ComponentActivity() {
                                 val derivedTitle = sessionObj.optString("derivedTitle", "")
                                 val kind = sessionObj.optString("kind", "")
                                 val updatedAt = if (sessionObj.has("updatedAt")) sessionObj.optLong("updatedAt", 0L).takeIf { it > 0 } else null
-                                // Use best available name: label > displayName > derivedTitle > key
-                                val name = label.ifEmpty { displayName.ifEmpty { derivedTitle.ifEmpty { key } } }
+                                val name = stableSessionDisplayName(key, label, displayName, derivedTitle)
                                 sessions.add(SessionPickerInfo(
                                     key = key,
                                     name = name,
@@ -1416,7 +1416,7 @@ class HudActivity : ComponentActivity() {
                 "voice_state" -> {
                     val state = msg.optString("state", "")
                     val text = msg.optString("text", "")
-                    val mode = if (msg.has("mode")) msg.optString("mode", null) else null
+                    val mode = if (msg.has("mode") && !msg.isNull("mode")) msg.optString("mode") else null
                     voiceHandler.handleVoiceState(state, text, mode)
                 }
 
@@ -1521,7 +1521,7 @@ class HudActivity : ComponentActivity() {
                     // TTS state sync from phone
                     val enabled = msg.optBoolean("enabled", false)
                     val voiceName = if (msg.has("voiceName") && !msg.isNull("voiceName")) {
-                        msg.optString("voiceName", null)
+                        msg.optString("voiceName")
                     } else null
                     hudState.update { current ->
                         current.copy(ttsEnabled = enabled)
