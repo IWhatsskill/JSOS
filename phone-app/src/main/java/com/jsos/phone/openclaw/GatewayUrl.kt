@@ -9,7 +9,7 @@ object GatewayUrl {
         val trimmedPort = port.trim().ifBlank { "18789" }
 
         return if (hasWebSocketScheme(trimmedHost)) {
-            appendPortIfMissing(trimmedHost, trimmedPort)
+            trimmedHost
         } else {
             "ws://${appendPortIfMissing(trimmedHost, trimmedPort)}"
         }

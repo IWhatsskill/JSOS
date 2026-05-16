@@ -18,6 +18,17 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal fun realtimeTranscriptionLanguage(languageTag: String?): String {
+    val language = languageTag
+        ?.trim()
+        ?.split("-", "_")
+        ?.firstOrNull()
+        ?.lowercase()
+        ?.takeIf { it.matches(Regex("[a-z]{2,3}")) }
+
+    return language ?: "de"
+}
+
 /**
  * OpenAI Realtime API client for streaming speech-to-text transcription.
  *
@@ -46,7 +57,6 @@ class OpenAIRealtimeClient {
         private const val TAG = "OpenAIRealtime"
         private const val REALTIME_URL = "wss://api.openai.com/v1/realtime"
         private const val MODEL = "gpt-realtime-whisper"
-        private const val TRANSCRIPTION_LANGUAGE = "de"
 
         private const val SAMPLE_RATE = 24000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
@@ -198,11 +208,7 @@ class OpenAIRealtimeClient {
     }
 
     private fun configureSession(webSocket: WebSocket, languageTag: String?) {
-        val requestedLanguage = languageTag
-            ?.split("-")
-            ?.firstOrNull()
-            ?.lowercase()
-            ?.takeIf { it.isNotBlank() }
+        val transcriptionLanguage = realtimeTranscriptionLanguage(languageTag)
 
         val sessionConfig = JSONObject().apply {
             put("type", "session.update")
@@ -216,7 +222,7 @@ class OpenAIRealtimeClient {
                         })
                         put("transcription", JSONObject().apply {
                             put("model", MODEL)
-                            put("language", TRANSCRIPTION_LANGUAGE)
+                            put("language", transcriptionLanguage)
                         })
                         put("turn_detection", JSONObject().apply {
                             put("type", "server_vad")
@@ -229,7 +235,7 @@ class OpenAIRealtimeClient {
             })
         }
 
-        Log.i(TAG, "Realtime transcription language: $TRANSCRIPTION_LANGUAGE (requested: ${requestedLanguage ?: "none"})")
+        Log.i(TAG, "Realtime transcription language: $transcriptionLanguage")
         Log.d(TAG, "Sending session config")
         webSocket.send(sessionConfig.toString())
     }
