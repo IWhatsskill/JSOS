@@ -239,8 +239,8 @@ class OpenClawClient(
 
     /**
      * Request the list of available sessions from the OpenClaw gateway.
-     * The server returns GatewaySessionRow objects with key, displayName, label,
-     * derivedTitle, updatedAt, kind, etc.
+     * The server returns GatewaySessionRow objects with key/sessionKey, agentId,
+     * displayName, origin, deliveryContext, derivedTitle, updatedAt, kind, etc.
      */
     fun requestSessions() {
         scope.launch {
@@ -255,22 +255,44 @@ class OpenClawClient(
                     val sessionsArray = sessionsPayload?.getAsJsonArray("sessions")
                     sessionsArray?.forEach { element ->
                         val obj = element.asJsonObject
-                        val key = obj.get("key")?.asString ?: ""
-                        val displayName = obj.get("displayName")?.asString
-                        val label = obj.get("label")?.asString
-                        val derivedTitle = obj.get("derivedTitle")?.asString
+                        val key = obj.stringOrNull("key") ?: obj.stringOrNull("sessionKey") ?: ""
+                        val displayName = obj.stringOrNull("displayName")
+                        val label = obj.stringOrNull("label")
+                        val derivedTitle = obj.stringOrNull("derivedTitle")
+                        val agentId = obj.stringOrNull("agentId")
+                        val origin = obj.stringOrNull("origin")
+                        val deliveryContext = obj.get("deliveryContext")
+                            ?.takeIf { it.isJsonObject }
+                            ?.asJsonObject
+                        val stableName = stableSessionDisplayName(
+                            key = key,
+                            label = label,
+                            displayName = displayName,
+                            derivedTitle = derivedTitle,
+                            agentId = agentId,
+                            origin = origin,
+                            deliveryContext = deliveryContext
+                        )
                         sessions.add(SessionInfo(
                             key = key,
                             displayName = displayName,
-                            label = stableSessionDisplayName(key, label, displayName, derivedTitle),
+                            label = stableName,
                             derivedTitle = derivedTitle,
-                            updatedAt = obj.get("updatedAt")?.asLong,
-                            kind = obj.get("kind")?.asString
+                            updatedAt = obj.longOrNull("updatedAt"),
+                            kind = obj.stringOrNull("kind"),
+                            agentId = agentId,
+                            origin = origin,
+                            deliveryContext = deliveryContext
                         ))
                     }
-                    _sessionList.value = sessions
-                    onSessionList?.invoke(SessionListUpdate(
+                    val dedupedSessions = dedupeSessions(
                         sessions = sessions,
+                        currentSessionKey = _currentSessionKey.value,
+                        unreadSessionKeys = _unreadSessions.value
+                    )
+                    _sessionList.value = dedupedSessions
+                    onSessionList?.invoke(SessionListUpdate(
+                        sessions = dedupedSessions,
                         currentSessionKey = _currentSessionKey.value,
                         unreadSessionKeys = _unreadSessions.value.toList()
                     ))
@@ -281,6 +303,36 @@ class OpenClawClient(
                 Log.e(TAG, "Error requesting sessions", e)
             }
         }
+    }
+
+    private fun dedupeSessions(
+        sessions: List<SessionInfo>,
+        currentSessionKey: String?,
+        unreadSessionKeys: Set<String>
+    ): List<SessionInfo> {
+        val byName = linkedMapOf<String, SessionInfo>()
+        sessions.filter { it.key.isNotBlank() }.forEach { session ->
+            val existing = byName[session.name]
+            if (existing == null || sessionRank(session, currentSessionKey, unreadSessionKeys) > sessionRank(existing, currentSessionKey, unreadSessionKeys)) {
+                byName[session.name] = session
+            }
+        }
+        return byName.values.sortedWith(
+            compareBy<SessionInfo> { sessionDisplaySortKey(it.name) }
+                .thenBy { it.name.lowercase() }
+                .thenBy { it.key }
+        )
+    }
+
+    private fun sessionRank(
+        session: SessionInfo,
+        currentSessionKey: String?,
+        unreadSessionKeys: Set<String>
+    ): Long {
+        var rank = session.updatedAt ?: 0L
+        if (session.key in unreadSessionKeys) rank += 1_000_000_000_000L
+        if (session.key == currentSessionKey) rank += 2_000_000_000_000L
+        return rank
     }
 
     /**
@@ -985,4 +1037,16 @@ class OpenClawClient(
             "image/webp"
         }
     }
+}
+
+private fun JsonObject.stringOrNull(name: String): String? {
+    val value = get(name) ?: return null
+    if (value.isJsonNull) return null
+    return runCatching { value.asString }.getOrNull()?.takeIf { it.isNotBlank() }
+}
+
+private fun JsonObject.longOrNull(name: String): Long? {
+    val value = get(name) ?: return null
+    if (value.isJsonNull) return null
+    return runCatching { value.asLong }.getOrNull()
 }

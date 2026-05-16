@@ -42,6 +42,7 @@ import com.jsos.glasses.ui.RecognitionMode
 import com.jsos.glasses.ui.VoiceSendMode
 import com.jsos.glasses.ui.theme.GlassesHudTheme
 import com.jsos.glasses.voice.GlassesVoiceHandler
+import com.jsos.shared.sessionDisplaySortKey
 import com.jsos.shared.stableSessionDisplayName
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -52,6 +53,7 @@ import org.json.JSONObject
 
 import android.os.BatteryManager
 import android.os.Build
+import com.google.gson.JsonParser
 import com.jsos.glasses.BuildConfig
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1408,9 +1410,22 @@ class HudActivity : ComponentActivity() {
                                 val label = sessionObj.optString("label", "")
                                 val displayName = sessionObj.optString("displayName", "")
                                 val derivedTitle = sessionObj.optString("derivedTitle", "")
+                                val agentId = sessionObj.optString("agentId", "")
+                                val origin = sessionObj.optString("origin", "")
+                                val deliveryContext = sessionObj.optJSONObject("deliveryContext")?.let { json ->
+                                    runCatching { JsonParser.parseString(json.toString()).asJsonObject }.getOrNull()
+                                }
                                 val kind = sessionObj.optString("kind", "")
                                 val updatedAt = if (sessionObj.has("updatedAt")) sessionObj.optLong("updatedAt", 0L).takeIf { it > 0 } else null
-                                val name = stableSessionDisplayName(key, label, displayName, derivedTitle)
+                                val name = stableSessionDisplayName(
+                                    key = key,
+                                    label = label,
+                                    displayName = displayName,
+                                    derivedTitle = derivedTitle,
+                                    agentId = agentId,
+                                    origin = origin,
+                                    deliveryContext = deliveryContext
+                                )
                                 sessions.add(SessionPickerInfo(
                                     key = key,
                                     name = name,
@@ -1423,19 +1438,25 @@ class HudActivity : ComponentActivity() {
                     }
 
                     // Insert "New Session" as the first option
+                    val sortedSessions = sessions.sortedWith(
+                        compareBy<SessionPickerInfo> { sessionDisplaySortKey(it.name) }
+                            .thenBy { it.name.lowercase() }
+                            .thenBy { it.key }
+                    )
+
                     val sessionsWithNew = listOf(
                         SessionPickerInfo(
                             key = NEW_SESSION_KEY,
                             name = "+ New Session"
                         )
-                    ) + sessions
+                    ) + sortedSessions
 
                     val current = hudState.value
                     // Default selection to the current session (offset by 1 for the New Session entry)
                     val currentIndex = sessionsWithNew.indexOfFirst { it.key == currentSessionKey }
                         .coerceAtLeast(0)
                     // Extract the current session's name from the list
-                    val resolvedSessionName = sessions.firstOrNull { it.key == currentSessionKey }?.name
+                    val resolvedSessionName = sortedSessions.firstOrNull { it.key == currentSessionKey }?.name
                         ?: current.currentSessionName
                     hudState.value = current.copy(
                         showSessionPicker = true,

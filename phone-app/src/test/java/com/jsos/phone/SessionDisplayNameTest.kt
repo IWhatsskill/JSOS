@@ -1,6 +1,8 @@
 package com.jsos.phone
 
+import com.google.gson.JsonObject
 import com.jsos.shared.SessionInfo
+import com.jsos.shared.sessionDisplaySortKey
 import com.jsos.shared.stableSessionDisplayName
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -34,11 +36,87 @@ class SessionDisplayNameTest {
     }
 
     @Test
+    fun mapsSessionKeyPatternsWithoutHardcodedChannelIds() {
+        assertEquals("DC-Codex-Lab", stableSessionDisplayName("agent:codex-lab:discord:channel:anything", "discord:g-123#codex-lab"))
+        assertEquals("DC-Coding-Lab", stableSessionDisplayName("agent:coding-lab:discord:channel:anything", "discord:g-123#general"))
+        assertEquals("DC-General", stableSessionDisplayName("agent:discord-general:discord:channel:anything", "discord:g-123#general"))
+        assertEquals("Web-Codex-Lab", stableSessionDisplayName("agent:codex-lab:main", displayName = ""))
+    }
+
+    @Test
+    fun dynamicallyLabelsNewAgentIds() {
+        assertEquals("Web-Research-Lab", stableSessionDisplayName("agent:research-lab:main"))
+        assertEquals("DC-Research-Lab", stableSessionDisplayName("agent:research-lab:discord:channel:anything"))
+        assertEquals("DC-Claude", stableSessionDisplayName("agent:discord-claude:discord:channel:anything"))
+        assertEquals("Web-My-New-Bot", stableSessionDisplayName("agent:my-new-bot:main"))
+    }
+
+    @Test
+    fun mapsRawDiscordRowsByAgentIdAndOrigin() {
+        assertEquals(
+            "DC-General",
+            stableSessionDisplayName(
+                key = "row-1",
+                displayName = "discord:g-123#general",
+                agentId = "discord-general",
+                origin = "discord"
+            )
+        )
+        assertEquals(
+            "DC-Codex-Lab",
+            stableSessionDisplayName(
+                key = "row-2",
+                displayName = "discord:g-123#codex-lab",
+                agentId = "codex-lab"
+            )
+        )
+        assertEquals(
+            "DC-Claude",
+            stableSessionDisplayName(
+                key = "row-5",
+                displayName = "discord:g-123#claude",
+                agentId = "discord-claude",
+                origin = "discord"
+            )
+        )
+    }
+
+    @Test
+    fun mapsRowsByAgentIdAndDeliveryContext() {
+        val deliveryContext = JsonObject().apply {
+            addProperty("channel", "general")
+        }
+
+        assertEquals(
+            "DC-Coding-Lab",
+            stableSessionDisplayName(
+                key = "row-3",
+                displayName = "",
+                agentId = "coding-lab",
+                deliveryContext = deliveryContext
+            )
+        )
+    }
+
+    @Test
+    fun mapsBlankWebRowsByAgentId() {
+        assertEquals(
+            "Web-Codex-Lab",
+            stableSessionDisplayName(
+                key = "row-4",
+                displayName = "",
+                agentId = "codex-lab"
+            )
+        )
+    }
+
+    @Test
     fun fallsBackToGatewayLabelsForUnknownKeys() {
         assertEquals("Label", stableSessionDisplayName("unknown:key", label = "Label", displayName = "Display", derivedTitle = "Derived"))
         assertEquals("Display", stableSessionDisplayName("unknown:key", displayName = "Display", derivedTitle = "Derived"))
         assertEquals("Derived", stableSessionDisplayName("unknown:key", derivedTitle = "Derived"))
         assertEquals("unknown:key", stableSessionDisplayName("unknown:key"))
+        assertEquals("discord:g-123#unknown", stableSessionDisplayName("unknown:key", displayName = "discord:g-123#unknown"))
     }
 
     @Test
@@ -49,5 +127,47 @@ class SessionDisplayNameTest {
         )
 
         assertEquals("DC-GPT-5", session.name)
+    }
+
+    @Test
+    fun sessionInfoNameUsesAgentMetadata() {
+        val session = SessionInfo(
+            key = "opaque-row",
+            displayName = "discord:g-123#general",
+            agentId = "discord-general",
+            origin = "discord"
+        )
+
+        assertEquals("DC-General", session.name)
+    }
+
+    @Test
+    fun sortsSessionsByFamilyAndTransport() {
+        val sorted = listOf(
+            "Web-Qwen397b",
+            "DC-Coding-Lab",
+            "Web-JARVIS",
+            "DC-General",
+            "WhatsApp",
+            "DC-JARVIS",
+            "Web-Coding-Lab",
+            "DC-Research-Lab",
+            "Web-Research-Lab"
+        ).sortedWith(compareBy { sessionDisplaySortKey(it) })
+
+        assertEquals(
+            listOf(
+                "WhatsApp",
+                "DC-JARVIS",
+                "Web-JARVIS",
+                "DC-Coding-Lab",
+                "Web-Coding-Lab",
+                "Web-Qwen397b",
+                "DC-General",
+                "DC-Research-Lab",
+                "Web-Research-Lab"
+            ),
+            sorted
+        )
     }
 }

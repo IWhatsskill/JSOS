@@ -213,41 +213,189 @@ data class SessionInfo(
     @SerializedName("label") val label: String? = null,
     @SerializedName("derivedTitle") val derivedTitle: String? = null,
     @SerializedName("updatedAt") val updatedAt: Long? = null,
-    @SerializedName("kind") val kind: String? = null
+    @SerializedName("kind") val kind: String? = null,
+    @SerializedName("agentId") val agentId: String? = null,
+    @SerializedName("origin") val origin: String? = null,
+    @SerializedName("deliveryContext") val deliveryContext: JsonObject? = null
 ) {
     /** Best available display name for this session */
-    val name: String get() = stableSessionDisplayName(key, label, displayName, derivedTitle)
+    val name: String get() = stableSessionDisplayName(
+        key = key,
+        label = label,
+        displayName = displayName,
+        derivedTitle = derivedTitle,
+        agentId = agentId,
+        origin = origin,
+        deliveryContext = deliveryContext
+    )
 }
 
 fun stableSessionDisplayName(
     key: String,
     label: String? = null,
     displayName: String? = null,
-    derivedTitle: String? = null
+    derivedTitle: String? = null,
+    agentId: String? = null,
+    origin: String? = null,
+    deliveryContext: JsonObject? = null
 ): String {
-    return when (key) {
-        "agent:main:main" -> "Web-JARVIS"
-        "agent:coding-lab:main" -> "Web-Coding-Lab"
-        "agent:codex-lab:main" -> "Web-Codex-Lab"
-        "agent:codex-cli-lab:main" -> "Web-CLI-Lab"
-        "agent:discord-gpt-5:main" -> "Web-GPT-5"
-        "agent:discord-qwen-397b:main" -> "Web-Qwen397b"
-        "agent:discord-general:main" -> "Web-General"
-        "agent:main:discord:channel:1500568623918616607" -> "DC-JARVIS"
-        "agent:discord-general:discord:channel:1500344381067235371" -> "DC-General"
-        "agent:coding-lab:discord:channel:1500344381067235371" -> "DC-Coding-Lab"
-        "agent:discord-gpt-5:discord:channel:1500358984887046344" -> "DC-GPT-5"
-        "agent:discord-qwen-397b:discord:channel:1500359031427039323" -> "DC-Qwen397b"
-        "agent:codex-lab:discord:channel:1500618054072012952" -> "DC-Codex-Lab"
-        "agent:codex-cli-lab:discord:channel:1501628003766112366" -> "DC-CLI-Lab"
-        else -> when {
-            key.startsWith("agent:main:whatsapp:direct:") -> "WhatsApp"
-            !label.isNullOrBlank() -> label
-            !displayName.isNullOrBlank() -> displayName
-            !derivedTitle.isNullOrBlank() -> derivedTitle
-            else -> key
+    val keyRoute = parseAgentSessionKey(key)
+    val keyAgentLabel = keyRoute?.agentId?.toJsosAgentLabel()
+    if (keyRoute != null && keyAgentLabel != null) {
+        return when (keyRoute.origin) {
+            "main" -> "Web-$keyAgentLabel"
+            "discord" -> "DC-$keyAgentLabel"
+            "whatsapp" -> "WhatsApp"
+            else -> "Web-$keyAgentLabel"
         }
     }
+
+    val effectiveAgentId = agentId?.takeIf { it.isNotBlank() } ?: keyRoute?.agentId
+    val agentLabel = effectiveAgentId?.toJsosAgentLabel()
+    if (agentLabel != null) {
+        return when {
+            isWhatsappSession(key, origin, displayName, deliveryContext) -> "WhatsApp"
+            isDiscordSession(key, origin, displayName, deliveryContext) -> "DC-$agentLabel"
+            isWebSession(key, origin, displayName, deliveryContext) -> "Web-$agentLabel"
+            else -> "Web-$agentLabel"
+        }
+    }
+
+    return when {
+        key.startsWith("agent:main:whatsapp:direct:") -> "WhatsApp"
+        !label.isNullOrBlank() -> label
+        !displayName.isNullOrBlank() -> displayName
+        !derivedTitle.isNullOrBlank() -> derivedTitle
+        else -> key
+    }
+}
+
+fun sessionDisplaySortKey(name: String): String {
+    val trimmed = name.trim()
+    if (trimmed.equals("WhatsApp", ignoreCase = true)) {
+        return "00|00|0|whatsapp"
+    }
+
+    val routeRank = when {
+        trimmed.startsWith("DC-") -> "0"
+        trimmed.startsWith("Web-") -> "1"
+        else -> "2"
+    }
+    val family = trimmed
+        .removePrefix("DC-")
+        .removePrefix("Web-")
+    val familyRank = when (family.lowercase()) {
+        "jarvis" -> "01"
+        "coding-lab" -> "02"
+        "codex-lab" -> "03"
+        "cli-lab" -> "04"
+        "gpt-5" -> "05"
+        "qwen397b" -> "06"
+        "general" -> "07"
+        else -> "90-${family.lowercase()}"
+    }
+
+    return "10|$familyRank|$routeRank|${trimmed.lowercase()}"
+}
+
+private data class AgentSessionKey(
+    val agentId: String,
+    val origin: String
+)
+
+private fun parseAgentSessionKey(key: String): AgentSessionKey? {
+    val parts = key.split(":")
+    if (parts.size < 3 || parts[0] != "agent") return null
+    return AgentSessionKey(
+        agentId = parts[1],
+        origin = parts[2]
+    )
+}
+
+private fun String.toJsosAgentLabel(): String = when (this) {
+    "main" -> "JARVIS"
+    "coding-lab" -> "Coding-Lab"
+    "codex-lab" -> "Codex-Lab"
+    "codex-cli-lab" -> "CLI-Lab"
+    "discord-general" -> "General"
+    "discord-gpt-5", "discord-gpt-5.5" -> "GPT-5"
+    "discord-qwen-397b" -> "Qwen397b"
+    else -> toReadableAgentLabel()
+}
+
+private fun String.toReadableAgentLabel(): String {
+    val normalized = removePrefix("discord-").takeIf { it.isNotBlank() } ?: this
+    return normalized
+        .split('-', '_')
+        .filter { it.isNotBlank() }
+        .joinToString("-") { it.toReadableAgentToken() }
+        .ifBlank { this }
+}
+
+private fun String.toReadableAgentToken(): String {
+    return when (lowercase()) {
+        "ai" -> "AI"
+        "api" -> "API"
+        "cli" -> "CLI"
+        "codex" -> "Codex"
+        "coding" -> "Coding"
+        "dc" -> "DC"
+        "general" -> "General"
+        "gpt" -> "GPT"
+        "hud" -> "HUD"
+        "jarvis" -> "JARVIS"
+        "jsos" -> "JSOS"
+        "lab" -> "Lab"
+        "qwen" -> "Qwen"
+        "stt" -> "STT"
+        "tts" -> "TTS"
+        "ui" -> "UI"
+        "ux" -> "UX"
+        else -> replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    }
+}
+
+private fun isDiscordSession(
+    key: String,
+    origin: String?,
+    displayName: String?,
+    deliveryContext: JsonObject?
+): Boolean {
+    return key.contains(":discord:") ||
+        origin.equals("discord", ignoreCase = true) ||
+        displayName?.startsWith("discord:", ignoreCase = true) == true ||
+        deliveryContext.hasAny("channel", "channelId", "threadId", "accountId", "guildId")
+}
+
+private fun isWhatsappSession(
+    key: String,
+    origin: String?,
+    displayName: String?,
+    deliveryContext: JsonObject?
+): Boolean {
+    return key.contains(":whatsapp:") ||
+        origin.equals("whatsapp", ignoreCase = true) ||
+        displayName?.startsWith("whatsapp", ignoreCase = true) == true ||
+        deliveryContext.hasAny("phoneNumber", "contactId")
+}
+
+private fun isWebSession(
+    key: String,
+    origin: String?,
+    displayName: String?,
+    deliveryContext: JsonObject?
+): Boolean {
+    return key.endsWith(":main") ||
+        origin.isNullOrBlank() ||
+        origin.equals("main", ignoreCase = true) ||
+        origin.equals("web", ignoreCase = true) ||
+        displayName.isNullOrBlank() ||
+        deliveryContext == null
+}
+
+private fun JsonObject?.hasAny(vararg names: String): Boolean {
+    if (this == null) return false
+    return names.any { name -> has(name) && !get(name).isJsonNull }
 }
 
 // ============================================
