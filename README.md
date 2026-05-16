@@ -7,7 +7,7 @@
 It consists of two Android apps:
 
 - **JSOS Core** - the phone app. It connects to OpenClaw, stores local runtime settings, handles voice input, TTS settings, sessions, camera handoff, Rokid pairing, and HUD deployment.
-- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, and requests photo capture.
+- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, and can trigger Rokid AR picture/recording scenes.
 
 JSOS started as a fork of the upstream Clawsses project and has been substantially reworked into a separate development-preview project. It is being prepared as a public fork base and is not presented as a finished consumer product.
 
@@ -22,7 +22,7 @@ Current state:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, and Hi Rokid / CXR-L HUD deployment code are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, Hi Rokid / CXR-L HUD deployment, and Rokid AR picture/recording triggers are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview areas:
@@ -57,6 +57,7 @@ Main JSOS changes include:
 - Integrated a Hi Rokid / CXR-L HUD deployment flow in JSOS Core so the phone app can select a JSOS HUD APK and hand installation to Hi Rokid when Hi Rokid is installed and already connected to the glasses.
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
 - Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
+- Added JSOS HUD `AR PIC` and `AR REC` options that trigger Rokid AR picture / mixed-recording scene commands from the glasses app, based on Anezium's OverlayRec reference with permission.
 - Chunked phone-to-glasses message transport for larger JSON payloads.
 - Wake acknowledgments and status messages between phone and HUD.
 - Public-readiness cleanup: neutral assets, README rewrite, safer `.gitignore`, redacted sensitive logs, local-only signing, and clearer security notes.
@@ -92,14 +93,14 @@ adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 | --- | --- | --- |
 | OpenClaw Gateway | WebSocket to JSOS Core | AI sessions, chat streaming, tool execution |
 | JSOS Core / Phone App | WebSocket to OpenClaw; Bluetooth CXR to JSOS HUD | Bridge + voice, TTS playback, wake management |
-| JSOS HUD / Glasses App | Bluetooth CXR messages from JSOS Core | HUD + gestures, camera capture, session picker |
+| JSOS HUD / Glasses App | Bluetooth CXR messages from JSOS Core; local Rokid scene commands | HUD + gestures, camera capture, AR picture/record triggers, session picker |
 
 ## Repository Layout
 
 | Path | Purpose |
 | --- | --- |
 | `phone-app/` | JSOS Core Android phone app. Bridges OpenClaw, Rokid CXR, voice, TTS, sessions, camera handoff, and HUD deployment. |
-| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, sessions, staged input, voice state, and camera requests. |
+| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, sessions, staged input, voice state, camera requests, and Rokid AR picture/record triggers. |
 | `shared/` | Shared JSON protocol models used between phone, glasses, and OpenClaw-facing code. |
 | `docs/` | Public notes and neutral visual assets. Keep screenshots redacted before publication. |
 | `gradle/` | Gradle wrapper files. |
@@ -274,6 +275,7 @@ JSOS HUD is responsible for:
 - Staged voice input.
 - `Send Ask` and `Send Auto` modes.
 - Camera request flow and photo thumbnail staging.
+- Rokid AR Picture and AR Record scene triggers from the OPTIONS panel.
 - Wake acknowledgments and TTS toggle messages back to the phone.
 
 ## Usage
@@ -301,13 +303,20 @@ JSOS separates normal speech-to-text from bidirectional OpenClaw Live Talk:
 | Photo | Request a glasses photo capture through JSOS Core. Up to four staged photos can be attached. |
 | Sess | Open the session picker and session state display. |
 | Size | Cycle the HUD display mode between Full, Bottom, and Mid. |
-| More | Open the OPTIONS panel for send mode, font size, slash commands, and voice response toggling. |
+| More | Open the OPTIONS panel for send mode, font size, slash commands, AR picture/record, and voice response toggling. |
 
 The HUD has separate focus areas for content, staged input/photos, and the bottom menu. This keeps reading, staging, and command actions usable on the limited glasses touchpad surface.
 
 ### Camera
 
 The HUD can request a camera capture through JSOS Core. Captured photos are staged as thumbnails on the glasses and attached to the next input sent to OpenClaw. JSOS limits staged photos to four.
+
+JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene commands from the OPTIONS panel:
+
+- `AR PIC` asks the Rokid system to capture an AR picture of the glasses view.
+- `AR REC` asks the Rokid system to start an AR mixed recording.
+
+This path does not merge media inside JSOS. It delegates capture/processing to Rokid's glasses-side system flow; availability depends on the target Rokid firmware and services.
 
 ### Text-To-Speech
 
@@ -546,7 +555,7 @@ Thanks to:
 
 - [dweddepohl](https://github.com/dweddepohl) for the upstream Clawsses project.
 - [OpenClaw](https://github.com/openclaw/openclaw) for the OpenClaw project.
-- [Anezium](https://github.com/Anezium) for public Rokid APK Manager / CXR-L workflow notes and permission to reference that work during JSOS HUD deployment integration.
+- [Anezium](https://github.com/Anezium) for public Rokid APK Manager / CXR-L workflow notes, OverlayRec reference work, and permission to reference that work during JSOS HUD deployment and AR picture/record integration.
 - [Rokid](https://github.com/rokid) for the Rokid glasses platform and SDK ecosystem.
 
 ## Links

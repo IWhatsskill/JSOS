@@ -22,6 +22,7 @@ import com.jsos.glasses.camera.CameraCapture
 import com.jsos.glasses.camera.PhotoCaptureState
 import com.jsos.glasses.input.GestureHandler
 import com.jsos.glasses.input.GestureHandler.Gesture
+import com.jsos.glasses.rokid.RokidArCommands
 import com.jsos.glasses.service.PhoneConnectionService
 import com.jsos.glasses.ui.AgentState
 import com.jsos.glasses.ui.ChatFocusArea
@@ -862,6 +863,12 @@ class HudActivity : ComponentActivity() {
                     showSlashMenu = true,
                     selectedSlashIndex = 0
                 )
+            }
+            MoreMenuItem.AR_PICTURE -> {
+                RokidArCommands.startArScreenshot(this)
+            }
+            MoreMenuItem.AR_RECORD -> {
+                RokidArCommands.startArRecord(this)
             }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
