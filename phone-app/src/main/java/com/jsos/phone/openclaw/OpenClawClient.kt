@@ -181,6 +181,12 @@ class OpenClawClient(
     fun sendMessage(text: String, images: List<String>? = null, onResult: ((Boolean) -> Unit)? = null) {
         scope.launch {
             try {
+                if (activeRunId != null || activeMessageId != null) {
+                    Log.w(TAG, "Ignoring send while agent run is still active")
+                    onResult?.invoke(false)
+                    return@launch
+                }
+
                 // Send to OpenClaw as chat.send
                 val idempotencyKey = UUID.randomUUID().toString()
                 val params = JsonObject().apply {

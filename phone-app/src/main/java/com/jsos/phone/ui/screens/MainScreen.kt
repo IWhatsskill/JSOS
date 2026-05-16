@@ -941,7 +941,7 @@ fun MainScreen() {
                                 when (result) {
                                     is VoiceCommandHandler.VoiceResult.Text -> {
                                         if (result.text.isNotEmpty()) {
-                                            openClawClient.sendMessage(result.text)
+                                            submitChatMessage(result.text, emptyList())
                                         }
                                     }
                                     is VoiceCommandHandler.VoiceResult.Command -> {
