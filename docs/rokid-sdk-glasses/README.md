@@ -1,6 +1,6 @@
 # Rokid CXR-S SDK Documentation (Glasses-Side)
 
-> Note: These are reference notes for working with the publicly accessible Rokid CXR SDK resources. They are not official Rokid documentation. Rokid SDKs, APIs, trademarks, and documentation remain governed by Rokid's own terms. No Rokid SDK binaries or private credentials are included in this repository.
+> Note: These are reference notes for working with the publicly accessible Rokid CXR SDK resources. They are not official Rokid documentation. Rokid SDKs, APIs, trademarks, and documentation remain governed by Rokid's own terms. No private Rokid credentials are included in this repository. The documented JSOS CXR-L compatibility AAR used by the HUD deployment flow lives under `phone-app/libs/` and remains governed by Rokid's own terms.
 
 > Version 1.0 | Source: https://custom.rokid.com/prod/rokid_web/57e35cd3ae294d16b1b8fc8dcbb1b7c7/pc/us/3fe1c87b945245bf8b6c50393f4da7b6.html
 
