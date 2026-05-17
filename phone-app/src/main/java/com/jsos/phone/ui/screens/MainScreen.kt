@@ -1580,6 +1580,10 @@ private fun ChatDeck(
     chatMessages: List<ChatMessage>,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
+    val speakerLabel = sessions.firstOrNull { it.key == currentSessionKey }?.name
+        ?: currentSessionKey?.let { stableSessionDisplayName(it) }
+        ?: "JSOS"
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (openClawState is OpenClawClient.ConnectionState.Connected) {
             SessionSelector(
@@ -1623,7 +1627,7 @@ private fun ChatDeck(
                         )
                     }
                     items(chatMessages) { msg ->
-                        ChatMessageRow(msg)
+                        ChatMessageRow(msg, speakerLabel)
                     }
                 }
             }
@@ -2552,7 +2556,7 @@ private fun TabHint(text: String) {
 }
 
 @Composable
-fun ChatMessageRow(msg: ChatMessage) {
+fun ChatMessageRow(msg: ChatMessage, speakerLabel: String = "JSOS") {
     val isUser = msg.role == "user"
     val lines = msg.content.lines()
     val isSystemOnly = lines.any { isSystemFeedLine(it) } && lines.none { it.isNotBlank() && !isSystemFeedLine(it) }
@@ -2563,7 +2567,7 @@ fun ChatMessageRow(msg: ChatMessage) {
     val label = when {
         isSystemOnly -> "SYSTEM>"
         isUser -> "YOU>"
-        else -> "JSOS>"
+        else -> "${speakerLabel}>"
     }
     Surface(
         modifier = Modifier

@@ -471,6 +471,7 @@ fun HudScreen(
                 ChatContentArea(
                     messages = state.messages,
                     agentState = state.agentState,
+                    speakerLabel = state.currentSessionName ?: "JSOS",
                     listState = listState,
                     fontSize = fontSize,
                     fontFamily = monoFontFamily,
@@ -614,6 +615,7 @@ private fun HudDivider(
 private fun ChatContentArea(
     messages: List<DisplayMessage>,
     agentState: AgentState,
+    speakerLabel: String,
     listState: androidx.compose.foundation.lazy.LazyListState,
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily,
@@ -685,6 +687,7 @@ private fun ChatContentArea(
                         Box(modifier = Modifier.alpha(fadeAlpha.value)) {
                             ChatMessageItem(
                                 message = message,
+                                speakerLabel = speakerLabel,
                                 fontSize = fontSize,
                                 fontFamily = fontFamily,
                                 isCurrent = isCurrentMessage
@@ -693,6 +696,7 @@ private fun ChatContentArea(
                     } else {
                         ChatMessageItem(
                             message = message,
+                            speakerLabel = speakerLabel,
                             fontSize = fontSize,
                             fontFamily = fontFamily,
                             isCurrent = isCurrentMessage
@@ -717,13 +721,14 @@ private fun ChatContentArea(
 @Composable
 private fun ChatMessageItem(
     message: DisplayMessage,
+    speakerLabel: String,
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily,
     isCurrent: Boolean
 ) {
     val isUser = message.role == "user"
     val isStreaming = message.isStreaming
-    val speaker = if (isUser) "YOU>" else "JSOS>"
+    val speaker = if (isUser) "YOU>" else "${speakerLabel}>"
     val speakerColor = if (isUser) HudColors.cyan else HudColors.green
 
     // Blinking cursor for streaming
@@ -786,7 +791,7 @@ private fun ChatMessageItem(
                 fontFamily = fontFamily,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.sp,
-                modifier = Modifier.width(44.dp)
+                modifier = Modifier.widthIn(min = 44.dp, max = 92.dp)
             )
 
             val displayText = if (message.content.isEmpty() && isStreaming) {
