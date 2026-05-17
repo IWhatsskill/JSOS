@@ -240,13 +240,21 @@ fun stableSessionDisplayName(
     deliveryContext: JsonObject? = null
 ): String {
     val keyRoute = parseAgentSessionKey(key)
+    val explicitDisplayName = displayName.cleanExplicitSessionLabel()
+    val explicitLabel = label.cleanExplicitSessionLabel()
+    val explicitDerivedTitle = derivedTitle.cleanExplicitSessionLabel()
+    val rawDiscordLabel = displayName.rawDiscordChannelLabel()
     val keyAgentLabel = keyRoute?.agentId?.toJsosAgentLabel()
-    if (keyRoute != null && keyAgentLabel != null) {
+
+    if (keyRoute != null) {
+        if (keyRoute.origin == "whatsapp") return "WhatsApp"
+        if (keyRoute.agentId == "main" && keyRoute.origin == "main") return "JARVIS"
+
+        val routedLabel = keyAgentLabel ?: explicitDisplayName ?: explicitLabel ?: rawDiscordLabel ?: explicitDerivedTitle
         return when (keyRoute.origin) {
-            "main" -> "Web-$keyAgentLabel"
-            "discord" -> "DC-$keyAgentLabel"
-            "whatsapp" -> "WhatsApp"
-            else -> "Web-$keyAgentLabel"
+            "discord" -> routedLabel ?: key
+            "main" -> routedLabel ?: key
+            else -> routedLabel ?: key
         }
     }
 
@@ -255,47 +263,75 @@ fun stableSessionDisplayName(
     if (agentLabel != null) {
         return when {
             isWhatsappSession(key, origin, displayName, deliveryContext) -> "WhatsApp"
-            isDiscordSession(key, origin, displayName, deliveryContext) -> "DC-$agentLabel"
-            isWebSession(key, origin, displayName, deliveryContext) -> "Web-$agentLabel"
-            else -> "Web-$agentLabel"
+            isDiscordSession(key, origin, displayName, deliveryContext) -> agentLabel
+            isWebSession(key, origin, displayName, deliveryContext) -> agentLabel
+            else -> agentLabel
         }
     }
 
     return when {
         key.startsWith("agent:main:whatsapp:direct:") -> "WhatsApp"
-        !label.isNullOrBlank() -> label
-        !displayName.isNullOrBlank() -> displayName
-        !derivedTitle.isNullOrBlank() -> derivedTitle
+        explicitLabel != null -> explicitLabel
+        explicitDisplayName != null -> explicitDisplayName
+        rawDiscordLabel != null -> rawDiscordLabel
+        explicitDerivedTitle != null -> explicitDerivedTitle
         else -> key
     }
 }
 
+fun shouldShowInJsosSessionPicker(session: SessionInfo): Boolean = shouldShowInJsosSessionPicker(
+    key = session.key,
+    displayName = session.displayName,
+    label = session.label,
+    derivedTitle = session.derivedTitle,
+    agentId = session.agentId,
+    origin = session.origin,
+    deliveryContext = session.deliveryContext
+)
+
+fun shouldShowInJsosSessionPicker(
+    key: String,
+    displayName: String? = null,
+    label: String? = null,
+    derivedTitle: String? = null,
+    agentId: String? = null,
+    origin: String? = null,
+    deliveryContext: JsonObject? = null
+): Boolean {
+    val keyRoute = parseAgentSessionKey(key)
+    if (keyRoute?.agentId == "main" && keyRoute.origin == "main") return true
+    if (keyRoute?.agentId == "main" && keyRoute.origin == "whatsapp") return true
+    if (isWhatsappSession(key, origin, displayName, deliveryContext)) return true
+
+    if (!isDiscordSession(key, origin, displayName, deliveryContext)) return false
+
+    val name = stableSessionDisplayName(
+        key = key,
+        label = label,
+        displayName = displayName,
+        derivedTitle = derivedTitle,
+        agentId = agentId,
+        origin = origin,
+        deliveryContext = deliveryContext
+    )
+    return visibleDiscordSessionNames.any { it.equals(name, ignoreCase = true) }
+}
+
 fun sessionDisplaySortKey(name: String): String {
     val trimmed = name.trim()
-    if (trimmed.equals("WhatsApp", ignoreCase = true)) {
-        return "00|00|0|whatsapp"
-    }
-
-    val routeRank = when {
-        trimmed.startsWith("DC-") -> "0"
-        trimmed.startsWith("Web-") -> "1"
-        else -> "2"
-    }
-    val family = trimmed
-        .removePrefix("DC-")
-        .removePrefix("Web-")
-    val familyRank = when (family.lowercase()) {
-        "jarvis" -> "01"
-        "coding-lab" -> "02"
-        "codex-lab" -> "03"
-        "cli-lab" -> "04"
-        "gpt-5" -> "05"
-        "qwen397b" -> "06"
+    val rank = when (trimmed.lowercase()) {
+        "jarvis" -> "00"
+        "whatsapp" -> "01"
+        "gideon" -> "02"
+        "chappi" -> "03"
+        "goku" -> "04"
+        "steel" -> "05"
+        "shelli" -> "06"
         "general" -> "07"
-        else -> "90-${family.lowercase()}"
+        else -> "90-${trimmed.lowercase()}"
     }
 
-    return "10|$familyRank|$routeRank|${trimmed.lowercase()}"
+    return "$rank|${trimmed.lowercase()}"
 }
 
 private data class AgentSessionKey(
@@ -314,13 +350,46 @@ private fun parseAgentSessionKey(key: String): AgentSessionKey? {
 
 private fun String.toJsosAgentLabel(): String = when (this) {
     "main" -> "JARVIS"
-    "coding-lab" -> "Coding-Lab"
-    "codex-lab" -> "Codex-Lab"
-    "codex-cli-lab" -> "CLI-Lab"
+    "coding-lab" -> "Goku"
+    "codex-lab" -> "Chappi"
+    "codex-cli-lab" -> "Shelli"
     "discord-general" -> "General"
-    "discord-gpt-5", "discord-gpt-5.5" -> "GPT-5"
-    "discord-qwen-397b" -> "Qwen397b"
+    "discord-gpt-5", "discord-gpt-5.5" -> "Gideon"
+    "discord-qwen-397b" -> "Steel"
     else -> toReadableAgentLabel()
+}
+
+private val visibleDiscordSessionNames = setOf(
+    "Gideon",
+    "Chappi",
+    "Goku",
+    "Steel",
+    "Shelli",
+    "General"
+)
+
+private fun String?.cleanExplicitSessionLabel(): String? {
+    val trimmed = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    if (trimmed.startsWith("discord:", ignoreCase = true)) return null
+    if (trimmed.startsWith("agent:", ignoreCase = true)) return null
+    val withoutTransportPrefix = trimmed
+        .removePrefixIgnoreCase("DC-")
+        .removePrefixIgnoreCase("Web-")
+    val withoutAgentSuffix = withoutTransportPrefix
+        .replace(Regex("\\s*\\([^)]*\\)\\s*$"), "")
+        .trim()
+    return withoutAgentSuffix.takeIf { it.isNotBlank() }?.toJsosAgentLabel()
+}
+
+private fun String?.rawDiscordChannelLabel(): String? {
+    val trimmed = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    if (!trimmed.startsWith("discord:", ignoreCase = true)) return null
+    val channel = trimmed.substringAfterLast("#", missingDelimiterValue = "").trim()
+    return channel.takeIf { it.isNotBlank() }?.toJsosAgentLabel()
+}
+
+private fun String.removePrefixIgnoreCase(prefix: String): String {
+    return if (startsWith(prefix, ignoreCase = true)) substring(prefix.length) else this
 }
 
 private fun String.toReadableAgentLabel(): String {

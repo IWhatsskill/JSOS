@@ -43,8 +43,17 @@ class OpenClawClient(
         data class Error(val message: String) : ConnectionState()
     }
 
+    enum class AgentActivityState {
+        Ready,
+        Thinking,
+        Writing,
+    }
+
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+    private val _agentActivity = MutableStateFlow(AgentActivityState.Ready)
+    val agentActivity: StateFlow<AgentActivityState> = _agentActivity.asStateFlow()
 
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
@@ -152,6 +161,7 @@ class OpenClawClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closed: $code - $reason")
                 _connectionState.value = ConnectionState.Disconnected
+                _agentActivity.value = AgentActivityState.Ready
                 notifyConnectionUpdate(false)
                 if (shouldReconnect) scheduleReconnect()
             }
@@ -159,6 +169,7 @@ class OpenClawClient(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WebSocket failed: ${t.javaClass.simpleName}: ${t.message}", t)
                 _connectionState.value = ConnectionState.Error("${t.javaClass.simpleName}: ${t.message}")
+                _agentActivity.value = AgentActivityState.Ready
                 notifyConnectionUpdate(false)
                 failAllPending("Connection lost")
                 if (shouldReconnect) scheduleReconnect()
@@ -171,6 +182,7 @@ class OpenClawClient(
         webSocket?.close(1000, "User disconnected")
         webSocket = null
         _connectionState.value = ConnectionState.Disconnected
+        _agentActivity.value = AgentActivityState.Ready
         notifyConnectionUpdate(false)
         failAllPending("Disconnected")
     }
@@ -230,6 +242,7 @@ class OpenClawClient(
                     activeRunId = response.payload?.get("runId")?.asString
                     Log.d(TAG, "Agent run started: runId=$activeRunId")
                     // Notify glasses that agent is thinking
+                    _agentActivity.value = AgentActivityState.Thinking
                     onAgentThinking?.invoke(AgentThinking(id = assistantMsgId))
                     onResult?.invoke(true)
                 } else {
@@ -238,6 +251,7 @@ class OpenClawClient(
                     activeRunId = null
                     activeMessageId = null
                     activeSessionKey = null
+                    _agentActivity.value = AgentActivityState.Ready
                     onResult?.invoke(false)
                 }
             } catch (e: Exception) {
@@ -245,6 +259,7 @@ class OpenClawClient(
                 activeRunId = null
                 activeMessageId = null
                 activeSessionKey = null
+                _agentActivity.value = AgentActivityState.Ready
                 onResult?.invoke(false)
             }
         }
@@ -324,12 +339,14 @@ class OpenClawClient(
         unreadSessionKeys: Set<String>
     ): List<SessionInfo> {
         val byName = linkedMapOf<String, SessionInfo>()
-        sessions.filter { it.key.isNotBlank() }.forEach { session ->
-            val existing = byName[session.name]
-            if (existing == null || sessionRank(session, currentSessionKey, unreadSessionKeys) > sessionRank(existing, currentSessionKey, unreadSessionKeys)) {
-                byName[session.name] = session
+        sessions
+            .filter { it.key.isNotBlank() && shouldShowInJsosSessionPicker(it) }
+            .forEach { session ->
+                val existing = byName[session.name]
+                if (existing == null || sessionRank(session, currentSessionKey, unreadSessionKeys) > sessionRank(existing, currentSessionKey, unreadSessionKeys)) {
+                    byName[session.name] = session
+                }
             }
-        }
         return byName.values.sortedWith(
             compareBy<SessionInfo> { sessionDisplaySortKey(it.name) }
                 .thenBy { it.name.lowercase() }
@@ -884,6 +901,7 @@ class OpenClawClient(
                     activeRunId = null
                     activeMessageId = null
                     activeSessionKey = null
+                    _agentActivity.value = AgentActivityState.Ready
                     streamingContent.clear()
                 }
             }
@@ -905,6 +923,7 @@ class OpenClawClient(
                     val newChunk = fullText.substring(previous.length)
                     streamingContent.clear()
                     streamingContent.append(fullText)
+                    _agentActivity.value = AgentActivityState.Writing
                     onChatStream?.invoke(ChatStream(id = msgId, chunk = newChunk))
                     // Update phone UI with streaming text
                     updateStreamingMessage(msgId, fullText)
@@ -915,6 +934,7 @@ class OpenClawClient(
                 val previous = streamingContent.toString()
                 if (fullText.isNotEmpty() && fullText.length > previous.length) {
                     val newChunk = fullText.substring(previous.length)
+                    _agentActivity.value = AgentActivityState.Writing
                     onChatStream?.invoke(ChatStream(id = msgId, chunk = newChunk))
                 }
                 // Use the final full text if available, otherwise keep what we accumulated
@@ -951,7 +971,10 @@ class OpenClawClient(
     }
 
     private fun finalizeStreaming() {
-        val msgId = activeMessageId ?: return
+        val msgId = activeMessageId ?: run {
+            _agentActivity.value = AgentActivityState.Ready
+            return
+        }
         val content = streamingContent.toString()
 
         if (content.isNotEmpty()) {
@@ -972,6 +995,7 @@ class OpenClawClient(
         activeRunId = null
         activeMessageId = null
         activeSessionKey = null
+        _agentActivity.value = AgentActivityState.Ready
         streamingContent.clear()
     }
 
@@ -1009,6 +1033,7 @@ class OpenClawClient(
     private fun notifyConnectionUpdate(connected: Boolean, sessionId: String? = null) {
         val sessionName = sessionId?.let { id ->
             _sessionList.value.firstOrNull { it.key == id }?.name
+                ?: stableSessionDisplayName(id)
         }
         onConnectionUpdate?.invoke(ConnectionUpdate(
             connected = connected,

@@ -107,6 +107,7 @@ import com.jsos.shared.ChatMessage
 import com.jsos.shared.ConnectionUpdate
 import com.jsos.shared.SessionInfo
 import com.jsos.shared.TtsState
+import com.jsos.shared.stableSessionDisplayName
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -168,6 +169,7 @@ fun MainScreen() {
     // State
     val glassesState by glassesManager.connectionState.collectAsState()
     val openClawState by openClawClient.connectionState.collectAsState()
+    val agentActivity by openClawClient.agentActivity.collectAsState()
     val chatMessages by openClawClient.chatMessages.collectAsState()
     val isListening by voiceRecognitionManager.isListening.collectAsState()
     val voiceMode by voiceRecognitionManager.activeMode.collectAsState()
@@ -231,6 +233,21 @@ fun MainScreen() {
     val openSettings: (SettingsTarget) -> Unit = { target ->
         settingsTarget = target
         showSettings = true
+    }
+    val toggleOpenClawGateway: () -> Unit = {
+        when (openClawState) {
+            is OpenClawClient.ConnectionState.Connected,
+            is OpenClawClient.ConnectionState.Connecting,
+            is OpenClawClient.ConnectionState.Authenticating,
+            is OpenClawClient.ConnectionState.PairingRequired -> {
+                openClawClient.disconnect()
+            }
+            is OpenClawClient.ConnectionState.Disconnected,
+            is OpenClawClient.ConnectionState.Error -> {
+                val portNum = openClawPort.toIntOrNull() ?: 18789
+                openClawClient.connect(openClawHost, portNum, openClawToken)
+            }
+        }
     }
     val setGlassesVoiceButtonMode: (GlassesVoiceButtonMode) -> Unit = { mode ->
         if (mode == GlassesVoiceButtonMode.Command && liveTalkManager.isActive) {
@@ -684,6 +701,7 @@ fun MainScreen() {
                         val currentKey = openClawClient.currentSessionKey.value
                         val currentName = currentKey?.let { key ->
                             openClawClient.sessionList.value.firstOrNull { it.key == key }?.name
+                                ?: stableSessionDisplayName(key)
                         }
                         val connUpdate = ConnectionUpdate(
                             connected = isConnected,
@@ -1036,10 +1054,7 @@ fun MainScreen() {
                         unreadCount = unreadSessions.size,
                         pendingPhotoCount = pendingPhotos.size,
                         onConnectGlasses = { glassesManager.startScanning() },
-                        onConnectOpenClaw = {
-                            val portNum = openClawPort.toIntOrNull() ?: 18789
-                            openClawClient.connect(openClawHost, portNum, openClawToken)
-                        },
+                        onConnectOpenClaw = toggleOpenClawGateway,
                         onNavigate = { tab -> selectedTab = tab },
                         onOpenSettings = openSettings,
                     )
@@ -1063,6 +1078,7 @@ fun MainScreen() {
                         },
                         onDismissSessionPicker = { showSessionPicker = false },
                         openClawState = openClawState,
+                        agentActivity = agentActivity,
                         chatMessages = chatMessages,
                         listState = listState,
                     )
@@ -1073,10 +1089,7 @@ fun MainScreen() {
                         glassesState = glassesState,
                         openClawState = openClawState,
                         onConnectGlasses = { glassesManager.startScanning() },
-                        onConnectOpenClaw = {
-                            val portNum = openClawPort.toIntOrNull() ?: 18789
-                            openClawClient.connect(openClawHost, portNum, openClawToken)
-                        },
+                        onConnectOpenClaw = toggleOpenClawGateway,
                         onOpenSettings = openSettings,
                     )
                 }
@@ -1556,6 +1569,7 @@ private fun ChatDeck(
     onSelectSession: (SessionInfo) -> Unit,
     onDismissSessionPicker: () -> Unit,
     openClawState: OpenClawClient.ConnectionState,
+    agentActivity: OpenClawClient.AgentActivityState,
     chatMessages: List<ChatMessage>,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
@@ -1569,6 +1583,7 @@ private fun ChatDeck(
                 onToggle = onToggleSessionPicker,
                 onSelect = onSelectSession,
                 onDismiss = onDismissSessionPicker,
+                agentActivity = agentActivity,
             )
         }
 
@@ -1737,7 +1752,7 @@ private fun DashboardModuleStack(
                 "Link" to if (openClawState is OpenClawClient.ConnectionState.Connected) gatewayLinkDuration else "--",
             ),
             onClick = { onOpenSettings(SettingsTarget.SystemLink) },
-            actionIcon = if (openClawState is OpenClawClient.ConnectionState.Connected) null else Icons.Default.PowerSettingsNew,
+            actionIcon = Icons.Default.PowerSettingsNew,
             onAction = onConnectOpenClaw,
         )
 
@@ -2125,7 +2140,7 @@ private fun ConnectionDeck(
                 "Protocol" to "4",
             ),
             onClick = { onOpenSettings(SettingsTarget.SystemLink) },
-            actionIcon = if (openClawState is OpenClawClient.ConnectionState.Connected) null else Icons.Default.PowerSettingsNew,
+            actionIcon = Icons.Default.PowerSettingsNew,
             onAction = onConnectOpenClaw,
         )
         DashboardModuleCard(
@@ -2796,7 +2811,7 @@ fun ConnectionStatusBar(
                 is OpenClawClient.ConnectionState.Error -> Color(0xFFFF5F56)
                 else -> Color(0xFF587465)
             },
-            actionIcon = if (openClawState is OpenClawClient.ConnectionState.Connected) null else Icons.Default.PowerSettingsNew,
+            actionIcon = Icons.Default.PowerSettingsNew,
             onAction = onConnectOpenClaw,
         )
     }
@@ -2862,10 +2877,13 @@ fun SessionSelector(
     expanded: Boolean,
     onToggle: () -> Unit,
     onSelect: (SessionInfo) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    agentActivity: OpenClawClient.AgentActivityState = OpenClawClient.AgentActivityState.Ready,
 ) {
     val currentSession = sessions.firstOrNull { it.key == currentSessionKey }
-    val displayName = currentSession?.name ?: currentSessionKey ?: "No session"
+    val displayName = currentSession?.name
+        ?: currentSessionKey?.let { stableSessionDisplayName(it) }
+        ?: "No session"
     val hasAnyUnread = unreadSessionKeys.isNotEmpty()
 
     Box(
@@ -2911,14 +2929,16 @@ fun SessionSelector(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.width(8.dp))
+                AgentActivityBadge(agentActivity)
                 if (hasAnyUnread) {
+                    Spacer(Modifier.width(6.dp))
                     Icon(
                         Icons.Default.Circle,
                         contentDescription = "Unread messages in other sessions",
                         modifier = Modifier.size(8.dp),
                         tint = JsosPalette.Green
                     )
-                    Spacer(Modifier.width(6.dp))
                 }
                 Icon(
                     if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -2978,6 +2998,54 @@ fun SessionSelector(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AgentActivityBadge(activity: OpenClawClient.AgentActivityState) {
+    val active = activity != OpenClawClient.AgentActivityState.Ready
+    val transition = rememberInfiniteTransition(label = "agent_activity")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "agent_activity_dots",
+    )
+    val dots = if (active) {
+        ".".repeat(phase.toInt().coerceIn(0, 2) + 1).padEnd(3, ' ')
+    } else {
+        ""
+    }
+    val label = when (activity) {
+        OpenClawClient.AgentActivityState.Ready -> "READY"
+        OpenClawClient.AgentActivityState.Thinking -> "THINKING"
+        OpenClawClient.AgentActivityState.Writing -> "WRITING"
+    }
+    val color = when (activity) {
+        OpenClawClient.AgentActivityState.Ready -> JsosPalette.Green
+        OpenClawClient.AgentActivityState.Thinking -> JsosPalette.Yellow
+        OpenClawClient.AgentActivityState.Writing -> JsosPalette.Cyan
+    }
+
+    Surface(
+        color = color.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.38f)),
+        shape = RoundedCornerShape(5.dp),
+    ) {
+        Text(
+            text = "$label$dots",
+            color = color,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 9.sp,
+            maxLines = 1,
+            modifier = Modifier
+                .widthIn(min = 54.dp)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+        )
     }
 }
 
