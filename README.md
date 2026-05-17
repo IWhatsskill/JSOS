@@ -15,6 +15,12 @@ JSOS started as a fork of the upstream Clawsses project and has been substantial
   <img src="docs/images/Top-Picture.png" alt="JSOS smart-glasses HUD preview" width="100%">
 </p>
 
+## Showcase
+
+Watch a short JSOS showcase video:
+
+[JSOS showcase video](docs/videos/JSOS-showcase.mp4)
+
 ## Status
 
 Current state:
