@@ -57,7 +57,7 @@ Main JSOS changes include:
 - Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines and no filled selection backgrounds.
 - Staged voice input on the glasses with `Send Ask` and `Send Auto` modes.
 - Session picker presentation updates, current-session markers, unread indicators, and session/chat forwarding behavior.
-- OpenClaw Gateway protocol updates used by JSOS, including protocol v4 handling and Live Talk related code paths.
+- OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
 - OpenAI Realtime voice input path with Android SpeechRecognizer fallback.
 - Updated the existing ElevenLabs TTS, Rokid CXR transport, and HUD camera request flows for the JSOS codebase, current dependencies, JSOS UI, and public-safe logging.
 - Integrated a Hi Rokid / CXR-L HUD deployment flow in JSOS Core so the phone app can select a JSOS HUD APK and hand installation to Hi Rokid when Hi Rokid is installed and already connected to the glasses.
@@ -367,7 +367,7 @@ Typical emulator flow:
 
 ### OpenClaw Protocol
 
-JSOS Core implements the OpenClaw Gateway WebSocket client. The current client pins protocol version `4` with `minProtocol` and `maxProtocol` during connect.
+JSOS Core implements the OpenClaw Gateway WebSocket client. The current client advertises `minProtocol` `4` and `maxProtocol` `5` during connect, then stores the negotiated gateway protocol from the `hello-ok` response for display in JSOS Core. This is separate from the JSOS Core-to-HUD protocol shown in the HUD cards.
 
 Implemented Gateway request/event areas in this source tree include:
 

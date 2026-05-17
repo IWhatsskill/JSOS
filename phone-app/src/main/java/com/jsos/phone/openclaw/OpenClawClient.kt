@@ -31,7 +31,8 @@ class OpenClawClient(
     companion object {
         private const val TAG = "OpenClawClient"
         private const val RECONNECT_DELAY_MS = 3000L
-        private const val PROTOCOL_VERSION = 4
+        private const val MIN_PROTOCOL_VERSION = 4
+        private const val MAX_PROTOCOL_VERSION = 5
     }
 
     sealed class ConnectionState {
@@ -54,6 +55,9 @@ class OpenClawClient(
 
     private val _agentActivity = MutableStateFlow(AgentActivityState.Ready)
     val agentActivity: StateFlow<AgentActivityState> = _agentActivity.asStateFlow()
+
+    private val _gatewayProtocol = MutableStateFlow<Int?>(null)
+    val gatewayProtocol: StateFlow<Int?> = _gatewayProtocol.asStateFlow()
 
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
@@ -124,6 +128,7 @@ class OpenClawClient(
         this.port = port
         this.token = token
         this.shouldReconnect = true
+        _gatewayProtocol.value = null
 
         // Bare hosts stay ws:// for local/private gateway compatibility.
         // Enter a full wss:// URL to use TLS when the gateway supports it.
@@ -162,6 +167,7 @@ class OpenClawClient(
                 Log.d(TAG, "WebSocket closed: $code - $reason")
                 _connectionState.value = ConnectionState.Disconnected
                 _agentActivity.value = AgentActivityState.Ready
+                _gatewayProtocol.value = null
                 notifyConnectionUpdate(false)
                 if (shouldReconnect) scheduleReconnect()
             }
@@ -170,6 +176,7 @@ class OpenClawClient(
                 Log.e(TAG, "WebSocket failed: ${t.javaClass.simpleName}: ${t.message}", t)
                 _connectionState.value = ConnectionState.Error("${t.javaClass.simpleName}: ${t.message}")
                 _agentActivity.value = AgentActivityState.Ready
+                _gatewayProtocol.value = null
                 notifyConnectionUpdate(false)
                 failAllPending("Connection lost")
                 if (shouldReconnect) scheduleReconnect()
@@ -183,6 +190,7 @@ class OpenClawClient(
         webSocket = null
         _connectionState.value = ConnectionState.Disconnected
         _agentActivity.value = AgentActivityState.Ready
+        _gatewayProtocol.value = null
         notifyConnectionUpdate(false)
         failAllPending("Disconnected")
     }
@@ -778,8 +786,8 @@ class OpenClawClient(
         scope.launch {
             try {
                 val params = JsonObject().apply {
-                    addProperty("minProtocol", PROTOCOL_VERSION)
-                    addProperty("maxProtocol", PROTOCOL_VERSION)
+                    addProperty("minProtocol", MIN_PROTOCOL_VERSION)
+                    addProperty("maxProtocol", MAX_PROTOCOL_VERSION)
 
                     add("client", JsonObject().apply {
                         addProperty("id", "openclaw-control-ui")
@@ -830,6 +838,12 @@ class OpenClawClient(
                 val response = sendRequest(OpenClawMethods.CONNECT, params)
                 if (response.ok) {
                     Log.i(TAG, "Authentication successful!")
+
+                    val negotiatedProtocol = response.payload
+                        ?.get("protocol")
+                        ?.let { runCatching { it.asInt }.getOrNull() }
+                    _gatewayProtocol.value = negotiatedProtocol
+                    Log.i(TAG, "OpenClaw protocol negotiated: ${negotiatedProtocol ?: "unknown"}")
 
                     // Persist deviceToken if returned (from pairing approval)
                     val dt = response.payload?.get("deviceToken")?.asString

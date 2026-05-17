@@ -170,6 +170,7 @@ fun MainScreen() {
     val glassesState by glassesManager.connectionState.collectAsState()
     val openClawState by openClawClient.connectionState.collectAsState()
     val agentActivity by openClawClient.agentActivity.collectAsState()
+    val gatewayProtocol by openClawClient.gatewayProtocol.collectAsState()
     val chatMessages by openClawClient.chatMessages.collectAsState()
     val isListening by voiceRecognitionManager.isListening.collectAsState()
     val voiceMode by voiceRecognitionManager.activeMode.collectAsState()
@@ -204,6 +205,7 @@ fun MainScreen() {
     val gatewayLinkDuration = gatewayConnectedSinceMs?.let { connectedSince ->
         formatLinkDuration((gatewayLinkNowMs - connectedSince).coerceAtLeast(0L))
     } ?: "--"
+    val gatewayProtocolLabel = gatewayProtocol?.toString() ?: "4-5"
 
     // Persist non-sensitive OpenClaw settings in SharedPreferences.
     val prefs = remember { context.getSharedPreferences("jsos", android.content.Context.MODE_PRIVATE) }
@@ -1027,6 +1029,7 @@ fun MainScreen() {
                         glassesState = glassesState,
                         openClawState = openClawState,
                         gatewayLinkDuration = gatewayLinkDuration,
+                        gatewayProtocolLabel = gatewayProtocolLabel,
                         sessions = sessionList,
                         currentSessionKey = currentSessionKey,
                         unreadSessions = unreadSessions,
@@ -1088,6 +1091,7 @@ fun MainScreen() {
                     ConnectionDeck(
                         glassesState = glassesState,
                         openClawState = openClawState,
+                        gatewayProtocolLabel = gatewayProtocolLabel,
                         onConnectGlasses = { glassesManager.startScanning() },
                         onConnectOpenClaw = toggleOpenClawGateway,
                         onOpenSettings = openSettings,
@@ -1120,6 +1124,7 @@ fun MainScreen() {
                     DiagnosticsDeck(
                         openClawState = openClawState,
                         glassesState = glassesState,
+                        gatewayProtocolLabel = gatewayProtocolLabel,
                         currentSessionName = sessionList.firstOrNull { it.key == currentSessionKey }?.name
                             ?: currentSessionKey
                             ?: "NONE",
@@ -1414,6 +1419,7 @@ private fun HomeDashboard(
     glassesState: GlassesConnectionManager.ConnectionState,
     openClawState: OpenClawClient.ConnectionState,
     gatewayLinkDuration: String,
+    gatewayProtocolLabel: String,
     sessions: List<SessionInfo>,
     currentSessionKey: String?,
     unreadSessions: Set<String>,
@@ -1453,6 +1459,7 @@ private fun HomeDashboard(
             glassesState = glassesState,
             openClawState = openClawState,
             gatewayLinkDuration = gatewayLinkDuration,
+            gatewayProtocolLabel = gatewayProtocolLabel,
             isListening = isListening,
             voiceMode = voiceMode,
             ttsEnabled = ttsEnabled,
@@ -1713,6 +1720,7 @@ private fun DashboardModuleStack(
     glassesState: GlassesConnectionManager.ConnectionState,
     openClawState: OpenClawClient.ConnectionState,
     gatewayLinkDuration: String,
+    gatewayProtocolLabel: String,
     isListening: Boolean,
     voiceMode: VoiceRecognitionManager.RecognitionMode,
     ttsEnabled: Boolean,
@@ -1748,7 +1756,7 @@ private fun DashboardModuleStack(
                     is OpenClawClient.ConnectionState.Error -> "ERROR"
                     else -> "OFFLINE"
                 },
-                "Protocol" to "4",
+                "Protocol" to gatewayProtocolLabel,
                 "Link" to if (openClawState is OpenClawClient.ConnectionState.Connected) gatewayLinkDuration else "--",
             ),
             onClick = { onOpenSettings(SettingsTarget.SystemLink) },
@@ -2120,6 +2128,7 @@ private fun DashboardModuleIcon(
 private fun ConnectionDeck(
     glassesState: GlassesConnectionManager.ConnectionState,
     openClawState: OpenClawClient.ConnectionState,
+    gatewayProtocolLabel: String,
     onConnectGlasses: () -> Unit,
     onConnectOpenClaw: () -> Unit,
     onOpenSettings: (SettingsTarget) -> Unit,
@@ -2137,7 +2146,7 @@ private fun ConnectionDeck(
             rows = listOf(
                 "Status" to if (openClawState is OpenClawClient.ConnectionState.Connected) "ONLINE" else "OFFLINE",
                 "Tap" to "SYSTEM LINK",
-                "Protocol" to "4",
+                "Protocol" to gatewayProtocolLabel,
             ),
             onClick = { onOpenSettings(SettingsTarget.SystemLink) },
             actionIcon = Icons.Default.PowerSettingsNew,
@@ -2426,6 +2435,7 @@ private fun HudDeck(
 private fun DiagnosticsDeck(
     openClawState: OpenClawClient.ConnectionState,
     glassesState: GlassesConnectionManager.ConnectionState,
+    gatewayProtocolLabel: String,
     currentSessionName: String,
     unreadCount: Int,
     isListening: Boolean,
@@ -2461,7 +2471,7 @@ private fun DiagnosticsDeck(
                     is OpenClawClient.ConnectionState.Error -> "ERROR"
                     is OpenClawClient.ConnectionState.Disconnected -> "OFFLINE"
                 },
-                "Protocol" to "4",
+                "Protocol" to gatewayProtocolLabel,
                 "Session" to currentSessionName,
             ),
             onClick = { onOpenSettings(SettingsTarget.SystemLink) },
