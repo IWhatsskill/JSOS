@@ -423,17 +423,19 @@ The README references selected JSOS assets and screenshots.
 
 ### JSOS Core
 
-#### Home, Chat, Voice, Diagnostics, Config
+#### Home, Chat, Voice, Diagnostics
 
 <p align="center">
-  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="19%">
-  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="19%">
-  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings and live talk mode" width="19%">
-  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="19%">
-  <img src="docs/images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" width="19%">
+  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="22%">
+  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="22%">
+  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings and live talk mode" width="22%">
+  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="22%">
 </p>
 
+#### Config
+
 <p align="center">
+  <img src="docs/images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" height="170">
   <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" height="170">
   <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" height="170">
   <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" height="170">
