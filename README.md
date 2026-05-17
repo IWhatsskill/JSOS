@@ -17,9 +17,9 @@ JSOS started as a fork of the upstream Clawsses project and has been substantial
 
 ## Showcase
 
-Watch a short JSOS showcase video:
+Download a short JSOS showcase video:
 
-[JSOS showcase video](docs/videos/JSOS-showcase.mp4)
+[Download the JSOS showcase video](docs/videos/JSOS-showcase.mp4)
 
 ## Status
 
