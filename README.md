@@ -17,7 +17,7 @@ JSOS started as a fork of the upstream Clawsses project and has been substantial
 
 ## Showcase
 
-Download a short JSOS showcase video:
+Download a 90-second JSOS HUD showcase video:
 
 [Download the JSOS showcase video](docs/videos/JSOS-showcase.mp4)
 
@@ -448,9 +448,11 @@ The README references selected JSOS assets and screenshots.
 ### JSOS HUD
 
 <p align="center">
-  <img src="docs/images/jsos-hud-options.png" alt="JSOS HUD options menu" width="30%">
-  <img src="docs/images/jsos-hud-commands.png" alt="JSOS HUD commands menu" width="30%">
-  <img src="docs/images/jsos-hud-session-chat.png" alt="JSOS HUD session chat view" width="30%">
+  <img src="docs/images/jsos-hud-glasses-01.jpeg" alt="JSOS HUD options overlay captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-02.jpeg" alt="JSOS HUD slash commands option captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-03.jpeg" alt="JSOS HUD font option captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-04.jpeg" alt="JSOS HUD exit overlay captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-05.jpeg" alt="JSOS HUD sessions overlay captured through Rokid glasses" width="19%">
 </p>
 
 ## Troubleshooting
