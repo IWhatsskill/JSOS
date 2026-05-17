@@ -434,10 +434,10 @@ The README references selected JSOS assets and screenshots.
 </p>
 
 <p align="center">
-  <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" height="220">
-  <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" height="220">
-  <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" height="220">
-  <img src="docs/images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" height="220">
+  <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" height="170">
+  <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" height="170">
+  <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" height="170">
+  <img src="docs/images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" height="170">
 </p>
 
 ### JSOS HUD
