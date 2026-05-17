@@ -423,26 +423,21 @@ The README references selected JSOS assets and screenshots.
 
 ### JSOS Core
 
-#### Home, Chat, Voice, Diagnostics
+#### Home, Chat, Voice, Diagnostics, Config
 
 <p align="center">
-  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="22%">
-  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings and live talk mode" width="22%">
-  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="22%">
-  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="22%">
-</p>
-
-#### Config
-
-<p align="center">
-  <img src="docs/images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" width="30%">
-  <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" width="30%">
-  <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" width="30%">
+  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="19%">
+  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="19%">
+  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings and live talk mode" width="19%">
+  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="19%">
+  <img src="docs/images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" width="19%">
 </p>
 
 <p align="center">
-  <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" width="45%">
-  <img src="docs/images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" width="45%">
+  <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" height="220">
+  <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" height="220">
+  <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" height="220">
+  <img src="docs/images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" height="220">
 </p>
 
 ### JSOS HUD
