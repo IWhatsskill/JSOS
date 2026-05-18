@@ -102,6 +102,7 @@ import com.jsos.phone.tts.TtsPlaybackManager
 import com.jsos.phone.tts.TtsSettingsManager
 import com.jsos.phone.voice.VoiceCommandHandler
 import com.jsos.phone.voice.VoiceLanguageManager
+import com.jsos.phone.voice.AgentWakeRouter
 import com.jsos.phone.voice.VoiceRecognitionManager
 import com.jsos.shared.ChatMessage
 import com.jsos.shared.ConnectionUpdate
@@ -228,6 +229,9 @@ fun MainScreen() {
     var pendingPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
     var ignoreAiExitUntilMs by remember { mutableLongStateOf(0L) }
     var liveTalkSource by remember { mutableStateOf<LiveTalkSource?>(null) }
+    var agentWakeEnabled by remember { mutableStateOf(false) }
+    var agentWakeSessionKey by remember { mutableStateOf<String?>(null) }
+    var agentWakeStatus by remember { mutableStateOf("OFF") }
     var glassesVoiceButtonMode by remember {
         mutableStateOf(GlassesVoiceButtonMode.fromPref(prefs.getString("glasses_voice_button_mode", "command")))
     }
@@ -481,6 +485,104 @@ fun MainScreen() {
             }
         }
     }
+    fun submitAgentWakeMessage(session: SessionInfo, message: String) {
+        if (message.isBlank()) return
+        if (openClawClient.connectionState.value !is OpenClawClient.ConnectionState.Connected) {
+            agentWakeStatus = "OFFLINE"
+            android.widget.Toast.makeText(context, "OpenClaw gateway offline", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (openClawClient.agentActivity.value != OpenClawClient.AgentActivityState.Ready) {
+            agentWakeStatus = "BUSY"
+            return
+        }
+
+        agentWakeSessionKey = session.key
+        agentWakeStatus = session.name.uppercase()
+        if (openClawClient.currentSessionKey.value != session.key) {
+            openClawClient.switchSession(session.key, loadHistory = false)
+        }
+        submitChatMessage(message, emptyList())
+    }
+
+    fun handleAgentWakeTranscript(transcript: String) {
+        val sessions = openClawClient.sessionList.value
+        if (sessions.isEmpty()) {
+            openClawClient.requestSessions()
+            agentWakeStatus = "SESSIONS"
+            return
+        }
+
+        val decision = AgentWakeRouter.route(transcript, sessions, agentWakeSessionKey)
+        when (decision.action) {
+            AgentWakeRouter.Action.SendToAgent,
+            AgentWakeRouter.Action.ContinueActive -> {
+                val session = decision.session ?: return
+                submitAgentWakeMessage(session, decision.message)
+            }
+            AgentWakeRouter.Action.SwitchOnly -> {
+                val session = decision.session ?: return
+                agentWakeSessionKey = session.key
+                agentWakeStatus = session.name.uppercase()
+                if (openClawClient.currentSessionKey.value != session.key) {
+                    openClawClient.switchSession(session.key)
+                }
+            }
+            AgentWakeRouter.Action.ClearActive -> {
+                agentWakeSessionKey = null
+                agentWakeStatus = "ARMED"
+            }
+            AgentWakeRouter.Action.Sleep -> {
+                agentWakeEnabled = false
+                agentWakeSessionKey = null
+                agentWakeStatus = "OFF"
+                voiceRecognitionManager.stopListening()
+            }
+            AgentWakeRouter.Action.NoMatch -> {
+                agentWakeStatus = "NAME?"
+            }
+            AgentWakeRouter.Action.Empty -> Unit
+        }
+    }
+
+    fun startAgentWakeMode() {
+        if (openClawClient.connectionState.value !is OpenClawClient.ConnectionState.Connected) {
+            android.widget.Toast.makeText(context, "Connect OpenClaw first", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (liveTalkManager.isActive) {
+            liveTalkManager.stop()
+            liveTalkAudioRouteManager.clear()
+            liveTalkSource = null
+            sendVoiceState("idle")
+        }
+        openClawClient.requestSessions()
+        agentWakeEnabled = true
+        agentWakeSessionKey = null
+        agentWakeStatus = "ARMED"
+        val started = voiceRecognitionManager.startContinuousListening(
+            languageTag = voiceLanguageManager.getActiveLanguageTag(),
+            onResult = { transcript -> handleAgentWakeTranscript(transcript) },
+            onError = {
+                agentWakeEnabled = false
+                agentWakeSessionKey = null
+                agentWakeStatus = "ERROR"
+                android.widget.Toast.makeText(context, "Agent Wake error", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        )
+        if (!started) {
+            agentWakeEnabled = false
+            agentWakeStatus = "NO KEY"
+            android.widget.Toast.makeText(context, "Enable OpenAI Realtime voice first", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun stopAgentWakeMode() {
+        agentWakeEnabled = false
+        agentWakeSessionKey = null
+        agentWakeStatus = "OFF"
+        voiceRecognitionManager.stopListening()
+    }
     fun stopLiveTalk() {
         liveTalkManager.stop()
         liveTalkAudioRouteManager.clear()
@@ -500,6 +602,10 @@ fun MainScreen() {
             sendVoiceError("OpenClaw gateway offline")
             sendVoiceState("idle")
             return
+        }
+
+        if (agentWakeEnabled) {
+            stopAgentWakeMode()
         }
 
         liveTalkSource = source
@@ -1106,6 +1212,14 @@ fun MainScreen() {
                         glassesVoiceButtonMode = glassesVoiceButtonMode,
                         liveTalkState = liveTalkState,
                         liveTalkSource = liveTalkSource,
+                        agentWakeEnabled = agentWakeEnabled,
+                        agentWakeStatus = agentWakeStatus,
+                        agentWakeSessionName = agentWakeSessionKey?.let { key ->
+                            sessionList.firstOrNull { it.key == key }?.name
+                        },
+                        onToggleAgentWake = {
+                            if (agentWakeEnabled) stopAgentWakeMode() else startAgentWakeMode()
+                        },
                         onTogglePhoneLiveTalk = ::toggleLiveTalkFromPhone,
                         onGlassesVoiceButtonModeChange = setGlassesVoiceButtonMode,
                         onOpenSettings = openSettings,
@@ -2179,6 +2293,10 @@ private fun VoiceDeck(
     glassesVoiceButtonMode: GlassesVoiceButtonMode,
     liveTalkState: LiveTalkState,
     liveTalkSource: LiveTalkSource?,
+    agentWakeEnabled: Boolean,
+    agentWakeStatus: String,
+    agentWakeSessionName: String?,
+    onToggleAgentWake: () -> Unit,
     onTogglePhoneLiveTalk: () -> Unit,
     onGlassesVoiceButtonModeChange: (GlassesVoiceButtonMode) -> Unit,
     onOpenSettings: (SettingsTarget) -> Unit,
@@ -2195,10 +2313,16 @@ private fun VoiceDeck(
             accent = if (isListening) Color(0xFF22D3EE) else Color(0xFF63F45C),
             rows = listOf(
                 "Status" to if (isListening) "LISTEN" else "READY",
-                "Model" to if (voiceMode == VoiceRecognitionManager.RecognitionMode.OPENAI) "RT-WHISPER" else "DEVICE",
+                "Model" to if (voiceMode == VoiceRecognitionManager.RecognitionMode.OPENAI) "4O-TRANSCRIBE" else "DEVICE",
                 "Tap" to "CONFIG",
             ),
             onClick = { onOpenSettings(SettingsTarget.Voice) },
+        )
+        AgentWakeCard(
+            enabled = agentWakeEnabled,
+            status = agentWakeStatus,
+            activeSessionName = agentWakeSessionName,
+            onToggle = onToggleAgentWake,
         )
         CoreLiveTalkCard(
             liveTalkState = liveTalkState,
@@ -2225,6 +2349,72 @@ private fun VoiceDeck(
     }
 }
 
+@Composable
+private fun AgentWakeCard(
+    enabled: Boolean,
+    status: String,
+    activeSessionName: String?,
+    onToggle: () -> Unit,
+) {
+    val accent = if (enabled) Color(0xFF63F45C) else Color(0xFF22D3EE)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = JsosPalette.Card,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.70f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Agent Wake",
+                    color = JsosPalette.Text,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = activeSessionName?.uppercase() ?: status,
+                    color = accent,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clickable(onClick = onToggle),
+                shape = RoundedCornerShape(8.dp),
+                color = if (enabled) Color(0xFF16321D) else Color(0xFF071010),
+                border = BorderStroke(1.dp, accent),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = if (enabled) "STOP AGENT WAKE" else "START AGENT WAKE",
+                        color = accent,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+
+            Text(
+                text = "Say an agent name first. Continue speaking without repeating it.",
+                color = JsosPalette.Muted,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+            )
+        }
+    }
+}
 @Composable
 private fun CoreLiveTalkCard(
     liveTalkState: LiveTalkState,

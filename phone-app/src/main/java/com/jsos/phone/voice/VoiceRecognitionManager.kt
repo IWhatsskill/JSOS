@@ -182,6 +182,59 @@ class VoiceRecognitionManager(private val context: Context) {
         )
     }
 
+    /**
+     * Start continuous OpenAI Realtime transcription for Agent Wake mode.
+     * This mode intentionally does not use Android SpeechRecognizer fallback because
+     * fallback is one-shot and causes mic restart flapping.
+     */
+    fun startContinuousListening(
+        languageTag: String? = null,
+        onResult: (String) -> Unit,
+        onError: (String) -> Unit
+    ): Boolean {
+        if (_isListening.value) {
+            Log.w(TAG, "Already listening, stopping first")
+            stopListening()
+        }
+
+        val apiKey = getOpenAIApiKey()
+        if (apiKey.isEmpty() || !isOpenAIVoiceEnabled()) {
+            _lastError.value = "OpenAI Realtime voice is required for Agent Wake"
+            _fallbackReason.value = if (apiKey.isEmpty()) FallbackReason.NO_API_KEY else FallbackReason.DISABLED
+            return false
+        }
+
+        _isListening.value = true
+        _lastError.value = null
+        _activeMode.value = RecognitionMode.OPENAI
+        _fallbackReason.value = FallbackReason.NONE
+
+        openAIClient.startContinuousListening(
+            apiKey = apiKey,
+            languageTag = languageTag,
+            onPartial = { partialText ->
+                onPartialResult?.invoke(partialText)
+            },
+            onSpeechStopped = {
+                onSpeechStopped?.invoke()
+            },
+            onFinal = { finalText ->
+                Log.i(TAG, "OpenAI continuous result received (${finalText.length} chars)")
+                if (finalText.isNotBlank()) {
+                    onResult(finalText.trim())
+                }
+            },
+            onError = { errorMessage ->
+                Log.w(TAG, "OpenAI continuous error (redacted)")
+                _lastError.value = errorMessage
+                _isListening.value = false
+                _activeMode.value = RecognitionMode.NONE
+                _fallbackReason.value = FallbackReason.API_ERROR
+                onError(errorMessage)
+            }
+        )
+        return true
+    }
     private fun startFallbackRecognition(
         languageTag: String?,
         onResult: (VoiceCommandHandler.VoiceResult) -> Unit

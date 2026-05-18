@@ -59,6 +59,7 @@ Main JSOS changes include:
 - Session picker presentation updates, current-session markers, unread indicators, and session/chat forwarding behavior.
 - OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
 - OpenAI Realtime voice input path with Android SpeechRecognizer fallback.
+- Core Agent Wake mode for phone-side continuous OpenAI Realtime transcription, leading-agent-name session routing, follow-up messages in the active session, and alias handling for the visible JSOS sessions (`JARVIS`, `WhatsApp`, `Gideon`, `Chappi`, `Goku`, `Steel`, `Shelli`, `General`).
 - Updated the existing ElevenLabs TTS, Rokid CXR transport, and HUD camera request flows for the JSOS codebase, current dependencies, JSOS UI, and public-safe logging.
 - Integrated a Hi Rokid / CXR-L HUD deployment flow in JSOS Core so the phone app can select a JSOS HUD APK and hand installation to Hi Rokid when Hi Rokid is installed and already connected to the glasses.
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
@@ -260,6 +261,7 @@ JSOS Core is responsible for:
 - Rokid CXR phone-side connection and device control.
 - Debug WebSocket bridge for emulator-style local testing.
 - OpenAI Realtime speech-to-text when configured.
+- Core Agent Wake: phone-side continuous Realtime transcription with leading-agent-name routing into the visible JSOS sessions.
 - Android SpeechRecognizer fallback.
 - Optional ElevenLabs TTS settings and playback path.
 - Photo capture handoff from the glasses to the phone/OpenClaw flow.
@@ -293,9 +295,14 @@ Voice input can be started from the glasses HUD with a long press on the temple 
 JSOS separates normal speech-to-text from bidirectional OpenClaw Live Talk:
 
 - **OpenAI Realtime speech-to-text** and **Android SpeechRecognizer** recognize voice input and submit text to OpenClaw.
+- **Core Agent Wake** runs from the phone voice UI and keeps phone-side OpenAI Realtime transcription active. A leading agent name such as `Shelli ...` switches to that session and sends the remaining text; follow-up phrases without a new agent name continue in the active session.
 - **Core Live Talk** starts OpenClaw Live Talk directly from the phone and routes output to the phone speaker.
 - **Glasses Voice Button / CMD** routes the glasses voice button to normal command/input speech recognition.
 - **Glasses Voice Button / LIVE TALK** routes the glasses voice button to OpenClaw Live Talk and Rokid communication audio.
+
+Core Agent Wake is designed for fast hands-free routing between the visible JSOS sessions. For example, `Shelli what is on the plan today` selects Shelli and sends `what is on the plan today`; a later phrase without an agent name continues in Shelli until another leading name is detected. Common transcription variants for the current agent names are handled in the router, but internal OpenClaw session keys remain unchanged.
+
+Current limitation: Core Agent Wake uses the phone-side voice path. The glasses voice button still uses the normal HUD voice flow, and a glasses-side Agent Wake mode without pressing the voice button is planned as separate follow-up work.
 
 ### HUD Controls
 
@@ -413,7 +420,7 @@ Common glasses-to-phone messages:
 - `wake_ack`
 - `tts_toggle`
 
-Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime speech-to-text runs phone-side. OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths and can be started either from Core Live Talk on the phone or from the glasses voice button in `LIVE TALK` mode.
+Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime speech-to-text runs phone-side. Core Agent Wake also runs phone-side and routes leading agent names through JSOS Core's session resolver before sending text to OpenClaw. OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths and can be started either from Core Live Talk on the phone or from the glasses voice button in `LIVE TALK` mode.
 
 Large phone-to-glasses JSON payloads are split into `chunk_part` messages and reassembled on JSOS HUD.
 

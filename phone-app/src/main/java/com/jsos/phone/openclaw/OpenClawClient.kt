@@ -407,15 +407,15 @@ class OpenClawClient(
     /**
      * Switch to a different session by key.
      */
-    fun switchSession(sessionKey: String) {
-        scope.launch {
-            Log.d(TAG, "Switching session (keyLength=${sessionKey.length})")
-            _currentSessionKey.value = sessionKey
-            _chatMessages.value = emptyList()
-            currentHistoryLimit = 50
-            // Clear unread flag for the session we're switching to
-            _unreadSessions.value = _unreadSessions.value - sessionKey
-            notifyConnectionUpdate(true, sessionKey)
+    fun switchSession(sessionKey: String, loadHistory: Boolean = true) {
+        Log.d(TAG, "Switching session (keyLength=${sessionKey.length})")
+        _currentSessionKey.value = sessionKey
+        _chatMessages.value = emptyList()
+        currentHistoryLimit = 50
+        // Clear unread flag for the session we're switching to
+        _unreadSessions.value = _unreadSessions.value - sessionKey
+        notifyConnectionUpdate(true, sessionKey)
+        if (loadHistory) {
             loadSessionHistory(sessionKey)
         }
     }

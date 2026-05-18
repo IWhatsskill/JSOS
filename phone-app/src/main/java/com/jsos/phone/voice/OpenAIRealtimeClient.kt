@@ -57,7 +57,7 @@ class OpenAIRealtimeClient {
     companion object {
         private const val TAG = "OpenAIRealtime"
         private const val REALTIME_URL = "wss://api.openai.com/v1/realtime"
-        private const val MODEL = "gpt-realtime-whisper"
+        private const val MODEL = "gpt-4o-transcribe"
 
         private const val SAMPLE_RATE = 24000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
@@ -93,6 +93,7 @@ class OpenAIRealtimeClient {
 
     private var speechDetected = false
     @Volatile private var currentlySpeaking = false
+    @Volatile private var continuousMode = false
 
     // Audio pre-buffering: record starts before WebSocket is ready
     private val preBuffer = ConcurrentLinkedQueue<ByteArray>()
@@ -143,6 +144,45 @@ class OpenAIRealtimeClient {
         onError: (String) -> Unit,
         onSpeechStopped: (() -> Unit)? = null
     ) {
+        startListeningInternal(
+            apiKey = apiKey,
+            languageTag = languageTag,
+            continuous = false,
+            onPartial = onPartial,
+            onFinal = onFinal,
+            onError = onError,
+            onSpeechStopped = onSpeechStopped
+        )
+    }
+
+    fun startContinuousListening(
+        apiKey: String,
+        languageTag: String? = null,
+        onPartial: (String) -> Unit,
+        onFinal: (String) -> Unit,
+        onError: (String) -> Unit,
+        onSpeechStopped: (() -> Unit)? = null
+    ) {
+        startListeningInternal(
+            apiKey = apiKey,
+            languageTag = languageTag,
+            continuous = true,
+            onPartial = onPartial,
+            onFinal = onFinal,
+            onError = onError,
+            onSpeechStopped = onSpeechStopped
+        )
+    }
+
+    private fun startListeningInternal(
+        apiKey: String,
+        languageTag: String? = null,
+        continuous: Boolean,
+        onPartial: (String) -> Unit,
+        onFinal: (String) -> Unit,
+        onError: (String) -> Unit,
+        onSpeechStopped: (() -> Unit)? = null
+    ) {
         val generation = sessionGeneration.incrementAndGet()
         if (_isListening.value) {
             Log.w(TAG, "Already listening, cleaning up first")
@@ -151,6 +191,7 @@ class OpenAIRealtimeClient {
 
         // Reset all state
         resultDelivered.set(false)
+        continuousMode = continuous
         speechDetected = false
         currentlySpeaking = false
         sessionReady = false
@@ -170,15 +211,14 @@ class OpenAIRealtimeClient {
         _connectionState.value = ConnectionState.Connecting
         _isListening.value = true
 
-        // Start audio capture immediately — buffer until WebSocket session is ready
-        // No-speech timeout starts later when session is configured (server can't detect speech until then)
+        // Start audio capture immediately - buffer until WebSocket session is ready.
+        // No-speech timeout starts later for single-turn recognition only.
         startAudioCapture(generation)
 
-        val url = "$REALTIME_URL?model=$MODEL"
+        val url = "$REALTIME_URL?intent=transcription"
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $apiKey")
-            .header("OpenAI-Beta", "realtime=v1")
             .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
@@ -209,8 +249,12 @@ class OpenAIRealtimeClient {
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (!isCurrentSession(generation, webSocket)) return
                 Log.d(TAG, "WebSocket closed: $code $reason")
-                // If result wasn't delivered yet (unexpected close), deliver empty
-                deliverFinalResult(generation)
+                if (continuousMode) {
+                    deliverError("Realtime connection closed", generation)
+                } else {
+                    // If result wasn't delivered yet (unexpected close), deliver empty.
+                    deliverFinalResult(generation)
+                }
             }
         })
     }
@@ -265,7 +309,9 @@ class OpenAIRealtimeClient {
                     Log.i(TAG, "Session configured, flushing pre-buffered audio")
                     sessionReady = true
                     // Recording coroutine will drain preBuffer on next iteration
-                    startNoSpeechTimeout(generation)
+                    if (!continuousMode) {
+                        startNoSpeechTimeout(generation)
+                    }
                 }
 
                 "input_audio_buffer.speech_started" -> {
@@ -334,13 +380,20 @@ class OpenAIRealtimeClient {
                         mainHandler.post { partialCallback?.invoke(currentText) }
                     }
 
-                    // Only start done timeout if user is NOT currently speaking.
-                    // This transcription may be for a previous segment while the user
-                    // has already started a new one.
-                    if (!currentlySpeaking) {
-                        startDoneTimeout(generation)
+                    if (continuousMode) {
+                        val turnText = synchronized(transcriptLock) {
+                            buildTranscriptLocked(includePartials = false)
+                        }.ifBlank { transcript.trim() }
+                        deliverContinuousResult(turnText, generation)
                     } else {
-                        Log.d(TAG, "User still speaking — not starting done timeout")
+                        // Only start done timeout if user is NOT currently speaking.
+                        // This transcription may be for a previous segment while the user
+                        // has already started a new one.
+                        if (!currentlySpeaking) {
+                            startDoneTimeout(generation)
+                        } else {
+                            Log.d(TAG, "User still speaking - not starting done timeout")
+                        }
                     }
                 }
 
@@ -349,8 +402,12 @@ class OpenAIRealtimeClient {
                     val message = errorObj?.optString("message") ?: "Transcription failed"
                     Log.e(TAG, "Transcription failed (error redacted)")
                     cancelTranscriptionTimeout()
-                    // Wait for more speech or done timeout
-                    startDoneTimeout(generation)
+                    // Wait for more speech or done timeout in single-turn mode.
+                    if (continuousMode) {
+                        clearTranscriptBuffers()
+                    } else {
+                        startDoneTimeout(generation)
+                    }
                 }
 
                 "error" -> {
@@ -477,8 +534,15 @@ class OpenAIRealtimeClient {
         transcriptionTimeoutJob = scope?.launch {
             delay(TRANSCRIPTION_TIMEOUT_MS)
             if (!isCurrentSession(generation)) return@launch
-            Log.w(TAG, "Transcription timeout after ${TRANSCRIPTION_TIMEOUT_MS}ms — delivering accumulated text")
-            deliverFinalResult(generation)
+            Log.w(TAG, "Transcription timeout after ${TRANSCRIPTION_TIMEOUT_MS}ms")
+            if (continuousMode) {
+                val text = synchronized(transcriptLock) {
+                    buildTranscriptLocked(includePartials = true)
+                }
+                deliverContinuousResult(text, generation)
+            } else {
+                deliverFinalResult(generation)
+            }
         }
     }
 
@@ -504,6 +568,33 @@ class OpenAIRealtimeClient {
 
     // --- Result delivery ---
 
+    private fun deliverContinuousResult(text: String, generation: Long) {
+        if (!isCurrentSession(generation)) return
+        if (!continuousMode) return
+
+        val finalText = text.trim()
+        if (finalText.isEmpty()) {
+            clearTranscriptBuffers()
+            return
+        }
+
+        Log.i(TAG, "Delivering continuous result (${finalText.length} chars)")
+        val callback = onFinalResult
+        mainHandler.post { callback?.invoke(finalText) }
+
+        clearTranscriptBuffers()
+        speechDetected = false
+        currentlySpeaking = false
+        cancelTranscriptionTimeout()
+        cancelDoneTimeout()
+    }
+
+    private fun clearTranscriptBuffers() {
+        synchronized(transcriptLock) {
+            accumulatedTranscript.clear()
+            partialTranscriptsByItem.clear()
+        }
+    }
     /**
      * Deliver the final transcription result on the main thread.
      * Only the first call takes effect (guarded by AtomicBoolean).
@@ -547,6 +638,11 @@ class OpenAIRealtimeClient {
      */
     fun stopListening() {
         Log.i(TAG, "stopListening() called")
+        if (continuousMode) {
+            sessionGeneration.incrementAndGet()
+            cleanupSilently()
+            return
+        }
         stopRecording()
         deliverFinalResult()
     }
@@ -561,6 +657,7 @@ class OpenAIRealtimeClient {
         stopRecording()
 
         sessionReady = false
+        continuousMode = false
         preBuffer.clear()
         synchronized(transcriptLock) {
             partialTranscriptsByItem.clear()
@@ -593,6 +690,7 @@ class OpenAIRealtimeClient {
         stopRecording()
 
         sessionReady = false
+        continuousMode = false
         preBuffer.clear()
         synchronized(transcriptLock) {
             partialTranscriptsByItem.clear()
