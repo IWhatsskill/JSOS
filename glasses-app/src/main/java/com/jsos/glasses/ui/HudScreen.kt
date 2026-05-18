@@ -374,11 +374,12 @@ fun HudScreen(
     }
 
     // Focus brightness
-    val contentFocused = state.focusedArea == ChatFocusArea.CONTENT
     val inputFocused = state.focusedArea == ChatFocusArea.INPUT
     val menuFocused = state.focusedArea == ChatFocusArea.MENU
 
-    val contentAlpha = focusBrightness(contentFocused)
+    // Keep chat fully opaque. Dimming the whole chat layer produces visible
+    // dithering/blocking on Rokid displays at very low brightness.
+    val contentAlpha = 1f
     val inputAlpha = focusBrightness(inputFocused)
     val menuAlpha = focusBrightness(menuFocused)
 
