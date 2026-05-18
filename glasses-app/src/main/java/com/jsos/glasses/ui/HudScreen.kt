@@ -111,23 +111,18 @@ enum class MenuBarItem(val icon: String, val label: String) {
     PHOTO("\uD83D\uDCF7", "Photo"),
     SESSION("\u25CE", "Sess"),
     SIZE("\u2588", "Size"),  // Icon overridden dynamically based on next HudPosition
+    SLASH("/", "Cmds"),
     MORE("\u2026", "More"),
 }
 
 /**
  * Items available in the MORE menu
  */
-enum class MoreMenuItem(val icon: String, val label: String, val displaySize: HudDisplaySize? = null) {
+enum class MoreMenuItem(val icon: String, val label: String) {
     VOICE_SEND("SEND", "Send Mode"),
-    FONT_COMPACT("Aa", "Compact", HudDisplaySize.COMPACT),
-    FONT_NORMAL("Aa", "Normal", HudDisplaySize.NORMAL),
-    FONT_COMFORTABLE("Aa", "Comfortable", HudDisplaySize.COMFORTABLE),
-    FONT_LARGE("Aa", "Large", HudDisplaySize.LARGE),
-    SLASH("/", "Slash Cmds"),
-    AR_PICTURE("PIC", "AR Picture"),
-    AR_RECORD("REC", "AR Record"),
-    AR_STOP("STOP", "AR Stop"),
-    VOICE("\uD83D\uDD0A", "Voice"),  // speaker icon - label is dynamic
+    AR_TOOLS("AR", "AR Tools"),
+    DISPLAY("DISP", "Display"),
+    VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
 }
 
 enum class VoiceSendMode {
@@ -223,6 +218,9 @@ data class ChatHudState(
     // More menu
     val showMoreMenu: Boolean = false,
     val selectedMoreIndex: Int = 0,
+    val showMoreSubMenu: Boolean = false,
+    val selectedMoreSubIndex: Int = 0,
+    val moreSubMenuType: MoreSubMenuType? = null,
     // Slash command menu
     val showSlashMenu: Boolean = false,
     val selectedSlashIndex: Int = 0,
@@ -273,19 +271,31 @@ data class SlashParamOption(
     val description: String
 )
 
+enum class MoreSubMenuType(val title: String) {
+    AR("AR TOOLS"),
+    DISPLAY("DISPLAY")
+}
+
+data class MoreSubMenuOption(
+    val label: String,
+    val description: String,
+    val displaySize: HudDisplaySize? = null,
+    val arAction: String? = null
+)
+
 /**
  * Available slash commands from the OpenClaw Gateway.
  * Keep this list aligned with the OpenClaw slash command reference.
  */
 val SLASH_COMMANDS = listOf(
-    SlashCommandItem("/help", "Show help"),
-    SlashCommandItem("/commands", "List commands"),
     SlashCommandItem("/status", "Show status"),
     SlashCommandItem("/model", "Switch model"),
-    SlashCommandItem("/compact", "Compact context"),
+    SlashCommandItem("/think", "Thinking level"),
     SlashCommandItem("/reset", "New session"),
     SlashCommandItem("/stop", "Stop generation"),
-    SlashCommandItem("/think", "Thinking level"),
+    SlashCommandItem("/help", "Show help"),
+    SlashCommandItem("/commands", "List commands"),
+    SlashCommandItem("/compact", "Compact context"),
     SlashCommandItem("/context", "Show context"),
     SlashCommandItem("/usage", "Usage info"),
     SlashCommandItem("/whoami", "Show identity"),
@@ -320,6 +330,24 @@ val THINK_PARAM_OPTIONS = listOf(
 fun slashParamOptions(type: SlashParamMenuType): List<SlashParamOption> = when (type) {
     SlashParamMenuType.MODEL -> MODEL_PARAM_OPTIONS
     SlashParamMenuType.THINK -> THINK_PARAM_OPTIONS
+}
+
+val AR_TOOL_OPTIONS = listOf(
+    MoreSubMenuOption("AR PIC", "Take AR picture", arAction = "picture"),
+    MoreSubMenuOption("AR REC", "Start AR recording", arAction = "record_start"),
+    MoreSubMenuOption("AR STOP", "Stop AR recording", arAction = "record_stop")
+)
+
+val DISPLAY_OPTIONS = listOf(
+    MoreSubMenuOption("COMPACT", "Smallest text", displaySize = HudDisplaySize.COMPACT),
+    MoreSubMenuOption("NORMAL", "Balanced text", displaySize = HudDisplaySize.NORMAL),
+    MoreSubMenuOption("COMFORT", "Larger text", displaySize = HudDisplaySize.COMFORTABLE),
+    MoreSubMenuOption("LARGE", "Largest text", displaySize = HudDisplaySize.LARGE)
+)
+
+fun moreSubMenuOptions(type: MoreSubMenuType): List<MoreSubMenuOption> = when (type) {
+    MoreSubMenuType.AR -> AR_TOOL_OPTIONS
+    MoreSubMenuType.DISPLAY -> DISPLAY_OPTIONS
 }
 
 // ============================================================================
@@ -590,6 +618,20 @@ fun HudScreen(
                 currentDisplaySize = state.displaySize,
                 voiceSendMode = state.voiceSendMode,
                 ttsEnabled = state.ttsEnabled,
+                fontFamily = monoFontFamily
+            )
+        }
+
+        // More submenu overlay
+        AnimatedVisibility(
+            visible = state.showMoreSubMenu,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            MoreSubMenuOverlay(
+                menuType = state.moreSubMenuType,
+                selectedIndex = state.selectedMoreSubIndex,
+                currentDisplaySize = state.displaySize,
                 fontFamily = monoFontFamily
             )
         }
@@ -1115,7 +1157,7 @@ private fun VoiceStatusStrip(
         if (rightLabel.isNotBlank()) {
             Text(
                 text = rightLabel,
-                color = if (batteryLevel != null && batteryLevel <= 15) HudColors.error else HudColors.dimText,
+                color = if (batteryLevel != null && batteryLevel <= 15) HudColors.error else HudColors.primaryText.copy(alpha = 0.86f),
                 fontSize = stripFontSize,
                 fontFamily = fontFamily,
                 maxLines = 1,
@@ -1461,6 +1503,7 @@ private fun ChatMenuBar(
                         HudPosition.BOTTOM_HALF -> "BOT"
                         HudPosition.TOP_HALF -> "MID"
                     }
+                    MenuBarItem.SLASH -> "/"
                     MenuBarItem.MORE -> "MORE"
                 }
                 val buttonText = if (isSelected) "> $displayLabel <" else displayLabel
@@ -1469,10 +1512,6 @@ private fun ChatMenuBar(
                     modifier = Modifier
                         .width(54.dp)
                         .height(24.dp)
-                        .background(
-                            if (isSelected) HudColors.green.copy(alpha = 0.16f) else Color.Transparent,
-                            RoundedCornerShape(2.dp)
-                        )
                         .border(
                             width = 1.dp,
                             color = if (isSelected) HudColors.green else HudColors.green.copy(alpha = 0.38f),
@@ -1483,7 +1522,7 @@ private fun ChatMenuBar(
                 ) {
                     Text(
                         text = buttonText,
-                        color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.72f),
+                        color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.86f),
                         fontSize = commandFontSize,
                         fontFamily = fontFamily,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
@@ -1497,7 +1536,7 @@ private fun ChatMenuBar(
         if (currentTime.isNotEmpty()) {
             Text(
                 text = currentTime,
-                color = HudColors.dimText,
+                color = HudColors.primaryText.copy(alpha = 0.86f),
                 fontSize = commandFontSize,
                 fontFamily = fontFamily,
                 modifier = Modifier.padding(start = 4.dp)
@@ -1508,7 +1547,7 @@ private fun ChatMenuBar(
         if (batteryLevel != null) {
             Text(
                 text = "${if (batteryCharging) "\u26A1" else "\uD83D\uDD0B"}${batteryLevel}%",  // ⚡ or 🔋
-                color = if (batteryLevel <= 15) HudColors.error else HudColors.dimText,
+                color = if (batteryLevel <= 15) HudColors.error else HudColors.primaryText.copy(alpha = 0.86f),
                 fontSize = commandFontSize,
                 fontFamily = fontFamily,
                 modifier = Modifier.padding(start = 4.dp)
@@ -1568,7 +1607,7 @@ private fun HudOverlayPanel(
 
             Text(
                 text = footerText,
-                color = HudColors.dimText,
+                color = HudColors.primaryText.copy(alpha = 0.72f),
                 fontSize = 9.sp,
                 fontFamily = fontFamily,
                 maxLines = 1
@@ -1667,7 +1706,7 @@ private fun SessionPickerOverlay(
                         if (session.updatedAt != null) {
                             Text(
                                 text = formatRelativeTime(session.updatedAt),
-                                color = HudColors.dimText,
+                                color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.86f),
                                 fontSize = 9.sp,
                                 fontFamily = fontFamily,
                                 maxLines = 1
@@ -1717,26 +1756,20 @@ private fun MoreMenuOverlay(
                     val isActive = when (item) {
                         MoreMenuItem.VOICE_SEND -> voiceSendMode == VoiceSendMode.AUTO
                         MoreMenuItem.VOICE -> ttsEnabled
-                        else -> item.displaySize == currentDisplaySize
+                        else -> false
                     }
 
                     // Dynamic labels for toggle items
                     val displayLabel = when (item) {
                         MoreMenuItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "SEND AUTO" else "SEND ASK"
-                        MoreMenuItem.FONT_COMPACT -> "FONT COMPACT"
-                        MoreMenuItem.FONT_NORMAL -> "FONT NORMAL"
-                        MoreMenuItem.FONT_COMFORTABLE -> "FONT COMFORT"
-                        MoreMenuItem.FONT_LARGE -> "FONT LARGE"
-                        MoreMenuItem.SLASH -> "SLASH CMDS"
-                        MoreMenuItem.AR_PICTURE -> "AR PIC"
-                        MoreMenuItem.AR_RECORD -> "AR REC"
-                        MoreMenuItem.AR_STOP -> "AR STOP"
-                        MoreMenuItem.VOICE -> if (ttsEnabled) "VOICE ON" else "VOICE OFF"
+                        MoreMenuItem.AR_TOOLS -> "AR TOOLS"
+                        MoreMenuItem.DISPLAY -> "DISPLAY"
+                        MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
                     }
                     val activeMark = if (isActive) "*" else " "
                     val leftMark = if (isSelected) ">" else " "
                     val rightMark = if (isSelected) "<" else " "
-                    val itemFontSize = if (item.displaySize != null) 12.sp else 13.sp
+                    val itemFontSize = 13.sp
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1779,6 +1812,103 @@ private fun MoreMenuOverlay(
                         )
                     }
                 }
+        }
+    }
+}
+
+// ============================================================================
+// MORE SUBMENU OVERLAY
+// ============================================================================
+
+@Composable
+private fun MoreSubMenuOverlay(
+    menuType: MoreSubMenuType?,
+    selectedIndex: Int,
+    currentDisplaySize: HudDisplaySize,
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    val type = menuType ?: MoreSubMenuType.DISPLAY
+    val options = moreSubMenuOptions(type)
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(type, selectedIndex) {
+        if (options.isNotEmpty()) {
+            listState.animateScrollToItem(selectedIndex.coerceIn(options.indices))
+        }
+    }
+
+    HudOverlayPanel(
+        title = type.title,
+        fontFamily = fontFamily,
+        modifier = modifier,
+        footerText = "SWIPE SELECT  TAP OK  2XTAP BACK"
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            itemsIndexed(options) { index, item ->
+                val isSelected = index == selectedIndex
+                val isActive = item.displaySize == currentDisplaySize
+                val activeMark = if (isActive) "*" else " "
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .border(
+                            width = if (isSelected) 1.dp else 0.dp,
+                            color = if (isSelected) HudColors.green else Color.Transparent,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isSelected) ">" else " ",
+                        color = HudColors.green,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = activeMark,
+                        color = HudColors.green,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = item.label,
+                        color = if (isSelected) HudColors.green else HudColors.primaryText,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily,
+                        fontWeight = if (isSelected || isActive) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.width(92.dp)
+                    )
+                    Text(
+                        text = item.description,
+                        color = HudColors.primaryText.copy(alpha = 0.86f),
+                        fontSize = 10.sp,
+                        fontFamily = fontFamily,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = if (isSelected) "<" else " ",
+                        color = if (isSelected) HudColors.green else Color.Transparent,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily
+                    )
+                }
+            }
         }
     }
 }
@@ -1835,16 +1965,25 @@ private fun SlashCommandOverlay(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
+                            text = " ",
+                            color = HudColors.green,
+                            fontSize = 12.sp,
+                            fontFamily = fontFamily
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
                             text = item.command,
                             color = if (isSelected) HudColors.green else HudColors.primaryText,
                             fontSize = 12.sp,
                             fontFamily = fontFamily,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.width(82.dp)
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.width(92.dp)
                         )
                         Text(
                             text = item.description,
-                            color = HudColors.dimText,
+                            color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.86f),
                             fontSize = 10.sp,
                             fontFamily = fontFamily,
                             maxLines = 1,
@@ -1920,6 +2059,13 @@ private fun SlashParamOverlay(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
+                        text = " ",
+                        color = HudColors.green,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
                         text = item.label,
                         color = if (isSelected) HudColors.green else HudColors.primaryText,
                         fontSize = 12.sp,
@@ -1927,11 +2073,11 @@ private fun SlashParamOverlay(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.width(82.dp)
+                        modifier = Modifier.width(92.dp)
                     )
                     Text(
                         text = item.description,
-                        color = HudColors.dimText,
+                        color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.86f),
                         fontSize = 10.sp,
                         fontFamily = fontFamily,
                         maxLines = 1,

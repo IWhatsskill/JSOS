@@ -34,6 +34,8 @@ import com.jsos.glasses.ui.HudScreen
 import com.jsos.glasses.ui.InputActionItem
 import com.jsos.glasses.ui.MenuBarItem
 import com.jsos.glasses.ui.MoreMenuItem
+import com.jsos.glasses.ui.MoreSubMenuOption
+import com.jsos.glasses.ui.MoreSubMenuType
 import com.jsos.glasses.ui.SessionPickerInfo
 import com.jsos.glasses.ui.MAX_PHOTOS
 import com.jsos.glasses.ui.SLASH_COMMANDS
@@ -41,6 +43,7 @@ import com.jsos.glasses.ui.SlashParamMenuType
 import com.jsos.glasses.ui.VoiceInputState
 import com.jsos.glasses.ui.RecognitionMode
 import com.jsos.glasses.ui.VoiceSendMode
+import com.jsos.glasses.ui.moreSubMenuOptions
 import com.jsos.glasses.ui.slashParamOptions
 import com.jsos.glasses.ui.theme.GlassesHudTheme
 import com.jsos.glasses.voice.GlassesVoiceHandler
@@ -444,6 +447,10 @@ class HudActivity : ComponentActivity() {
             handleSlashMenuGesture(gesture)
             return
         }
+        if (current.showMoreSubMenu) {
+            handleMoreSubMenuGesture(gesture)
+            return
+        }
         if (current.showMoreMenu) {
             handleMoreMenuGesture(gesture)
             return
@@ -712,10 +719,19 @@ class HudActivity : ComponentActivity() {
                     scrollTrigger = current.scrollTrigger + 1
                 )
             }
+            MenuBarItem.SLASH -> {
+                hudState.value = current.copy(
+                    showSlashMenu = true,
+                    selectedSlashIndex = 0
+                )
+            }
             MenuBarItem.MORE -> {
                 hudState.value = current.copy(
                     showMoreMenu = true,
-                    selectedMoreIndex = 0
+                    selectedMoreIndex = 0,
+                    showMoreSubMenu = false,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = null
                 )
             }
         }
@@ -850,14 +866,6 @@ class HudActivity : ComponentActivity() {
     private fun executeMoreMenuItem(item: MoreMenuItem) {
         val current = hudState.value
 
-        if (item.displaySize != null) {
-            hudState.value = current.copy(
-                displaySize = item.displaySize,
-                scrollTrigger = current.scrollTrigger + 1
-            )
-            return
-        }
-
         when (item) {
             MoreMenuItem.VOICE_SEND -> {
                 val newMode = when (current.voiceSendMode) {
@@ -867,27 +875,21 @@ class HudActivity : ComponentActivity() {
                 hudState.value = current.copy(voiceSendMode = newMode)
                 Log.d(GlassesApp.TAG, "Voice send mode: $newMode")
             }
-            MoreMenuItem.SLASH -> {
+            MoreMenuItem.AR_TOOLS -> {
                 hudState.value = current.copy(
                     showMoreMenu = false,
-                    showSlashMenu = true,
-                    selectedSlashIndex = 0
+                    showMoreSubMenu = true,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = MoreSubMenuType.AR
                 )
             }
-            MoreMenuItem.AR_PICTURE -> {
-                runRokidArCommand("picture") {
-                    RokidArCommands.startArScreenshot(this)
-                }
-            }
-            MoreMenuItem.AR_RECORD -> {
-                runRokidArCommand("record_start") {
-                    RokidArCommands.startArRecord(this)
-                }
-            }
-            MoreMenuItem.AR_STOP -> {
-                runRokidArCommand("record_stop") {
-                    RokidArCommands.stopArRecord(this)
-                }
+            MoreMenuItem.DISPLAY -> {
+                hudState.value = current.copy(
+                    showMoreMenu = false,
+                    showMoreSubMenu = true,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = MoreSubMenuType.DISPLAY
+                )
             }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
@@ -901,6 +903,73 @@ class HudActivity : ComponentActivity() {
                 Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
             }
             else -> {}
+        }
+    }
+
+    private fun handleMoreSubMenuGesture(gesture: Gesture) {
+        val current = hudState.value
+        val menuType = current.moreSubMenuType ?: MoreSubMenuType.DISPLAY
+        val options = moreSubMenuOptions(menuType)
+        if (options.isEmpty()) {
+            hudState.value = current.copy(
+                showMoreSubMenu = false,
+                selectedMoreSubIndex = 0,
+                moreSubMenuType = null
+            )
+            return
+        }
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = if (current.selectedMoreSubIndex > 0) current.selectedMoreSubIndex - 1 else options.size - 1
+                hudState.value = current.copy(selectedMoreSubIndex = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = if (current.selectedMoreSubIndex < options.size - 1) current.selectedMoreSubIndex + 1 else 0
+                hudState.value = current.copy(selectedMoreSubIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                val option = options[current.selectedMoreSubIndex.coerceIn(options.indices)]
+                hudState.value = current.copy(
+                    showMoreSubMenu = false,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = null
+                )
+                executeMoreSubMenuOption(option)
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(
+                    showMoreSubMenu = false,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = null,
+                    showMoreMenu = true
+                )
+            }
+            Gesture.LONG_PRESS -> {}
+        }
+    }
+
+    private fun executeMoreSubMenuOption(option: MoreSubMenuOption) {
+        val current = hudState.value
+
+        option.displaySize?.let { displaySize ->
+            hudState.value = current.copy(
+                displaySize = displaySize,
+                scrollTrigger = current.scrollTrigger + 1
+            )
+            return
+        }
+
+        when (option.arAction) {
+            "picture" -> runRokidArCommand("picture") {
+                RokidArCommands.startArScreenshot(this)
+            }
+            "record_start" -> runRokidArCommand("record_start") {
+                RokidArCommands.startArRecord(this)
+            }
+            "record_stop" -> runRokidArCommand("record_stop") {
+                RokidArCommands.stopArRecord(this)
+            }
         }
     }
 

@@ -54,7 +54,7 @@ Main JSOS changes include:
 - Reading-first HUD behavior where the bottom menu stays hidden while content is being read and appears only when the user navigates to actions.
 - HUD chat behavior focused on JSOS/assistant output, while user input remains available in JSOS Core and session history.
 - Suppression of unwanted Rokid AI auto-message overlays while JSOS HUD handles the interaction.
-- Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines and no filled selection backgrounds.
+- Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines, no filled selection backgrounds, direct bottom-bar slash command access, and grouped `AR TOOLS` / `DISPLAY` submenus.
 - Staged voice input on the glasses with `Send Ask` and `Send Auto` modes.
 - Session picker presentation updates, current-session markers, unread indicators, and session/chat forwarding behavior.
 - OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
@@ -277,13 +277,13 @@ JSOS HUD is responsible for:
 - HUD chat focus on JSOS/assistant output, while user input remains available in JSOS Core and session history.
 - Suppression of unwanted Rokid AI auto-message overlays where JSOS HUD is handling the interaction.
 - Session picker UI.
-- OPTIONS and COMMANDS overlays.
+- OPTIONS, COMMANDS, SESSIONS, AR TOOLS, and DISPLAY overlays.
 - Top-bar voice state display, including wave/live status for active voice modes.
 - Reading-first behavior where the bottom menu stays hidden while content is being read and appears only when needed.
 - Staged voice input.
 - `Send Ask` and `Send Auto` modes.
 - Camera request flow and photo thumbnail staging.
-- Rokid AR Picture and AR Record scene triggers from the OPTIONS panel.
+- Rokid AR Picture and AR Record scene triggers from the HUD AR TOOLS submenu.
 - Wake acknowledgments and TTS toggle messages back to the phone.
 
 ## Usage
@@ -316,15 +316,23 @@ Current limitation: Core Agent Wake uses the phone-side voice path. The glasses 
 | Photo | Request a glasses photo capture through JSOS Core. Up to four staged photos can be attached. |
 | Sess | Open the session picker and session state display. |
 | Size | Cycle the HUD display mode between Full, Bottom, and Mid. |
-| More | Open the OPTIONS panel for send mode, font size, slash commands, AR picture/record, and voice response toggling. |
+| / | Open the COMMANDS panel directly. |
+| More | Open the OPTIONS panel for send mode, AR tools, display/font settings, and TTS toggling. |
 
 The HUD has separate focus areas for content, staged input/photos, and the bottom menu. This keeps reading, staging, and command actions usable on the limited glasses touchpad surface.
+
+The bottom HUD menu is `CAM | SESS | SIZE | / | MORE`. `MORE` opens a compact OPTIONS panel:
+
+- `SEND ASK` / `SEND AUTO` toggles staged versus automatic voice-send behavior.
+- `AR TOOLS` opens `AR PIC`, `AR REC`, and `AR STOP`.
+- `DISPLAY` opens `COMPACT`, `NORMAL`, `COMFORT`, and `LARGE` font presets.
+- `TTS ON` / `TTS OFF` toggles response voice state.
 
 ### Camera
 
 The HUD can request a camera capture through JSOS Core. Captured photos are staged as thumbnails on the glasses and attached to the next input sent to OpenClaw. JSOS limits staged photos to four.
 
-JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene commands from the OPTIONS panel:
+JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene commands from the `AR TOOLS` submenu:
 
 - `AR PIC` asks the Rokid system to capture an AR picture of the glasses view.
 - `AR REC` asks the Rokid system to start an AR mixed recording.
