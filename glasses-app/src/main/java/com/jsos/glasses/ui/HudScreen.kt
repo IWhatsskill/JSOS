@@ -226,6 +226,9 @@ data class ChatHudState(
     // Slash command menu
     val showSlashMenu: Boolean = false,
     val selectedSlashIndex: Int = 0,
+    val showSlashParamMenu: Boolean = false,
+    val selectedSlashParamIndex: Int = 0,
+    val slashParamMenuType: SlashParamMenuType? = null,
     // Input staging area (voice text accumulation)
     val stagingText: String = "",
     val showInputStaging: Boolean = false,
@@ -259,6 +262,17 @@ data class ChatHudState(
  */
 data class SlashCommandItem(val command: String, val description: String)
 
+enum class SlashParamMenuType(val title: String) {
+    MODEL("MODELS"),
+    THINK("THINK")
+}
+
+data class SlashParamOption(
+    val label: String,
+    val command: String,
+    val description: String
+)
+
 /**
  * Available slash commands from the OpenClaw Gateway.
  * Keep this list aligned with the OpenClaw slash command reference.
@@ -281,6 +295,32 @@ val SLASH_COMMANDS = listOf(
     SlashCommandItem("/exec", "Exec settings"),
     SlashCommandItem("/subagents", "Sub-agents"),
 )
+
+val MODEL_PARAM_OPTIONS = listOf(
+    SlashParamOption("ALL", "/models", "List all models"),
+    SlashParamOption("OPENAI", "/models openai", "List OpenAI models"),
+    SlashParamOption("OLLAMA", "/models ollama", "List Ollama models"),
+    SlashParamOption("CURRENT", "/model", "Show current model"),
+    SlashParamOption("GPT-5.5", "/model openai/gpt-5.5", "Switch to OpenAI GPT-5.5"),
+    SlashParamOption("QWEN397B", "/model ollama/qwen3.5:397b-cloud", "Switch to Qwen 397B")
+)
+
+val THINK_PARAM_OPTIONS = listOf(
+    SlashParamOption("OFF", "/think off", "Disable thinking"),
+    SlashParamOption("MIN", "/think minimal", "Minimal thinking"),
+    SlashParamOption("LOW", "/think low", "Low thinking"),
+    SlashParamOption("MED", "/think medium", "Medium thinking"),
+    SlashParamOption("HIGH", "/think high", "High thinking"),
+    SlashParamOption("XHIGH", "/think xhigh", "Extra high"),
+    SlashParamOption("AUTO", "/think adaptive", "Adaptive thinking"),
+    SlashParamOption("MAX", "/think max", "Maximum thinking"),
+    SlashParamOption("ON", "/think on", "Provider default")
+)
+
+fun slashParamOptions(type: SlashParamMenuType): List<SlashParamOption> = when (type) {
+    SlashParamMenuType.MODEL -> MODEL_PARAM_OPTIONS
+    SlashParamMenuType.THINK -> THINK_PARAM_OPTIONS
+}
 
 // ============================================================================
 // MAIN HUD SCREEN
@@ -562,6 +602,19 @@ fun HudScreen(
         ) {
             SlashCommandOverlay(
                 selectedIndex = state.selectedSlashIndex,
+                fontFamily = monoFontFamily
+            )
+        }
+
+        // Slash command parameter overlay
+        AnimatedVisibility(
+            visible = state.showSlashParamMenu,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            SlashParamOverlay(
+                menuType = state.slashParamMenuType,
+                selectedIndex = state.selectedSlashParamIndex,
                 fontFamily = monoFontFamily
             )
         }
@@ -1806,6 +1859,93 @@ private fun SlashCommandOverlay(
                         )
                     }
                 }
+        }
+    }
+}
+
+// ============================================================================
+// SLASH PARAMETER OVERLAY
+// ============================================================================
+
+@Composable
+private fun SlashParamOverlay(
+    menuType: SlashParamMenuType?,
+    selectedIndex: Int,
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    val type = menuType ?: SlashParamMenuType.MODEL
+    val options = slashParamOptions(type)
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(type, selectedIndex) {
+        if (options.isNotEmpty()) {
+            listState.animateScrollToItem(selectedIndex.coerceIn(options.indices))
+        }
+    }
+
+    HudOverlayPanel(
+        title = type.title,
+        fontFamily = fontFamily,
+        modifier = modifier,
+        footerText = "SWIPE SELECT  TAP SEND  2XTAP BACK"
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            itemsIndexed(options) { index, item ->
+                val isSelected = index == selectedIndex
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .border(
+                            width = if (isSelected) 1.dp else 0.dp,
+                            color = if (isSelected) HudColors.green else Color.Transparent,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isSelected) ">" else " ",
+                        color = HudColors.green,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = item.label,
+                        color = if (isSelected) HudColors.green else HudColors.primaryText,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.width(82.dp)
+                    )
+                    Text(
+                        text = item.description,
+                        color = HudColors.dimText,
+                        fontSize = 10.sp,
+                        fontFamily = fontFamily,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = if (isSelected) "<" else " ",
+                        color = if (isSelected) HudColors.green else Color.Transparent,
+                        fontSize = 12.sp,
+                        fontFamily = fontFamily
+                    )
+                }
+            }
         }
     }
 }

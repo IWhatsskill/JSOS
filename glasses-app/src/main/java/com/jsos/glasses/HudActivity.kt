@@ -37,9 +37,11 @@ import com.jsos.glasses.ui.MoreMenuItem
 import com.jsos.glasses.ui.SessionPickerInfo
 import com.jsos.glasses.ui.MAX_PHOTOS
 import com.jsos.glasses.ui.SLASH_COMMANDS
+import com.jsos.glasses.ui.SlashParamMenuType
 import com.jsos.glasses.ui.VoiceInputState
 import com.jsos.glasses.ui.RecognitionMode
 import com.jsos.glasses.ui.VoiceSendMode
+import com.jsos.glasses.ui.slashParamOptions
 import com.jsos.glasses.ui.theme.GlassesHudTheme
 import com.jsos.glasses.voice.GlassesVoiceHandler
 import com.jsos.shared.sessionDisplaySortKey
@@ -432,6 +434,10 @@ class HudActivity : ComponentActivity() {
         // If overlays are open, handle gestures for them
         if (current.showExitConfirm) {
             handleExitConfirmGesture(gesture)
+            return
+        }
+        if (current.showSlashParamMenu) {
+            handleSlashParamMenuGesture(gesture)
             return
         }
         if (current.showSlashMenu) {
@@ -930,17 +936,31 @@ class HudActivity : ComponentActivity() {
             }
             Gesture.TAP -> {
                 val item = commands[current.selectedSlashIndex]
-                // Send slash command to phone
-                val json = JSONObject().apply {
-                    put("type", "slash_command")
-                    put("command", item.command)
+                when (item.command) {
+                    "/model" -> {
+                        hudState.value = current.copy(
+                            showSlashMenu = false,
+                            showSlashParamMenu = true,
+                            selectedSlashParamIndex = 0,
+                            slashParamMenuType = SlashParamMenuType.MODEL
+                        )
+                    }
+                    "/think" -> {
+                        hudState.value = current.copy(
+                            showSlashMenu = false,
+                            showSlashParamMenu = true,
+                            selectedSlashParamIndex = 0,
+                            slashParamMenuType = SlashParamMenuType.THINK
+                        )
+                    }
+                    else -> {
+                        sendSlashCommandToPhone(item.command)
+                        hudState.value = current.copy(
+                            showSlashMenu = false,
+                            selectedSlashIndex = 0
+                        )
+                    }
                 }
-                phoneConnection.sendToPhone(json.toString())
-                hudState.value = current.copy(
-                    showSlashMenu = false,
-                    selectedSlashIndex = 0
-                )
-                Log.d(GlassesApp.TAG, "Slash command: ${item.command}")
             }
             Gesture.DOUBLE_TAP -> {
                 hudState.value = current.copy(
@@ -950,6 +970,58 @@ class HudActivity : ComponentActivity() {
             }
             Gesture.LONG_PRESS -> {}
         }
+    }
+
+    private fun handleSlashParamMenuGesture(gesture: Gesture) {
+        val current = hudState.value
+        val menuType = current.slashParamMenuType ?: SlashParamMenuType.MODEL
+        val options = slashParamOptions(menuType)
+        if (options.isEmpty()) {
+            hudState.value = current.copy(
+                showSlashParamMenu = false,
+                selectedSlashParamIndex = 0,
+                slashParamMenuType = null
+            )
+            return
+        }
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = maxOf(0, current.selectedSlashParamIndex - 1)
+                hudState.value = current.copy(selectedSlashParamIndex = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = minOf(options.size - 1, current.selectedSlashParamIndex + 1)
+                hudState.value = current.copy(selectedSlashParamIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                val option = options[current.selectedSlashParamIndex.coerceIn(options.indices)]
+                sendSlashCommandToPhone(option.command)
+                hudState.value = current.copy(
+                    showSlashParamMenu = false,
+                    selectedSlashParamIndex = 0,
+                    slashParamMenuType = null
+                )
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(
+                    showSlashParamMenu = false,
+                    selectedSlashParamIndex = 0,
+                    slashParamMenuType = null,
+                    showSlashMenu = true
+                )
+            }
+            Gesture.LONG_PRESS -> {}
+        }
+    }
+
+    private fun sendSlashCommandToPhone(command: String) {
+        val json = JSONObject().apply {
+            put("type", "slash_command")
+            put("command", command)
+        }
+        phoneConnection.sendToPhone(json.toString())
+        Log.d(GlassesApp.TAG, "Slash command: $command")
     }
 
     // ============== Scroll Helpers ==============
