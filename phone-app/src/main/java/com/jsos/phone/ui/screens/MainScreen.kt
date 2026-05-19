@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jsos.phone.R
 import com.jsos.phone.audio.LiveTalkAudioRouteManager
+import com.jsos.phone.codex.CodexCliBridgeClient
 import com.jsos.phone.glasses.GlassesConnectionManager
 import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.glasses.WakeSignalManager
@@ -166,6 +167,7 @@ fun MainScreen() {
     val elevenLabsClient = remember { ElevenLabsClient() }
     val ttsPlaybackManager = remember { TtsPlaybackManager(context, elevenLabsClient, ttsSettingsManager) }
     val liveTalkAudioRouteManager = remember { LiveTalkAudioRouteManager(context) }
+    val codexCliBridgeClient = remember { CodexCliBridgeClient() }
 
     // State
     val glassesState by glassesManager.connectionState.collectAsState()
@@ -259,6 +261,7 @@ fun MainScreen() {
         if (mode == GlassesVoiceButtonMode.Command && liveTalkManager.isActive) {
             liveTalkManager.stop()
             liveTalkAudioRouteManager.clear()
+            codexCliBridgeClient.disconnect()
             liveTalkSource = null
         }
         glassesVoiceButtonMode = mode
@@ -303,6 +306,26 @@ fun MainScreen() {
         }
     }
 
+    // Codex CLI bridge callbacks for the experimental HUD terminal mode.
+    LaunchedEffect(openClawHost) {
+        codexCliBridgeClient.onStatus = { state, detail ->
+            val statusMsg = org.json.JSONObject().apply {
+                put("type", "cli_status")
+                put("state", state.name.lowercase())
+                put("detail", detail ?: "")
+                put("url", codexCliBridgeUrl(openClawHost))
+            }
+            glassesManager.sendRawMessage(statusMsg.toString())
+        }
+        codexCliBridgeClient.onOutput = { output, append ->
+            val outputMsg = org.json.JSONObject().apply {
+                put("type", "cli_output")
+                put("text", output)
+                put("append", append)
+            }
+            glassesManager.sendRawMessage(outputMsg.toString())
+        }
+    }
     // Sync TTS state to glasses when settings change
     LaunchedEffect(ttsEnabled, ttsVoiceName) {
         if (glassesState is GlassesConnectionManager.ConnectionState.Connected) {
@@ -316,13 +339,13 @@ fun MainScreen() {
 
     // Start/stop foreground service based on glasses connection state,
     // and send current chat history when glasses connect.
-    // IMPORTANT: Don't stop the service during Reconnecting — killing the foreground
+    // IMPORTANT: Don't stop the service during Reconnecting - killing the foreground
     // service drops the wake lock and lets Android kill the Bluetooth connection,
     // making reconnection impossible. Only stop on true Disconnected (not reconnecting).
     LaunchedEffect(glassesState) {
         when (glassesState) {
             is GlassesConnectionManager.ConnectionState.Connected -> {
-                android.util.Log.i("MainScreen", "Glasses connected — starting foreground service")
+                android.util.Log.i("MainScreen", "Glasses connected - starting foreground service")
                 com.jsos.phone.service.GlassesConnectionService.start(context)
                 // Send current chat history to glasses if we have any
                 val currentMessages = openClawClient.chatMessages.value
@@ -341,15 +364,15 @@ fun MainScreen() {
                 // Only stop the service if we're truly disconnected (no saved pairing to reconnect to).
                 // If we have a pairing, the service keeps BT alive for auto-reconnect.
                 if (!RokidSdkManager.hasSavedConnectionInfo()) {
-                    android.util.Log.i("MainScreen", "Glasses disconnected (no pairing) — stopping foreground service")
+                    android.util.Log.i("MainScreen", "Glasses disconnected (no pairing) - stopping foreground service")
                     com.jsos.phone.service.GlassesConnectionService.stop(context)
                 } else {
-                    android.util.Log.i("MainScreen", "Glasses disconnected but paired — keeping foreground service for reconnect")
+                    android.util.Log.i("MainScreen", "Glasses disconnected but paired - keeping foreground service for reconnect")
                 }
             }
             is GlassesConnectionManager.ConnectionState.Reconnecting -> {
                 // Keep foreground service alive during reconnection attempts
-                android.util.Log.i("MainScreen", "Glasses reconnecting — keeping foreground service")
+                android.util.Log.i("MainScreen", "Glasses reconnecting - keeping foreground service")
                 com.jsos.phone.service.GlassesConnectionService.start(context)
             }
             else -> {}
@@ -357,7 +380,7 @@ fun MainScreen() {
     }
 
     // Auto-scroll to bottom when new messages arrive (but not during load-more).
-    // Detect prepend by checking if the first message ID changed — this is more
+    // Detect prepend by checking if the first message ID changed - this is more
     // reliable than checking phoneLoadingMore which may already be false by the
     // time this effect runs (both StateFlows update in the same coroutine frame).
     var previousFirstMsgId by remember { mutableStateOf<String?>(null) }
@@ -391,23 +414,23 @@ fun MainScreen() {
             glassesManager.sendRawMessage(msg.toJson(), isNewMessage = isNewMessage)
         }
         openClawClient.onChatHistory = { messages ->
-            // Full history reload (initial load or session switch) — reset glasses limit
+            // Full history reload (initial load or session switch) - reset glasses limit
             glassesMessageLimit = 20
             val json = buildChatHistoryJson(messages)
             android.util.Log.i("MainScreen", "Forwarding chat_history to glasses: ${messages.size} messages, ${json.length} chars")
             glassesManager.sendRawMessage(json)
         }
         openClawClient.onAgentThinking = { msg ->
-            // Agent is about to start streaming — notify wake manager
+            // Agent is about to start streaming - notify wake manager
             glassesManager.notifyStreamStart(msg.id)
             glassesManager.sendRawMessage(msg.toJson(), isStreamContent = true)
         }
         openClawClient.onChatStream = { msg ->
-            // Streaming content — mark as such for wake signal handling
+            // Streaming content - mark as such for wake signal handling
             glassesManager.sendRawMessage(msg.toJson(), isStreamContent = true)
         }
         openClawClient.onChatStreamEnd = { msg ->
-            // Streaming complete — notify wake manager
+            // Streaming complete - notify wake manager
             glassesManager.notifyStreamEnd(msg.id)
             glassesManager.sendRawMessage(msg.toJson())
             // Trigger TTS if enabled
@@ -553,6 +576,7 @@ fun MainScreen() {
         if (liveTalkManager.isActive) {
             liveTalkManager.stop()
             liveTalkAudioRouteManager.clear()
+            codexCliBridgeClient.disconnect()
             liveTalkSource = null
             sendVoiceState("idle")
         }
@@ -652,6 +676,7 @@ fun MainScreen() {
             is LiveTalkState.Speaking -> sendVoiceState("processing", text = "JSOS")
             is LiveTalkState.Error -> {
                 liveTalkAudioRouteManager.clear()
+                codexCliBridgeClient.disconnect()
                 liveTalkSource = null
                 sendVoiceError(state.message)
                 sendVoiceState("idle")
@@ -742,7 +767,7 @@ fun MainScreen() {
                                         put("text", result.text)
                                     }
                                     glassesManager.sendRawMessage(resultMsg.toString())
-                                    // Don't send to OpenClaw here — glasses stages the text
+                                    // Don't send to OpenClaw here - glasses stages the text
                                     // and sends user_input when user confirms via Send button
                                 }
                                 is VoiceCommandHandler.VoiceResult.Command -> {
@@ -801,6 +826,24 @@ fun MainScreen() {
                         if (command.isNotEmpty()) {
                             openClawClient.sendSlashCommand(command)
                         }
+                    }
+                    "cli_connect" -> {
+                        val bridgeUrl = codexCliBridgeUrl(openClawHost)
+                        android.util.Log.d("MainScreen", "Glasses requested Codex CLI bridge connect")
+                        codexCliBridgeClient.connect(bridgeUrl)
+                    }
+                    "cli_disconnect" -> {
+                        android.util.Log.d("MainScreen", "Glasses requested Codex CLI bridge disconnect")
+                        codexCliBridgeClient.disconnect()
+                    }
+                    "cli_input" -> {
+                        val text = json.optString("text", "")
+                        android.util.Log.d("MainScreen", "Codex CLI input from glasses (${text.length} chars)")
+                        codexCliBridgeClient.sendInput(text)
+                    }
+                    "cli_stop" -> {
+                        android.util.Log.d("MainScreen", "Glasses requested Codex CLI stop")
+                        codexCliBridgeClient.stop()
                     }
                     "request_state" -> {
                         android.util.Log.d("MainScreen", "Glasses requested current state")
@@ -882,12 +925,12 @@ fun MainScreen() {
                         android.util.Log.d("MainScreen", "Glasses requesting more history (glassesLimit=$glassesMessageLimit, phoneCache=${allMessages.size})")
 
                         if (glassesMessageLimit < allMessages.size) {
-                            // Phone has more cached messages — serve from cache
+                            // Phone has more cached messages - serve from cache
                             glassesMessageLimit = (glassesMessageLimit + 15).coerceAtMost(allMessages.size)
                             val chatJson = buildChatHistoryJson(allMessages, glassesMessageLimit, isLoadMore = true, hasMore = true)
                             glassesManager.sendRawMessage(chatJson)
                         } else {
-                            // Phone cache exhausted — fetch more from OpenClaw
+                            // Phone cache exhausted - fetch more from OpenClaw
                             openClawClient.loadMoreHistory()
                         }
                     }
@@ -903,6 +946,7 @@ fun MainScreen() {
         onDispose {
             liveTalkManager.stop()
             liveTalkAudioRouteManager.clear()
+            codexCliBridgeClient.cleanup()
             glassesManager.disconnect()
             openClawClient.cleanup()
             voiceHandler.cleanup()
@@ -1019,7 +1063,7 @@ fun MainScreen() {
                     textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
                 )
 
-                // Camera button — always takes a new photo, adds to pending list
+                // Camera button - always takes a new photo, adds to pending list
                 IconButton(
                     onClick = {
                         android.util.Log.d("MainScreen", "Taking photo from glasses camera")
@@ -1347,7 +1391,7 @@ private fun MatrixRainBackground(modifier: Modifier = Modifier) {
         label = "matrix_phase",
     )
     val glyphs = remember {
-        "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<>[]{}+=-"
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<>[]{}+=-"
     }
 
     Canvas(modifier = modifier) {
@@ -3276,7 +3320,7 @@ private fun startVoiceRecognitionWithManager(
     }
     glassesManager.sendRawMessage(stateMsg.toString())
 
-    // Keep the SDK AI scene alive — it times out if no ASR content is sent.
+    // Keep the SDK AI scene alive - it times out if no ASR content is sent.
     // With OpenAI Realtime, there are no partials during active speech (only after VAD pause),
     // so the AI scene would close before any transcription arrives. Sending initial content
     // resets the timeout. Real partial results replace this via onPartialResult.
@@ -3304,7 +3348,7 @@ private fun startVoiceRecognitionWithManager(
                     android.util.Log.i("MainScreen", "Voice text received ($actualMode, ${result.text.length} chars)")
                     RokidSdkManager.sendAsrContent(result.text)
                     RokidSdkManager.notifyAsrEnd()
-                    // Don't send to OpenClaw here — glasses stages the text
+                    // Don't send to OpenClaw here - glasses stages the text
                     // and sends user_input when user confirms via Send button
                     val resultMsg = org.json.JSONObject().apply {
                         put("type", "voice_result")
@@ -3386,7 +3430,7 @@ private fun startVoiceRecognition(
                     android.util.Log.i("MainScreen", "AI voice text received (${result.text.length} chars)")
                     RokidSdkManager.sendAsrContent(result.text)
                     RokidSdkManager.notifyAsrEnd()
-                    // Don't send to OpenClaw here — glasses stages the text
+                    // Don't send to OpenClaw here - glasses stages the text
                     // and sends user_input when user confirms via Send button
                     val resultMsg = org.json.JSONObject().apply {
                         put("type", "voice_result")
@@ -3506,4 +3550,17 @@ private fun createThumbnailBase64(imageBytes: ByteArray, maxWidth: Int, maxHeigh
     grayscale.compress(android.graphics.Bitmap.CompressFormat.WEBP, 60, stream)
     grayscale.recycle()
     return android.util.Base64.encodeToString(stream.toByteArray(), android.util.Base64.NO_WRAP)
+}
+
+private fun codexCliBridgeUrl(openClawHost: String): String {
+    val trimmed = openClawHost.trim().ifEmpty { "10.0.2.2" }
+    val hasSecureScheme = trimmed.startsWith("wss://", ignoreCase = true)
+    val withoutScheme = trimmed
+        .removePrefix("ws://")
+        .removePrefix("wss://")
+        .removePrefix("http://")
+        .removePrefix("https://")
+    val hostOnly = withoutScheme.substringBefore('/').substringBefore(':').ifEmpty { "10.0.2.2" }
+    val scheme = if (hasSecureScheme) "wss" else "ws"
+    return "$scheme://$hostOnly:18890/codex-cli"
 }

@@ -122,6 +122,8 @@ enum class MoreMenuItem(val icon: String, val label: String) {
     VOICE_SEND("SEND", "Send Mode"),
     AR_TOOLS("AR", "AR Tools"),
     DISPLAY("DISP", "Display"),
+    CODI_CLI("CODI", "Codi CLI"),
+    CODI_CLEAR("CLR", "Codi Clear"),
     VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
 }
 
@@ -192,7 +194,7 @@ private fun formatRelativeTime(timestampMs: Long): String {
 }
 
 /**
- * Chat HUD state — replaces the old TerminalState
+ * Chat HUD state - replaces the old TerminalState
  */
 data class ChatHudState(
     val messages: List<DisplayMessage> = emptyList(),
@@ -248,7 +250,13 @@ data class ChatHudState(
     // Voice input send mode
     val voiceSendMode: VoiceSendMode = VoiceSendMode.ASK,
     // TTS state (voice responses)
-    val ttsEnabled: Boolean = false
+    val ttsEnabled: Boolean = false,
+    // Experimental Codex CLI terminal overlay
+    val showCliTerminal: Boolean = false,
+    val cliStatus: String = "OFFLINE",
+    val cliDetail: String = "",
+    val cliLines: List<String> = emptyList(),
+    val cliScrollPosition: Int = 0
 ) {
     /** Total number of messages */
     val totalMessages: Int get() = messages.size
@@ -358,17 +366,10 @@ fun moreSubMenuOptions(type: MoreSubMenuType): List<MoreSubMenuOption> = when (t
  * Chat-oriented HUD display for Rokid Glasses with OpenClaw backend.
  *
  * Layout:
- * ┌─[TopBar]──────────────────────────────────┐
- * │ ● connected                    12/42 lines │
- * ├────────────────────────────────────────────┤
- * │ Assistant message (left-aligned, green)     │
- * │         User message (right, light bg) │
- * │ Assistant streaming...█                     │
- * ├───[Input]──────────────────────────────────┤
- * │ > current input text...                     │
- * ├───[Menu Bar]───────────────────────────────┤
- * │ ↵Enter ⌫Clear ◎Sess ⬚Size AaFont …More    │
- * └────────────────────────────────────────────┘
+ * [TopBar]
+ * Assistant and session content
+ * [Input / staged photos]
+ * [Bottom menu]
  */
 @Composable
 fun HudScreen(
@@ -427,7 +428,7 @@ fun HudScreen(
             } else if (targetIndex == totalItems - 1) {
                 // Scrolling to last item: use a large offset so the bottom of the
                 // item aligns with the viewport bottom (Compose clamps internally).
-                // During streaming, use instant scroll — animated scroll gets
+                // During streaming, use instant scroll - animated scroll gets
                 // cancelled and restarted on every chunk, causing visible flicker.
                 val isStreaming = visibleMessages.lastOrNull()?.value?.isStreaming == true
                 if (isStreaming) {
@@ -479,7 +480,7 @@ fun HudScreen(
                 )
             }
     ) {
-        // Calculate font size to fit content width — varies with displaySize
+        // Calculate font size to fit content width - varies with displaySize
         val targetColumns = when (state.displaySize) {
             HudDisplaySize.COMPACT -> 70
             HudDisplaySize.NORMAL -> 60
@@ -536,7 +537,7 @@ fun HudScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // CONTENT AREA — chat messages
+                // CONTENT AREA - chat messages
                 ChatContentArea(
                     messages = state.messages,
                     agentState = state.agentState,
@@ -661,6 +662,21 @@ fun HudScreen(
             )
         }
 
+        // Experimental Codex CLI terminal overlay
+        AnimatedVisibility(
+            visible = state.showCliTerminal,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            CliTerminalOverlay(
+                lines = state.cliLines,
+                status = state.cliStatus,
+                detail = state.cliDetail,
+                scrollPosition = state.cliScrollPosition,
+                voiceSendMode = state.voiceSendMode,
+                fontFamily = monoFontFamily
+            )
+        }
         // Exit confirmation overlay
         AnimatedVisibility(
             visible = state.showExitConfirm,
@@ -1242,7 +1258,7 @@ private fun MiniWaveform(
  * Combined input staging area.
  *
  * Layout (single line below text):
- *   [Photo1] [Photo2] ... [Photo4]  ←spacer→  [Clear] [Send]
+ *   [Photo1] [Photo2] ... [Photo4]  spacer ->  [Clear] [Send]
  *
  * Clear and Send buttons are only shown when there is staged input (text or photos).
  *
@@ -1342,7 +1358,7 @@ private fun InputStagingArea(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Photo thumbnails — left-aligned
+            // Photo thumbnails - left-aligned
             photos.forEachIndexed { index, bitmap ->
                 val isSelected = index == selectedIndex && isFocused
                 Box(modifier = Modifier.padding(end = 4.dp)) {
@@ -1475,7 +1491,7 @@ private fun ChatMenuBar(
     alpha: Float,
     modifier: Modifier = Modifier
 ) {
-    val commandFontSize = 8.sp  // Fixed size — FONT only affects content
+    val commandFontSize = 8.sp  // Fixed size - FONT only affects content
     val items = MenuBarItem.entries
     val scrollState = rememberScrollState()
 
@@ -1546,7 +1562,7 @@ private fun ChatMenuBar(
         // Battery indicator (bottom-right, only shown when available)
         if (batteryLevel != null) {
             Text(
-                text = "${if (batteryCharging) "\u26A1" else "\uD83D\uDD0B"}${batteryLevel}%",  // ⚡ or 🔋
+                text = "${if (batteryCharging) "\u26A1" else "\uD83D\uDD0B"}${batteryLevel}%",  // charging or battery
                 color = if (batteryLevel <= 15) HudColors.error else HudColors.primaryText.copy(alpha = 0.86f),
                 fontSize = commandFontSize,
                 fontFamily = fontFamily,
@@ -1764,6 +1780,8 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "SEND AUTO" else "SEND ASK"
                         MoreMenuItem.AR_TOOLS -> "AR TOOLS"
                         MoreMenuItem.DISPLAY -> "DISPLAY"
+                        MoreMenuItem.CODI_CLI -> "CODI CLI"
+                        MoreMenuItem.CODI_CLEAR -> "CODI CLEAR"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
                     }
                     val activeMark = if (isActive) "*" else " "
@@ -2096,6 +2114,92 @@ private fun SlashParamOverlay(
     }
 }
 
+// ============================================================================
+// CODEX CLI TERMINAL OVERLAY
+// ============================================================================
+
+@Composable
+private fun CliTerminalOverlay(
+    lines: List<String>,
+    status: String,
+    detail: String,
+    scrollPosition: Int,
+    voiceSendMode: VoiceSendMode,
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+    val visibleLines = if (lines.isEmpty()) listOf("Waiting for Codex CLI bridge...") else lines
+
+    LaunchedEffect(visibleLines.size, scrollPosition) {
+        val target = scrollPosition.coerceIn(visibleLines.indices)
+        listState.animateScrollToItem(target)
+    }
+
+    HudOverlayPanel(
+        title = "CODI CLI",
+        fontFamily = fontFamily,
+        modifier = modifier,
+        horizontalPadding = 10.dp,
+        verticalPadding = 14.dp,
+        footerText = if (voiceSendMode == VoiceSendMode.AUTO) {
+            "SWIPE SCROLL  LONG VOICE  AUTO SEND  2XTAP HIDE"
+        } else {
+            "SWIPE SCROLL  LONG VOICE  TAP SEND  2XTAP HIDE"
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(22.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "STATE $status",
+                color = when (status.uppercase()) {
+                    "CONNECTED" -> HudColors.green
+                    "CONNECTING" -> HudColors.yellow
+                    "ERROR" -> HudColors.error
+                    else -> HudColors.primaryText
+                },
+                fontSize = 10.sp,
+                fontFamily = fontFamily,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = detail.take(32),
+                color = HudColors.primaryText.copy(alpha = 0.86f),
+                fontSize = 9.sp,
+                fontFamily = fontFamily,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            itemsIndexed(visibleLines) { _, line ->
+                Text(
+                    text = line,
+                    color = if (line.startsWith("[error]", ignoreCase = true)) HudColors.error else HudColors.primaryText,
+                    fontSize = 10.sp,
+                    fontFamily = fontFamily,
+                    lineHeight = 12.sp,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
 // ============================================================================
 // EXIT CONFIRMATION OVERLAY
 // ============================================================================

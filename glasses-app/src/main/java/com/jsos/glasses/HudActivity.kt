@@ -74,6 +74,7 @@ class HudActivity : ComponentActivity() {
         private const val CHUNK_MESSAGE_TYPE = "chunk_part"
         private const val CHUNK_TIMEOUT_MS = 30_000L
         private const val ROKID_AR_COMMAND_COOLDOWN_MS = 1_200L
+        private const val MAX_CLI_LINES = 220
 
         /** Sentinel key for the "New Session" entry in the session picker. */
         const val NEW_SESSION_KEY = "__new_session__"
@@ -188,7 +189,7 @@ class HudActivity : ComponentActivity() {
                     else -> ""
                 }
                 // Use atomic update to avoid overwriting concurrent state changes
-                // Don't force staging area open — the SDK AI scene shows recognized text.
+                // Don't force staging area open - the SDK AI scene shows recognized text.
                 // Staging area opens when voice_result arrives (stageVoiceText).
                 // If staging is already open (from previous input), the cursor animation
                 // still shows via the Processing voice state in HudScreen.
@@ -459,6 +460,10 @@ class HudActivity : ComponentActivity() {
             handleSessionPickerGesture(gesture)
             return
         }
+        if (current.showCliTerminal) {
+            handleCliTerminalGesture(gesture)
+            return
+        }
 
         // If voice is active, TAP cancels
         if (isVoiceActive && gesture == Gesture.TAP) {
@@ -482,7 +487,7 @@ class HudActivity : ComponentActivity() {
                 val current = hudState.value
                 val maxScroll = maxOf(0, current.messages.size - 1)
                 if (current.scrollPosition >= maxScroll && current.isScrolledToEnd) {
-                    // Push through: CONTENT → INPUT (if staging or photos) → MENU
+                    // Push through: CONTENT -> INPUT (if staging or photos) -> MENU
                     if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
                         // Default focus on last visible item in combined row
                         val lastIndex = if (current.stagingText.isNotEmpty()) {
@@ -545,7 +550,7 @@ class HudActivity : ComponentActivity() {
         when (gesture) {
             Gesture.SWIPE_FORWARD -> {
                 if (current.inputActionIndex == 0) {
-                    // Push through: INPUT → CONTENT
+                    // Push through: INPUT -> CONTENT
                     hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
                 } else {
                     hudState.value = current.copy(inputActionIndex = current.inputActionIndex - 1)
@@ -553,7 +558,7 @@ class HudActivity : ComponentActivity() {
             }
             Gesture.SWIPE_BACKWARD -> {
                 if (current.inputActionIndex >= totalItems - 1) {
-                    // Push through: INPUT → MENU
+                    // Push through: INPUT -> MENU
                     hudState.value = current.copy(
                         focusedArea = ChatFocusArea.MENU,
                         menuBarIndex = 0
@@ -566,12 +571,12 @@ class HudActivity : ComponentActivity() {
                 val idx = current.inputActionIndex
                 when {
                     idx < photoCount -> {
-                        // Tap on photo — remove it
+                        // Tap on photo - remove it
                         val newThumbnails = current.photoThumbnails.toMutableList().apply { removeAt(idx) }
                         val newPhotoCount = newThumbnails.size
                         // After removal, keep focus on same position but clamp
                         val newIndex = if (newThumbnails.isEmpty() && !current.showInputStaging) {
-                            // No photos left and no staging text — go to MENU
+                            // No photos left and no staging text - go to MENU
                             hudState.value = current.copy(
                                 photoThumbnails = emptyList(),
                                 inputActionIndex = 0,
@@ -633,7 +638,7 @@ class HudActivity : ComponentActivity() {
         when (gesture) {
             Gesture.SWIPE_FORWARD -> {
                 if (current.menuBarIndex == 0) {
-                    // Push through: MENU → INPUT (if staging or photos) → CONTENT
+                    // Push through: MENU -> INPUT (if staging or photos) -> CONTENT
                     if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
                         // Focus on last visible item in combined row
                         val lastIndex = if (current.stagingText.isNotEmpty()) {
@@ -747,6 +752,27 @@ class HudActivity : ComponentActivity() {
         val thumbnails = current.photoThumbnails.toList()
         Log.d(GlassesApp.TAG, "submitInput: textLength=${text.length}, photos=${thumbnails.size}, focusArea=${current.focusedArea}")
 
+        if (current.showCliTerminal) {
+            val json = JSONObject().apply {
+                put("type", "cli_input")
+                put("text", text)
+            }
+            phoneConnection.sendToPhone(json.toString())
+            val commandLine = "> $text"
+            val updatedLines = (current.cliLines + commandLine).takeLast(MAX_CLI_LINES)
+            hudState.value = current.copy(
+                inputText = "",
+                focusedArea = ChatFocusArea.CONTENT,
+                showInputStaging = false,
+                stagingText = "",
+                inputActionIndex = 0,
+                voiceState = VoiceInputState.Idle,
+                voiceText = "",
+                cliLines = updatedLines,
+                cliScrollPosition = maxOf(0, updatedLines.size - 1)
+            )
+            return
+        }
         // Add user message to display immediately (optimistic update)
         val userMsg = DisplayMessage(
             id = "local-${System.currentTimeMillis()}",
@@ -891,6 +917,12 @@ class HudActivity : ComponentActivity() {
                     moreSubMenuType = MoreSubMenuType.DISPLAY
                 )
             }
+            MoreMenuItem.CODI_CLI -> {
+                openCliTerminal()
+            }
+            MoreMenuItem.CODI_CLEAR -> {
+                clearCliTerminal()
+            }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
                 val newEnabled = !current.ttsEnabled
@@ -906,6 +938,71 @@ class HudActivity : ComponentActivity() {
         }
     }
 
+    private fun clearCliTerminal() {
+        val current = hudState.value
+        val lines = listOf("CLI screen cleared.")
+        hudState.value = current.copy(
+            showCliTerminal = true,
+            showMoreMenu = false,
+            showMoreSubMenu = false,
+            cliDetail = "",
+            cliLines = lines,
+            cliScrollPosition = 0,
+            focusedArea = ChatFocusArea.CONTENT
+        )
+    }
+
+    private fun openCliTerminal() {
+        val current = hudState.value
+        val lines = if (current.cliLines.isEmpty()) {
+            listOf("JSOS Core will connect to the private Codex CLI bridge.")
+        } else {
+            current.cliLines
+        }
+        hudState.value = current.copy(
+            showCliTerminal = true,
+            showMoreMenu = false,
+            showMoreSubMenu = false,
+            cliStatus = "CONNECTING",
+            cliDetail = "",
+            cliLines = lines,
+            cliScrollPosition = maxOf(0, lines.size - 1),
+            focusedArea = ChatFocusArea.CONTENT
+        )
+        phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
+    }
+
+    private fun handleCliTerminalGesture(gesture: Gesture) {
+        val current = hudState.value
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = maxOf(0, current.cliScrollPosition - 5)
+                hudState.value = current.copy(cliScrollPosition = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = minOf(maxOf(0, current.cliLines.size - 1), current.cliScrollPosition + 5)
+                hudState.value = current.copy(cliScrollPosition = newIndex)
+            }
+            Gesture.TAP -> {
+                val staged = current.stagingText.trim()
+                val typed = current.inputText.trim()
+                val text = staged.ifEmpty { typed }
+                if (text.isNotEmpty()) {
+                    hudState.value = current.copy(inputText = text)
+                    submitInput()
+                }
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(
+                    showCliTerminal = false,
+                    showInputStaging = false,
+                    stagingText = "",
+                    inputActionIndex = 0
+                )
+            }
+            Gesture.LONG_PRESS -> startVoice()
+        }
+    }
     private fun handleMoreSubMenuGesture(gesture: Gesture) {
         val current = hudState.value
         val menuType = current.moreSubMenuType ?: MoreSubMenuType.DISPLAY
@@ -1142,7 +1239,7 @@ class HudActivity : ComponentActivity() {
         if (voiceHandler.isListening()) {
             voiceHandler.cancel()
         } else {
-            // Don't pass a result callback — voice_result messages from the phone
+            // Don't pass a result callback - voice_result messages from the phone
             // are handled directly in handlePhoneMessage to avoid the AI key path
             // issue where onResult is never set because startVoice() isn't called.
             voiceHandler.startListening { /* handled in handlePhoneMessage */ }
@@ -1237,7 +1334,7 @@ class HudActivity : ComponentActivity() {
                 }
             }
             else -> {
-                // Treat as text input — stage it
+                // Treat as text input - stage it
                 val text = command.trim()
                 if (text.isNotEmpty()) {
                     stageVoiceText(text)
@@ -1292,6 +1389,24 @@ class HudActivity : ComponentActivity() {
         phoneConnection.sendToPhone(json.toString())
     }
 
+    private fun appendCliOutput(text: String, replace: Boolean = false) {
+        val newLines = text
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .lines()
+            .filter { it.isNotBlank() }
+        if (newLines.isEmpty()) return
+
+        hudState.update { current ->
+            val base = if (replace) emptyList() else current.cliLines
+            val merged = (base + newLines).takeLast(MAX_CLI_LINES)
+            current.copy(
+                cliLines = merged,
+                cliScrollPosition = maxOf(0, merged.size - 1),
+                showCliTerminal = current.showCliTerminal
+            )
+        }
+    }
     // ============== Phone Message Handling ==============
 
     private fun handlePhoneMessage(json: String) {
@@ -1328,7 +1443,7 @@ class HudActivity : ComponentActivity() {
                             }
                             return
                         }
-                        // Phone-originated user message — grab photos from strip if any
+                        // Phone-originated user message - grab photos from strip if any
                         val thumbnails = current.photoThumbnails.toList()
                         val displayMsg = DisplayMessage(
                             id = id,
@@ -1403,7 +1518,7 @@ class HudActivity : ComponentActivity() {
                         val prependedCount = (messages.size - oldCount).coerceAtLeast(0)
 
                         if (prependedCount == 0) {
-                            // No new messages — beginning of conversation reached
+                            // No new messages - beginning of conversation reached
                             hudState.value = current.copy(
                                 messages = messages,
                                 isLoadingMoreHistory = false,
@@ -1428,14 +1543,14 @@ class HudActivity : ComponentActivity() {
                             Log.d(GlassesApp.TAG, "Load-more: prepended $prependedCount messages (total=${messages.size}, hasMore=$hasMore)")
                         }
                     } else {
-                        // Normal history load (initial or session switch) — scroll to bottom
+                        // Normal history load (initial or session switch) - scroll to bottom
                         hudState.value = current.copy(
                             messages = messages,
                             agentState = AgentState.IDLE,
                             scrollPosition = maxOf(0, messages.size - 1),
                             scrollTrigger = current.scrollTrigger + 1,
                             isLoadingMoreHistory = false,
-                            hasMoreHistory = true  // Reset — new session may have more
+                            hasMoreHistory = true  // Reset - new session may have more
                         )
                         Log.d(GlassesApp.TAG, "Loaded ${messages.size} history messages")
                     }
@@ -1488,7 +1603,7 @@ class HudActivity : ComponentActivity() {
                 }
 
                 "chat_stream_end" -> {
-                    // Streaming complete — unwrap soft line breaks now that full content is available
+                    // Streaming complete - unwrap soft line breaks now that full content is available
                     val id = msg.optString("id", "")
 
                     val current = hudState.value
@@ -1511,6 +1626,32 @@ class HudActivity : ComponentActivity() {
                     Log.d(GlassesApp.TAG, "Stream ended for $id")
                 }
 
+                "cli_status" -> {
+                    val state = msg.optString("state", "disconnected").uppercase(Locale.US)
+                    val detail = msg.optString("detail", "")
+                    hudState.update { current ->
+                        current.copy(
+                            cliStatus = state,
+                            cliDetail = detail,
+                            cliLines = if (current.cliLines.isEmpty()) listOf("Codex CLI bridge: $state") else current.cliLines,
+                            cliScrollPosition = maxOf(0, current.cliLines.size - 1)
+                        )
+                    }
+                }
+
+                "cli_output" -> {
+                    val text = msg.optString("text", "")
+                    val append = msg.optBoolean("append", true)
+                    appendCliOutput(text, replace = !append)
+                }
+
+                "cli_error" -> {
+                    val detail = msg.optString("message", "Codex CLI bridge error")
+                    hudState.update { current ->
+                        current.copy(cliStatus = "ERROR", cliDetail = detail)
+                    }
+                    appendCliOutput("[error] $detail")
+                }
                 "connection_update" -> {
                     val connected = msg.optBoolean("connected", false)
                     val sessionKey = msg.optString("sessionId", "")
@@ -1699,7 +1840,7 @@ class HudActivity : ComponentActivity() {
                 }
 
                 "wake_signal" -> {
-                    // Phone is sending a wake signal — display wake is handled by the
+                    // Phone is sending a wake signal - display wake is handled by the
                     // phone via CXR SDK (setGlassBrightness). Glasses side just shows
                     // the notification and sends ack.
                     val reason = msg.optString("reason", "")
@@ -1821,8 +1962,8 @@ class HudActivity : ComponentActivity() {
             if (i < lines.lastIndex) {
                 val next = lines[i + 1]
                 // Keep newline (don't join) when:
-                // - current line is blank → paragraph break
-                // - next line is blank → paragraph break
+                // - current line is blank -> paragraph break
+                // - next line is blank -> paragraph break
                 // - next line starts with markdown structure (list, heading, code fence, blockquote)
                 val keepNewline = line.isBlank() ||
                     next.isBlank() ||

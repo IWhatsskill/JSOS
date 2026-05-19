@@ -248,7 +248,7 @@ fun stableSessionDisplayName(
 
     if (keyRoute != null) {
         if (keyRoute.origin == "whatsapp") return "WhatsApp"
-        if (keyRoute.agentId == "main" && keyRoute.origin == "main") return "JARVIS"
+        if (keyRoute.agentId == "main" && keyRoute.origin == "main") return "Main"
 
         val routedLabel = keyAgentLabel ?: explicitDisplayName ?: explicitLabel ?: rawDiscordLabel ?: explicitDerivedTitle
         return when (keyRoute.origin) {
@@ -320,13 +320,13 @@ fun shouldShowInJsosSessionPicker(
 fun sessionDisplaySortKey(name: String): String {
     val trimmed = name.trim()
     val rank = when (trimmed.lowercase()) {
-        "jarvis" -> "00"
+        "main" -> "00"
         "whatsapp" -> "01"
-        "gideon" -> "02"
-        "chappi" -> "03"
-        "goku" -> "04"
-        "steel" -> "05"
-        "shelli" -> "06"
+        "gpt-5" -> "02"
+        "codex lab" -> "03"
+        "coding lab" -> "04"
+        "qwen" -> "05"
+        "cli lab" -> "06"
         "general" -> "07"
         else -> "90-${trimmed.lowercase()}"
     }
@@ -349,22 +349,22 @@ private fun parseAgentSessionKey(key: String): AgentSessionKey? {
 }
 
 private fun String.toJsosAgentLabel(): String = when (this) {
-    "main" -> "JARVIS"
-    "coding-lab" -> "Goku"
-    "codex-lab" -> "Chappi"
-    "codex-cli-lab" -> "Shelli"
+    "main" -> "Main"
+    "coding-lab" -> "Coding Lab"
+    "codex-lab" -> "Codex Lab"
+    "codex-cli-lab" -> "CLI Lab"
     "discord-general" -> "General"
-    "discord-gpt-5", "discord-gpt-5.5" -> "Gideon"
-    "discord-qwen-397b" -> "Steel"
+    "discord-gpt-5", "discord-gpt-5.5" -> "GPT-5"
+    "discord-qwen-397b" -> "Qwen"
     else -> toReadableAgentLabel()
 }
 
 private val visibleDiscordSessionNames = setOf(
-    "Gideon",
-    "Chappi",
-    "Goku",
-    "Steel",
-    "Shelli",
+    "GPT-5",
+    "Codex Lab",
+    "Coding Lab",
+    "Qwen",
+    "CLI Lab",
     "General"
 )
 
@@ -412,7 +412,7 @@ private fun String.toReadableAgentToken(): String {
         "general" -> "General"
         "gpt" -> "GPT"
         "hud" -> "HUD"
-        "jarvis" -> "JARVIS"
+        "jarvis" -> "Main"
         "jsos" -> "JSOS"
         "lab" -> "Lab"
         "qwen" -> "Qwen"

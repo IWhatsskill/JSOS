@@ -33,13 +33,13 @@ object AgentWakeRouter {
     )
 
     private val agents = listOf(
-        AgentAliases("JARVIS", listOf("jarvis", "chaivis", "javis", "javiz", "javez", "jarves", "javes", "cavis", "cavez", "tschavis", "chavez", "chavis", "chiz", "jar was", "service")),
+        AgentAliases("Main", listOf("main", "assistant", "primary")),
         AgentAliases("WhatsApp", listOf("whatsapp", "whatsepp", "whatsap", "whats app", "what's app")),
-        AgentAliases("Gideon", listOf("gideon", "gidon", "gidaon", "gidian", "gidean")),
-        AgentAliases("Chappi", listOf("chappi", "chappy", "charpi", "cheppi", "krappi", "crappy", "crapy", "crapi", "krapi", "tschappi", "chapi")),
-        AgentAliases("Goku", listOf("goku", "gorku", "gocu", "goko", "go ku", "gocku")),
-        AgentAliases("Steel", listOf("steel", "stil", "stiil", "steal", "seel", "stiel", "steele")),
-        AgentAliases("Shelli", listOf("shelli", "shelly", "shalli", "chelli", "challi", "shaly", "shali", "schelli", "schelly", "schalli", "schally", "selli", "sally", "shirley", "shelley")),
+        AgentAliases("GPT-5", listOf("gpt five", "gpt 5", "gpt")),
+        AgentAliases("Codex Lab", listOf("codex lab", "codex")),
+        AgentAliases("Coding Lab", listOf("coding lab", "coding")),
+        AgentAliases("Qwen", listOf("qwen", "queen")),
+        AgentAliases("CLI Lab", listOf("cli lab", "cli", "command line")),
         AgentAliases("General", listOf("general", "genelal", "generel", "generell")),
     )
 

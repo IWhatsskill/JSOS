@@ -13,37 +13,37 @@ import org.junit.Test
 class SessionDisplayNameTest {
     @Test
     fun mapsKnownWebAndDiscordSessionKeys() {
-        assertEquals("JARVIS", stableSessionDisplayName("agent:main:main", "JARVIS"))
-        assertEquals("Goku", stableSessionDisplayName("agent:coding-lab:main", "Coding"))
-        assertEquals("Chappi", stableSessionDisplayName("agent:codex-lab:main", "-Codex"))
-        assertEquals("Shelli", stableSessionDisplayName("agent:codex-cli-lab:main", "CLI"))
-        assertEquals("Gideon", stableSessionDisplayName("agent:discord-gpt-5:main", "GPT-5.5"))
-        assertEquals("Steel", stableSessionDisplayName("agent:discord-qwen-397b:main", "Qwen"))
+        assertEquals("Main", stableSessionDisplayName("agent:main:main", "Main"))
+        assertEquals("Coding Lab", stableSessionDisplayName("agent:coding-lab:main", "Coding"))
+        assertEquals("Codex Lab", stableSessionDisplayName("agent:codex-lab:main", "-Codex"))
+        assertEquals("CLI Lab", stableSessionDisplayName("agent:codex-cli-lab:main", "CLI"))
+        assertEquals("GPT-5", stableSessionDisplayName("agent:discord-gpt-5:main", "GPT-5.5"))
+        assertEquals("Qwen", stableSessionDisplayName("agent:discord-qwen-397b:main", "Qwen"))
         assertEquals("General", stableSessionDisplayName("agent:discord-general:main", "General"))
 
-        assertEquals("JARVIS", stableSessionDisplayName("agent:main:discord:channel:1500568623918616607", "DC-Codi"))
-        assertEquals("General", stableSessionDisplayName("agent:discord-general:discord:channel:1500344381067235371", "DC-General"))
-        assertEquals("Goku", stableSessionDisplayName("agent:coding-lab:discord:channel:1500344381067235371", "DC-Coding"))
-        assertEquals("Gideon", stableSessionDisplayName("agent:discord-gpt-5:discord:channel:1500358984887046344", "DC-GPT-5.5"))
-        assertEquals("Steel", stableSessionDisplayName("agent:discord-qwen-397b:discord:channel:1500359031427039323", "DC-Qwen397b"))
-        assertEquals("Chappi", stableSessionDisplayName("agent:codex-lab:discord:channel:1500618054072012952", "-Codex"))
-        assertEquals("Shelli", stableSessionDisplayName("agent:codex-cli-lab:discord:channel:1501628003766112366", "DC-CLI"))
+        assertEquals("Main", stableSessionDisplayName("agent:main:discord:channel:sample-main", "DC-Main"))
+        assertEquals("General", stableSessionDisplayName("agent:discord-general:discord:channel:sample-general", "DC-General"))
+        assertEquals("Coding Lab", stableSessionDisplayName("agent:coding-lab:discord:channel:sample-general", "DC-Coding"))
+        assertEquals("GPT-5", stableSessionDisplayName("agent:discord-gpt-5:discord:channel:sample-gpt", "DC-GPT-5"))
+        assertEquals("Qwen", stableSessionDisplayName("agent:discord-qwen-397b:discord:channel:sample-qwen", "DC-Qwen397b"))
+        assertEquals("Codex Lab", stableSessionDisplayName("agent:codex-lab:discord:channel:sample-codex", "-Codex"))
+        assertEquals("CLI Lab", stableSessionDisplayName("agent:codex-cli-lab:discord:channel:sample-cli", "DC-CLI"))
     }
 
     @Test
     fun mapsWhatsappDirectSessionsToStableLabel() {
         assertEquals(
             "WhatsApp",
-            stableSessionDisplayName("agent:main:whatsapp:direct:49123456789", "private title")
+            stableSessionDisplayName("agent:main:whatsapp:direct:sample-contact", "private title")
         )
     }
 
     @Test
     fun mapsSessionKeyPatternsWithoutHardcodedChannelIds() {
-        assertEquals("Chappi", stableSessionDisplayName("agent:codex-lab:discord:channel:anything", "discord:g-123#codex-lab"))
-        assertEquals("Goku", stableSessionDisplayName("agent:coding-lab:discord:channel:anything", "discord:g-123#general"))
+        assertEquals("Codex Lab", stableSessionDisplayName("agent:codex-lab:discord:channel:anything", "discord:g-123#codex-lab"))
+        assertEquals("Coding Lab", stableSessionDisplayName("agent:coding-lab:discord:channel:anything", "discord:g-123#general"))
         assertEquals("General", stableSessionDisplayName("agent:discord-general:discord:channel:anything", "discord:g-123#general"))
-        assertEquals("Chappi", stableSessionDisplayName("agent:codex-lab:main", displayName = ""))
+        assertEquals("Codex Lab", stableSessionDisplayName("agent:codex-lab:main", displayName = ""))
     }
 
     @Test
@@ -66,7 +66,7 @@ class SessionDisplayNameTest {
             )
         )
         assertEquals(
-            "Chappi",
+            "Codex Lab",
             stableSessionDisplayName(
                 key = "row-2",
                 displayName = "discord:g-123#codex-lab",
@@ -91,7 +91,7 @@ class SessionDisplayNameTest {
         }
 
         assertEquals(
-            "Goku",
+            "Coding Lab",
             stableSessionDisplayName(
                 key = "row-3",
                 displayName = "",
@@ -104,7 +104,7 @@ class SessionDisplayNameTest {
     @Test
     fun mapsBlankWebRowsByAgentId() {
         assertEquals(
-            "Chappi",
+            "Codex Lab",
             stableSessionDisplayName(
                 key = "row-4",
                 displayName = "",
@@ -125,11 +125,11 @@ class SessionDisplayNameTest {
     @Test
     fun sessionInfoNameUsesStableMapping() {
         val session = SessionInfo(
-            key = "agent:discord-gpt-5:discord:channel:1500358984887046344",
-            label = "DC-GPT 5.5"
+            key = "agent:discord-gpt-5:discord:channel:sample-gpt",
+            label = "DC-GPT-5"
         )
 
-        assertEquals("Gideon", session.name)
+        assertEquals("GPT-5", session.name)
     }
 
     @Test
@@ -147,26 +147,26 @@ class SessionDisplayNameTest {
     @Test
     fun sortsSessionsByFamilyAndTransport() {
         val sorted = listOf(
-            "Steel",
-            "Goku",
-            "JARVIS",
+            "Qwen",
+            "Coding Lab",
+            "Main",
             "General",
             "WhatsApp",
-            "Gideon",
-            "Chappi",
+            "GPT-5",
+            "Codex Lab",
             "Research-Lab",
-            "Shelli"
+            "CLI Lab"
         ).sortedWith(compareBy { sessionDisplaySortKey(it) })
 
         assertEquals(
             listOf(
-                "JARVIS",
+                "Main",
                 "WhatsApp",
-                "Gideon",
-                "Chappi",
-                "Goku",
-                "Steel",
-                "Shelli",
+                "GPT-5",
+                "Codex Lab",
+                "Coding Lab",
+                "Qwen",
+                "CLI Lab",
                 "General",
                 "Research-Lab"
             ),
@@ -177,10 +177,10 @@ class SessionDisplayNameTest {
     @Test
     fun filtersPickerToMainWhatsappAndSelectedDiscordAgents() {
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:main")))
-        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:whatsapp:direct:49123456789")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:whatsapp:direct:sample-contact")))
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:discord-gpt-5:discord:channel:anything")))
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "row-general", displayName = "discord:g-123#general", origin = "discord")))
-        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "row-goku", displayName = "goku", origin = "discord")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "row-coding", displayName = "coding-lab", origin = "discord")))
 
         assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:discord:channel:anything")))
         assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:codex-lab:main")))

@@ -19,10 +19,10 @@ class AgentWakeRouterTest {
 
     @Test
     fun routesLeadingAgentNameAndKeepsMessageText() {
-        val decision = AgentWakeRouter.route("Shelli was steht heute an", sessions, activeSessionKey = null)
+        val decision = AgentWakeRouter.route("cli lab was steht heute an", sessions, activeSessionKey = null)
 
         assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-        assertEquals("Shelli", decision.session?.name)
+        assertEquals("CLI Lab", decision.session?.name)
         assertEquals("was steht heute an", decision.message)
     }
 
@@ -32,7 +32,7 @@ class AgentWakeRouterTest {
         val decision = AgentWakeRouter.route("und was ist um 15 40", sessions, activeSessionKey = activeKey)
 
         assertEquals(AgentWakeRouter.Action.ContinueActive, decision.action)
-        assertEquals("Shelli", decision.session?.name)
+        assertEquals("CLI Lab", decision.session?.name)
         assertEquals("und was ist um 15 40", decision.message)
     }
 
@@ -45,21 +45,21 @@ class AgentWakeRouterTest {
     }
 
     @Test
-    fun handlesCommonJarvisMisrecognitions() {
-        val decision = AgentWakeRouter.route("chiz starte bitte", sessions, activeSessionKey = null)
+    fun handlesMainAlias() {
+        val decision = AgentWakeRouter.route("main starte bitte", sessions, activeSessionKey = null)
 
         assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-        assertEquals("JARVIS", decision.session?.name)
+        assertEquals("Main", decision.session?.name)
         assertEquals("starte bitte", decision.message)
     }
 
     @Test
-    fun handlesAdditionalJarvisAliases() {
-        for (alias in listOf("chaivis", "javiz", "javez", "cavis", "cavez")) {
+    fun handlesAdditionalMainAliases() {
+        for (alias in listOf("assistant", "primary")) {
             val decision = AgentWakeRouter.route("$alias test", sessions, activeSessionKey = null)
 
             assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-            assertEquals("JARVIS", decision.session?.name)
+            assertEquals("Main", decision.session?.name)
             assertEquals("test", decision.message)
         }
     }
@@ -67,64 +67,64 @@ class AgentWakeRouterTest {
     @Test
     fun switchesAgentsEvenWhenAnotherSessionIsActive() {
         val activeKey = "agent:main:main"
-        val decision = AgentWakeRouter.route("schalli test", sessions, activeSessionKey = activeKey)
+        val decision = AgentWakeRouter.route("cli test", sessions, activeSessionKey = activeKey)
 
         assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-        assertEquals("Shelli", decision.session?.name)
+        assertEquals("CLI Lab", decision.session?.name)
         assertEquals("test", decision.message)
     }
 
     @Test
-    fun handlesAdditionalShelliAliases() {
-        for (alias in listOf("shalli", "shelli", "chelli", "challi", "shaly", "shali", "shelly")) {
+    fun handlesAdditionalCliLabAliases() {
+        for (alias in listOf("cli lab", "cli", "command line")) {
             val decision = AgentWakeRouter.route("$alias test", sessions, activeSessionKey = "agent:main:main")
 
             assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-            assertEquals("Shelli", decision.session?.name)
+            assertEquals("CLI Lab", decision.session?.name)
             assertEquals("test", decision.message)
         }
     }
 
     @Test
-    fun handlesAdditionalGideonAliases() {
-        for (alias in listOf("gideon", "gidon", "gidaon")) {
+    fun handlesAdditionalGptAliases() {
+        for (alias in listOf("gpt five", "gpt 5", "gpt")) {
             val decision = AgentWakeRouter.route("$alias test", sessions, activeSessionKey = "agent:main:main")
 
             assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-            assertEquals("Gideon", decision.session?.name)
+            assertEquals("GPT-5", decision.session?.name)
             assertEquals("test", decision.message)
         }
     }
 
     @Test
-    fun handlesAdditionalChappiAliases() {
-        for (alias in listOf("chappi", "charpi", "cheppi", "krappi", "crappy", "crapy", "crapi", "krapi")) {
+    fun handlesAdditionalCodexLabAliases() {
+        for (alias in listOf("codex lab", "codex")) {
             val decision = AgentWakeRouter.route("$alias test", sessions, activeSessionKey = "agent:main:main")
 
             assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-            assertEquals("Chappi", decision.session?.name)
+            assertEquals("Codex Lab", decision.session?.name)
             assertEquals("test", decision.message)
         }
     }
 
     @Test
-    fun handlesAdditionalSteelAliases() {
-        for (alias in listOf("steel", "stil", "stiil", "steal", "seel")) {
+    fun handlesAdditionalQwenAliases() {
+        for (alias in listOf("qwen", "queen")) {
             val decision = AgentWakeRouter.route("$alias test", sessions, activeSessionKey = "agent:main:main")
 
             assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-            assertEquals("Steel", decision.session?.name)
+            assertEquals("Qwen", decision.session?.name)
             assertEquals("test", decision.message)
         }
     }
 
     @Test
-    fun handlesAdditionalGokuAliases() {
-        for (alias in listOf("goku", "gorku", "gocu", "goko")) {
+    fun handlesAdditionalCodingLabAliases() {
+        for (alias in listOf("coding lab", "coding")) {
             val decision = AgentWakeRouter.route("$alias test", sessions, activeSessionKey = "agent:main:main")
 
             assertEquals(AgentWakeRouter.Action.SendToAgent, decision.action)
-            assertEquals("Goku", decision.session?.name)
+            assertEquals("Coding Lab", decision.session?.name)
             assertEquals("test", decision.message)
         }
     }
