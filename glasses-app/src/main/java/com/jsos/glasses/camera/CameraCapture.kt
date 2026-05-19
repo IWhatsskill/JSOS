@@ -9,6 +9,8 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.SessionConfiguration
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executor
 
 sealed class PhotoCaptureState {
     object Idle : PhotoCaptureState()
@@ -108,48 +111,53 @@ class CameraCapture(private val context: Context) {
                         captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                         captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
 
-                        camera.createCaptureSession(
-                            listOf(imageReader.surface),
-                            object : CameraCaptureSession.StateCallback() {
-                                override fun onConfigured(session: CameraCaptureSession) {
-                                    try {
-                                        session.capture(captureBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
-                                            override fun onCaptureCompleted(
-                                                session: CameraCaptureSession,
-                                                request: CaptureRequest,
-                                                result: android.hardware.camera2.TotalCaptureResult
-                                            ) {
-                                                Log.d(TAG, "Capture completed")
-                                                camera.close()
-                                            }
+                        val sessionCallback = object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(session: CameraCaptureSession) {
+                                try {
+                                    session.capture(captureBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
+                                        override fun onCaptureCompleted(
+                                            session: CameraCaptureSession,
+                                            request: CaptureRequest,
+                                            result: android.hardware.camera2.TotalCaptureResult
+                                        ) {
+                                            Log.d(TAG, "Capture completed")
+                                            camera.close()
+                                        }
 
-                                            override fun onCaptureFailed(
-                                                session: CameraCaptureSession,
-                                                request: CaptureRequest,
-                                                failure: android.hardware.camera2.CaptureFailure
-                                            ) {
-                                                Log.e(TAG, "Capture failed: reason=${failure.reason}")
-                                                camera.close()
-                                                _state.value = PhotoCaptureState.Error("Capture failed")
-                                                cleanupThread()
-                                            }
-                                        }, handler)
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error capturing", e)
-                                        camera.close()
-                                        _state.value = PhotoCaptureState.Error("Capture error")
-                                        cleanupThread()
-                                    }
-                                }
-
-                                override fun onConfigureFailed(session: CameraCaptureSession) {
-                                    Log.e(TAG, "Session configure failed")
+                                        override fun onCaptureFailed(
+                                            session: CameraCaptureSession,
+                                            request: CaptureRequest,
+                                            failure: android.hardware.camera2.CaptureFailure
+                                        ) {
+                                            Log.e(TAG, "Capture failed: reason=${failure.reason}")
+                                            camera.close()
+                                            _state.value = PhotoCaptureState.Error("Capture failed")
+                                            cleanupThread()
+                                        }
+                                    }, handler)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error capturing", e)
                                     camera.close()
-                                    _state.value = PhotoCaptureState.Error("Camera configure failed")
+                                    _state.value = PhotoCaptureState.Error("Capture error")
                                     cleanupThread()
                                 }
-                            },
-                            handler
+                            }
+
+                            override fun onConfigureFailed(session: CameraCaptureSession) {
+                                Log.e(TAG, "Session configure failed")
+                                camera.close()
+                                _state.value = PhotoCaptureState.Error("Camera configure failed")
+                                cleanupThread()
+                            }
+                        }
+                        val executor = Executor { command -> handler.post(command) }
+                        camera.createCaptureSession(
+                            SessionConfiguration(
+                                SessionConfiguration.SESSION_REGULAR,
+                                listOf(OutputConfiguration(imageReader.surface)),
+                                executor,
+                                sessionCallback
+                            )
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "Error setting up capture", e)
