@@ -269,7 +269,7 @@ JSOS Core is responsible for:
 - Optional ElevenLabs TTS settings and playback path.
 - Photo capture handoff from the glasses to the phone/OpenClaw flow.
 - HUD deployment flow for selecting a separate JSOS HUD APK and handing installation to Hi Rokid / CXR-L.
-- Experimental private Codex CLI bridge client for the HUD Codex CLI view.
+- Experimental private Codex CLI bridge client for the Core Codex tab and HUD Codex CLI view.
 
 ### JSOS HUD glasses app
 
@@ -349,10 +349,11 @@ This path does not merge media inside JSOS. It delegates capture/processing to R
 
 JSOS includes an experimental private Codex CLI bridge path for local/VPN setups:
 
+- JSOS Core provides a `Codex` tab with link, send, stop, and clear controls.
 - JSOS HUD opens `MORE` -> `Codex CLI`.
 - JSOS Core connects to a user-managed WebSocket bridge derived from the configured OpenClaw host, using port `18890` and path `/codex-cli`.
-- HUD input is sent to that bridge, and returned output is displayed in the Codex CLI terminal overlay.
-- `CODEX CLEAR` clears the local HUD terminal view only; it does not reset the remote Codex session or workspace.
+- Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view.
+- `CLEAR` / `CODEX CLEAR` clears the local terminal view only; it does not reset the remote Codex session or workspace.
 
 The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private VPS configuration, or any credentials. Keep this bridge private, for example on a trusted LAN or Tailnet, and do not expose it directly to the public internet.
 

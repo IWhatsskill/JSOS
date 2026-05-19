@@ -122,6 +122,7 @@ private enum class CoreTab {
     Chat,
     Connection,
     Voice,
+    Codex,
     Hud,
     Diagnostics,
 }
@@ -234,10 +235,17 @@ fun MainScreen() {
     var agentWakeEnabled by remember { mutableStateOf(false) }
     var agentWakeSessionKey by remember { mutableStateOf<String?>(null) }
     var agentWakeStatus by remember { mutableStateOf("OFF") }
+    var codexCliInput by remember { mutableStateOf("") }
+    var codexCliStatus by remember { mutableStateOf(CodexCliBridgeClient.State.DISCONNECTED) }
+    var codexCliDetail by remember { mutableStateOf<String?>(null) }
+    var codexCliLines by remember { mutableStateOf(listOf("Codex CLI bridge ready.")) }
+    val codexCliUrl = remember(openClawHost) { codexCliBridgeUrl(openClawHost) }
     var glassesVoiceButtonMode by remember {
         mutableStateOf(GlassesVoiceButtonMode.fromPref(prefs.getString("glasses_voice_button_mode", "command")))
     }
     val listState = rememberLazyListState()
+    val codexCliListState = rememberLazyListState()
+    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val openSettings: (SettingsTarget) -> Unit = { target ->
         settingsTarget = target
         showSettings = true
@@ -306,9 +314,16 @@ fun MainScreen() {
         }
     }
 
-    // Codex CLI bridge callbacks for the experimental HUD terminal mode.
+    // Codex CLI bridge callbacks for the experimental HUD/Core terminal mode.
     LaunchedEffect(openClawHost) {
         codexCliBridgeClient.onStatus = { state, detail ->
+            mainHandler.post {
+                codexCliStatus = state
+                codexCliDetail = detail
+                if (state == CodexCliBridgeClient.State.ERROR || !detail.isNullOrBlank()) {
+                    codexCliLines = (codexCliLines + "[status] ${state.name}: ${detail ?: ""}").takeLast(220)
+                }
+            }
             val statusMsg = org.json.JSONObject().apply {
                 put("type", "cli_status")
                 put("state", state.name.lowercase())
@@ -318,6 +333,16 @@ fun MainScreen() {
             glassesManager.sendRawMessage(statusMsg.toString())
         }
         codexCliBridgeClient.onOutput = { output, append ->
+            mainHandler.post {
+                val incomingLines = output.lines().filter { it.isNotBlank() }
+                if (incomingLines.isNotEmpty()) {
+                    codexCliLines = if (append) {
+                        (codexCliLines + incomingLines).takeLast(220)
+                    } else {
+                        incomingLines.takeLast(220)
+                    }
+                }
+            }
             val outputMsg = org.json.JSONObject().apply {
                 put("type", "cli_output")
                 put("text", output)
@@ -384,6 +409,12 @@ fun MainScreen() {
     // reliable than checking phoneLoadingMore which may already be false by the
     // time this effect runs (both StateFlows update in the same coroutine frame).
     var previousFirstMsgId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedTab, codexCliLines.size) {
+        if (selectedTab == CoreTab.Codex && codexCliLines.isNotEmpty()) {
+            codexCliListState.animateScrollToItem(codexCliLines.lastIndex)
+        }
+    }
+
     LaunchedEffect(chatMessages.size) {
         if (chatMessages.isNotEmpty()) {
             val currentFirstId = chatMessages.first().id
@@ -459,7 +490,6 @@ fun MainScreen() {
     }
 
     // Handle AI scene events (glasses long-press triggers voice input)
-    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     fun dismissRokidAiSceneBurst() {
         RokidSdkManager.sendExitEvent()
         mainHandler.postDelayed({ RokidSdkManager.sendExitEvent() }, 50)
@@ -1270,6 +1300,32 @@ fun MainScreen() {
                     )
                 }
 
+                CoreTab.Codex -> {
+                    CodexCliDeck(
+                        status = codexCliStatus,
+                        detail = codexCliDetail,
+                        lines = codexCliLines,
+                        inputText = codexCliInput,
+                        onInputChange = { codexCliInput = it },
+                        listState = codexCliListState,
+                        onConnect = {
+                            codexCliLines = (codexCliLines + "[link] $codexCliUrl").takeLast(220)
+                            codexCliBridgeClient.connect(codexCliUrl)
+                        },
+                        onDisconnect = { codexCliBridgeClient.disconnect() },
+                        onSend = {
+                            val textToSend = codexCliInput.trim()
+                            if (textToSend.isNotEmpty()) {
+                                codexCliLines = (codexCliLines + "> $textToSend").takeLast(220)
+                                codexCliInput = ""
+                                codexCliBridgeClient.sendInput(textToSend)
+                            }
+                        },
+                        onStop = { codexCliBridgeClient.stop() },
+                        onClear = { codexCliLines = listOf("Codex CLI output cleared.") },
+                    )
+                }
+
                 CoreTab.Hud -> {
                     HudDeck(
                         glassesState = glassesState,
@@ -1560,6 +1616,13 @@ private fun CoreBottomNavigation(
             onClick = { onSelect(CoreTab.Voice) },
             icon = { Icon(Icons.Default.GraphicEq, contentDescription = null) },
             label = { Text("Voice", fontFamily = FontFamily.Monospace, fontSize = 9.sp) },
+            colors = itemColors,
+        )
+        NavigationBarItem(
+            selected = selectedTab == CoreTab.Codex,
+            onClick = { onSelect(CoreTab.Codex) },
+            icon = { Icon(Icons.Default.Code, contentDescription = null) },
+            label = { Text("Codex", fontFamily = FontFamily.Monospace, fontSize = 9.sp) },
             colors = itemColors,
         )
         NavigationBarItem(
@@ -2330,6 +2393,113 @@ private fun ConnectionDeck(
 }
 
 @Composable
+private fun CodexCliDeck(
+    status: CodexCliBridgeClient.State,
+    detail: String?,
+    lines: List<String>,
+    inputText: String,
+    onInputChange: (String) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    onClear: () -> Unit,
+) {
+    val connected = status == CodexCliBridgeClient.State.CONNECTED
+    val accent = when (status) {
+        CodexCliBridgeClient.State.CONNECTED -> Color(0xFF63F45C)
+        CodexCliBridgeClient.State.CONNECTING -> JsosPalette.Cyan
+        CodexCliBridgeClient.State.ERROR -> Color(0xFFFF5F6D)
+        CodexCliBridgeClient.State.DISCONNECTED -> JsosPalette.Muted
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        DashboardModuleCard(
+            icon = Icons.Default.Code,
+            title = "Codex CLI",
+            accent = accent,
+            rows = listOf(
+                "State" to status.name,
+                "Bridge" to (detail?.takeIf { it.isNotBlank() } ?: "Private CLI"),
+                "Tap" to if (connected) "SEND" else "CONNECT",
+            ),
+        )
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            shape = RoundedCornerShape(8.dp),
+            color = JsosPalette.Card,
+            border = BorderStroke(1.dp, JsosPalette.Green.copy(alpha = 0.72f)),
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(lines) { line ->
+                    Text(
+                        text = line,
+                        color = if (line.startsWith("[error]", ignoreCase = true)) Color(0xFFFF5F6D) else JsosPalette.Green,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                    )
+                }
+            }
+        }
+
+        OutlinedTextField(
+            value = inputText,
+            onValueChange = onInputChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Codex input", color = JsosPalette.Cyan, fontFamily = FontFamily.Monospace) },
+            textStyle = LocalTextStyle.current.copy(
+                color = JsosPalette.Text,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            maxLines = 3,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = JsosPalette.Cyan,
+                unfocusedBorderColor = JsosPalette.Cyan.copy(alpha = 0.55f),
+                cursorColor = JsosPalette.Cyan,
+                focusedTextColor = JsosPalette.Text,
+                unfocusedTextColor = JsosPalette.Text,
+            ),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(onClick = if (connected) onDisconnect else onConnect, modifier = Modifier.weight(1f)) {
+                Text(if (connected) "DISC" else "LINK", fontFamily = FontFamily.Monospace)
+            }
+            TextButton(onClick = onSend, enabled = inputText.isNotBlank() && connected, modifier = Modifier.weight(1f)) {
+                Text("SEND", fontFamily = FontFamily.Monospace)
+            }
+            TextButton(onClick = onStop, enabled = connected, modifier = Modifier.weight(1f)) {
+                Text("STOP", fontFamily = FontFamily.Monospace)
+            }
+            TextButton(onClick = onClear, modifier = Modifier.weight(1f)) {
+                Text("CLEAR", fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+}
+@Composable
 private fun VoiceDeck(
     isListening: Boolean,
     voiceMode: VoiceRecognitionManager.RecognitionMode,
@@ -2389,7 +2559,7 @@ private fun VoiceDeck(
             ),
             onClick = { onOpenSettings(SettingsTarget.ResponseVoice) },
         )
-        TabHint("Core Live Talk uses the phone speaker. The glasses voice button can stay classic STT or route Live Talk to Rokid.")
+        TabHint("Core Live: phone speaker. Glasses button: STT or Rokid Live.")
     }
 }
 
