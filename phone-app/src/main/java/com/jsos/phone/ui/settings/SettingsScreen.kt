@@ -87,6 +87,8 @@ fun SettingsScreen(
     // Wake on stream
     wakeOnStreamEnabled: Boolean = true,
     onWakeOnStreamChange: (Boolean) -> Unit = {},
+    glassBrightness: Int = 0,
+    onGlassBrightnessChange: (Int) -> Unit = {},
     // Voice
     voiceLanguageManager: VoiceLanguageManager,
     voiceRecognitionManager: VoiceRecognitionManager? = null,
@@ -242,6 +244,8 @@ fun SettingsScreen(
                         cachedDeviceName = cachedDeviceName,
                         wakeOnStreamEnabled = wakeOnStreamEnabled,
                         onWakeOnStreamChange = onWakeOnStreamChange,
+                        glassBrightness = glassBrightness,
+                        onGlassBrightnessChange = onGlassBrightnessChange,
                     )
                 }
             }

@@ -67,6 +67,7 @@ object OpenClawMethods {
     const val CHANNEL_LIST = "channel.list"
     const val TALK_SESSION_CREATE = "talk.session.create"
     const val TALK_SESSION_APPEND_AUDIO = "talk.session.appendAudio"
+    const val TALK_SESSION_CANCEL_OUTPUT = "talk.session.cancelOutput"
     const val TALK_SESSION_CLOSE = "talk.session.close"
     const val TALK_SESSION_SUBMIT_TOOL_RESULT = "talk.session.submitToolResult"
     const val TALK_CLIENT_TOOL_CALL = "talk.client.toolCall"

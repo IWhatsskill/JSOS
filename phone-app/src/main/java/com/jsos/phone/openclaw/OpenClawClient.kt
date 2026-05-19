@@ -632,6 +632,14 @@ class OpenClawClient(
         sendRequestWithoutWaiting(OpenClawMethods.TALK_SESSION_APPEND_AUDIO, params)
     }
 
+    suspend fun cancelTalkOutput(sessionId: String, reason: String = "barge-in"): OpenClawResponse {
+        val params = JsonObject().apply {
+            addProperty("sessionId", sessionId)
+            addProperty("reason", reason)
+        }
+        return sendRequest(OpenClawMethods.TALK_SESSION_CANCEL_OUTPUT, params)
+    }
+
     suspend fun closeTalkSession(sessionId: String): OpenClawResponse {
         val params = JsonObject().apply {
             addProperty("sessionId", sessionId)

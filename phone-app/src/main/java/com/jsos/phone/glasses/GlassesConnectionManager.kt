@@ -138,6 +138,7 @@ class GlassesConnectionManager(private val context: Context) {
             currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
             reconnectJob?.cancel()
             RokidSdkManager.setScreenOffTimeout(30)
+            RokidSdkManager.applyPreferredGlassBrightness()
             // Notify wake signal manager that glasses is connected
             wakeSignalManager.handleGlassesConnected()
             Log.d(TAG, "SDK: Glasses connected")

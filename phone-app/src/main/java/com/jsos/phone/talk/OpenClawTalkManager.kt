@@ -5,6 +5,9 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import com.google.gson.JsonObject
@@ -22,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.sqrt
 
 sealed class LiveTalkState {
     object Idle : LiveTalkState()
@@ -45,6 +49,10 @@ class OpenClawTalkManager(
         private const val SAMPLE_RATE = 24_000
         private const val SEND_FRAME_BYTES = 4096
         private const val TOOL_RESULT_TIMEOUT_MS = 120_000L
+        private const val MIC_GATE_TAIL_MS = 250L
+        private const val BARGE_IN_RMS_THRESHOLD = 2400.0
+        private const val BARGE_IN_MIC_OPEN_MS = 1600L
+        private const val SUPPRESS_ASSISTANT_AUDIO_AFTER_BARGE_IN_MS = 2000L
     }
 
     private val _state = kotlinx.coroutines.flow.MutableStateFlow<LiveTalkState>(LiveTalkState.Idle)
@@ -61,6 +69,11 @@ class OpenClawTalkManager(
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
     private var audioOutputQueue: Channel<ByteArray>? = null
+    private var echoCanceler: AcousticEchoCanceler? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
+    private val micGateUntilMs = AtomicLong(0L)
+    private val forceMicOpenUntilMs = AtomicLong(0L)
+    private val suppressAssistantAudioUntilMs = AtomicLong(0L)
     private val playbackLock = Any()
     private var activeSessionId: String? = null
     private var activeRelaySessionId: String? = null
@@ -136,6 +149,9 @@ class OpenClawTalkManager(
         activeSessionId = null
         activeRelaySessionId = null
         activeSessionKey = null
+        micGateUntilMs.set(0L)
+        forceMicOpenUntilMs.set(0L)
+        suppressAssistantAudioUntilMs.set(0L)
 
         stopAudioCapture()
         stopPlayback()
@@ -169,6 +185,7 @@ class OpenClawTalkManager(
             "audio" -> {
                 val audio = payload.stringValue("audioBase64") ?: payload.stringValue("audio")
                 if (audio != null) {
+                    if (isAssistantAudioSuppressed()) return
                     _state.value = LiveTalkState.Speaking
                     queueAudio(audio)
                 }
@@ -178,6 +195,10 @@ class OpenClawTalkManager(
                 val role = payload.stringValue("role") ?: "assistant"
                 val text = payload.stringValue("text").orEmpty()
                 val isFinal = payload.boolValue("final") ?: false
+                val isUserTranscript = role.equals("user", ignoreCase = true)
+                if (isUserTranscript && text.isNotBlank() && shouldCancelOutputForUserTranscript()) {
+                    handleBargeIn(sessionId, generation, trigger = "transcript")
+                }
                 if (text.isNotBlank()) {
                     onTranscript(LiveTalkTranscript(role = role, text = text, isFinal = isFinal))
                 }
@@ -324,6 +345,7 @@ class OpenClawTalkManager(
         }
 
         audioRecord = record
+        setupAudioEffects(record.audioSessionId)
         record.startRecording()
 
         recordingJob = scope?.launch {
@@ -331,6 +353,13 @@ class OpenClawTalkManager(
             while (isActive && isCurrentGeneration(generation) && activeSessionId == sessionId) {
                 val bytesRead = record.read(readBuffer, 0, readBuffer.size)
                 if (bytesRead > 0) {
+                    if (isMicGateActive() && !isForceMicOpenActive()) {
+                        if (looksLikeBargeIn(readBuffer, bytesRead)) {
+                            handleBargeIn(sessionId, generation)
+                        } else {
+                            continue
+                        }
+                    }
                     val audioBase64 = Base64.encodeToString(readBuffer.copyOf(bytesRead), Base64.NO_WRAP)
                     openClawClient.appendTalkAudio(sessionId, audioBase64)
                 } else {
@@ -343,6 +372,7 @@ class OpenClawTalkManager(
     private fun stopAudioCapture() {
         recordingJob?.cancel()
         recordingJob = null
+        releaseAudioEffects()
         audioRecord?.let { record ->
             runCatching { record.stop() }
             runCatching { record.release() }
@@ -401,6 +431,7 @@ class OpenClawTalkManager(
             return
         }
         if (audio.isNotEmpty()) {
+            if (isAssistantAudioSuppressed()) return
             val result = audioOutputQueue?.trySend(audio)
             if (result?.isFailure == true) {
                 Log.w(TAG, "Output audio queue rejected chunk (${audio.size} bytes)")
@@ -415,6 +446,7 @@ class OpenClawTalkManager(
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
                 runCatching { track.play() }
             }
+            holdMicGateFor(audio.size)
             val written = track.write(audio, 0, audio.size, AudioTrack.WRITE_BLOCKING)
             if (written < 0) {
                 Log.w(TAG, "AudioTrack write failed: $written")
@@ -441,6 +473,93 @@ class OpenClawTalkManager(
             }
         }
         _state.value = LiveTalkState.Listening
+    }
+
+    private fun setupAudioEffects(audioSessionId: Int) {
+        releaseAudioEffects()
+        if (AcousticEchoCanceler.isAvailable()) {
+            runCatching {
+                AcousticEchoCanceler.create(audioSessionId)?.also { effect ->
+                    effect.enabled = true
+                    echoCanceler = effect
+                    Log.d(TAG, "Acoustic echo cancellation enabled=${effect.enabled}")
+                }
+            }.onFailure {
+                Log.w(TAG, "Acoustic echo cancellation unavailable: ${it.message}")
+            }
+        }
+        if (NoiseSuppressor.isAvailable()) {
+            runCatching {
+                NoiseSuppressor.create(audioSessionId)?.also { effect ->
+                    effect.enabled = true
+                    noiseSuppressor = effect
+                    Log.d(TAG, "Noise suppression enabled=${effect.enabled}")
+                }
+            }.onFailure {
+                Log.w(TAG, "Noise suppression unavailable: ${it.message}")
+            }
+        }
+    }
+
+    private fun releaseAudioEffects() {
+        echoCanceler?.release()
+        echoCanceler = null
+        noiseSuppressor?.release()
+        noiseSuppressor = null
+    }
+
+    private fun holdMicGateFor(audioBytes: Int) {
+        val durationMs = ((audioBytes / 2L) * 1000L / SAMPLE_RATE).coerceAtLeast(40L)
+        val untilMs = SystemClock.elapsedRealtime() + durationMs + MIC_GATE_TAIL_MS
+        while (true) {
+            val current = micGateUntilMs.get()
+            if (untilMs <= current || micGateUntilMs.compareAndSet(current, untilMs)) return
+        }
+    }
+
+    private fun isMicGateActive(): Boolean =
+        SystemClock.elapsedRealtime() < micGateUntilMs.get()
+
+    private fun isForceMicOpenActive(): Boolean =
+        SystemClock.elapsedRealtime() < forceMicOpenUntilMs.get()
+
+    private fun isAssistantAudioSuppressed(): Boolean =
+        SystemClock.elapsedRealtime() < suppressAssistantAudioUntilMs.get()
+
+    private fun shouldCancelOutputForUserTranscript(): Boolean {
+        if (isAssistantAudioSuppressed()) return false
+        return _state.value is LiveTalkState.Speaking || isMicGateActive()
+    }
+
+    private fun handleBargeIn(sessionId: String, generation: Long, trigger: String = "audio") {
+        val now = SystemClock.elapsedRealtime()
+        if (now < suppressAssistantAudioUntilMs.get()) return
+        Log.d(TAG, "Live Talk barge-in detected via $trigger")
+        micGateUntilMs.set(0L)
+        forceMicOpenUntilMs.set(now + BARGE_IN_MIC_OPEN_MS)
+        suppressAssistantAudioUntilMs.set(now + SUPPRESS_ASSISTANT_AUDIO_AFTER_BARGE_IN_MS)
+        clearPlayback()
+        scope?.launch {
+            if (!isCurrentGeneration(generation)) return@launch
+            runCatching { openClawClient.cancelTalkOutput(sessionId) }
+                .onFailure { Log.w(TAG, "Failed to cancel Live Talk output: ${it.message}") }
+        }
+    }
+
+    private fun looksLikeBargeIn(buffer: ByteArray, bytesRead: Int): Boolean =
+        calculatePcm16Rms(buffer, bytesRead) >= BARGE_IN_RMS_THRESHOLD
+
+    private fun calculatePcm16Rms(buffer: ByteArray, bytesRead: Int): Double {
+        var sumSquares = 0.0
+        var samples = 0
+        var i = 0
+        while (i + 1 < bytesRead) {
+            val sample = ((buffer[i].toInt() and 0xFF) or (buffer[i + 1].toInt() shl 8)).toShort().toInt()
+            sumSquares += sample.toDouble() * sample.toDouble()
+            samples++
+            i += 2
+        }
+        return if (samples > 0) sqrt(sumSquares / samples) else 0.0
     }
 
     private fun stopPlayback() {

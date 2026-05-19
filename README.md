@@ -28,7 +28,7 @@ Current state:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Codex CLI bridge client are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Codex CLI bridge client are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview areas:
@@ -262,6 +262,7 @@ JSOS Core is responsible for:
 - Session listing, switching, reset/new-session flow, and chat history loading.
 - Streaming chat forwarding to the HUD.
 - Rokid CXR phone-side connection and device control.
+- HUD brightness preference for connected Rokid glasses.
 - Debug WebSocket bridge for emulator-style local testing.
 - OpenAI Realtime speech-to-text when configured.
 - Core Agent Wake: phone-side continuous Realtime transcription with leading-agent-name routing into the visible JSOS sessions.
@@ -304,6 +305,8 @@ JSOS separates normal speech-to-text from bidirectional OpenClaw Live Talk:
 - **Core Live Talk** starts OpenClaw Live Talk directly from the phone and routes output to the phone speaker.
 - **Glasses Voice Button / CMD** routes the glasses voice button to normal command/input speech recognition.
 - **Glasses Voice Button / LIVE TALK** routes the glasses voice button to OpenClaw Live Talk and Rokid communication audio.
+
+Live Talk includes a client-side barge-in path for interrupting assistant output while new user speech is detected. The exact behavior still depends on the target OpenClaw Gateway version and audio route.
 
 Core Agent Wake is designed for fast hands-free routing between configured visible JSOS sessions. For example, saying a configured session label followed by the message selects that session and sends the remaining phrase; later phrases without a new leading label continue in the active session until another configured label is detected. Common transcription variants can be handled in the router, but internal OpenClaw session keys remain unchanged.
 
@@ -407,7 +410,7 @@ Implemented Gateway request/event areas in this source tree include:
 - `chat.send` for normal message sending, including optional image content.
 - `chat.history` for session history loading.
 - `sessions.list`, `session.create`, and `sessions.reset` / new-session behavior.
-- `talk.session.create`, `talk.session.appendAudio`, `talk.session.close`, `talk.session.submitToolResult`, and `talk.event` paths for experimental Live Talk support.
+- `talk.session.create`, `talk.session.appendAudio`, `talk.session.cancelOutput`, `talk.session.close`, `talk.session.submitToolResult`, and `talk.event` paths for experimental Live Talk support.
 - Gateway `chat` events with delta/final handling for streamed assistant output.
 - Auto-reconnect behavior after disconnects.
 

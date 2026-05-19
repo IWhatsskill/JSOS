@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Search
@@ -25,6 +25,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -44,7 +46,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jsos.phone.glasses.GlassesConnectionManager
+import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.ui.theme.JsosPalette
+import kotlin.math.roundToInt
 
 @Composable
 fun GlassesSection(
@@ -63,6 +67,8 @@ fun GlassesSection(
     cachedDeviceName: String?,
     wakeOnStreamEnabled: Boolean = true,
     onWakeOnStreamChange: (Boolean) -> Unit = {},
+    glassBrightness: Int = 0,
+    onGlassBrightnessChange: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -99,6 +105,8 @@ fun GlassesSection(
                         cachedDeviceName = cachedDeviceName,
                         wakeOnStreamEnabled = wakeOnStreamEnabled,
                         onWakeOnStreamChange = onWakeOnStreamChange,
+                        glassBrightness = glassBrightness,
+                        onGlassBrightnessChange = onGlassBrightnessChange,
                         onDisconnect = onDisconnectGlasses,
                         onClearSn = onClearSn,
                     )
@@ -300,6 +308,8 @@ private fun ConnectedContent(
     cachedDeviceName: String?,
     wakeOnStreamEnabled: Boolean,
     onWakeOnStreamChange: (Boolean) -> Unit,
+    glassBrightness: Int,
+    onGlassBrightnessChange: (Int) -> Unit,
     onDisconnect: () -> Unit,
     onClearSn: () -> Unit,
 ) {
@@ -350,6 +360,59 @@ private fun ConnectedContent(
         }
     }
 
+
+    Spacer(Modifier.height(16.dp))
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = JsosPalette.CardDark.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.34f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            val sanitizedBrightness = glassBrightness.coerceIn(
+                RokidSdkManager.GLASS_BRIGHTNESS_MIN,
+                RokidSdkManager.GLASS_BRIGHTNESS_MAX,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "HUD Brightness",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = JsosPalette.Text,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "$sanitizedBrightness / ${RokidSdkManager.GLASS_BRIGHTNESS_MAX}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = JsosPalette.Green,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Slider(
+                value = sanitizedBrightness.toFloat(),
+                onValueChange = { onGlassBrightnessChange(it.roundToInt()) },
+                valueRange = RokidSdkManager.GLASS_BRIGHTNESS_MIN.toFloat()..RokidSdkManager.GLASS_BRIGHTNESS_MAX.toFloat(),
+                steps = (RokidSdkManager.GLASS_BRIGHTNESS_MAX - RokidSdkManager.GLASS_BRIGHTNESS_MIN - 1).coerceAtLeast(0),
+                colors = SliderDefaults.colors(
+                    thumbColor = JsosPalette.Green,
+                    activeTrackColor = JsosPalette.Cyan,
+                    inactiveTrackColor = JsosPalette.Cyan.copy(alpha = 0.22f),
+                ),
+            )
+            Text(
+                "Default 0. Raise only when the HUD needs more light.",
+                style = MaterialTheme.typography.bodySmall,
+                color = JsosPalette.Muted,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+    }
     // Paired device card
     if (hasCachedSn) {
         Spacer(Modifier.height(16.dp))
@@ -461,7 +524,7 @@ private fun ErrorContent(
         modifier = Modifier.fillMaxWidth(),
         colors = jsosPrimaryButtonColors(),
     ) {
-        Icon(Icons.Default.BluetoothSearching, contentDescription = null, modifier = Modifier.size(18.dp))
+        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text("Scan for Glasses")
     }

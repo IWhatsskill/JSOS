@@ -37,6 +37,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -183,6 +184,7 @@ fun MainScreen() {
     val currentSessionKey by openClawClient.currentSessionKey.collectAsState()
     val unreadSessions by openClawClient.unreadSessions.collectAsState()
     val wakeOnStreamEnabled by glassesManager.wakeSignalManager.enabled.collectAsState()
+    val glassBrightness by RokidSdkManager.preferredGlassBrightness.collectAsState()
     val ttsEnabled by ttsSettingsManager.isEnabled.collectAsState()
     val ttsVoiceName by ttsSettingsManager.selectedVoiceName.collectAsState()
     val liveTalkState by liveTalkManager.state.collectAsState()
@@ -1412,6 +1414,10 @@ fun MainScreen() {
             onWakeOnStreamChange = { enabled ->
                 glassesManager.wakeSignalManager.setEnabled(enabled)
             },
+            glassBrightness = glassBrightness,
+            onGlassBrightnessChange = { brightness ->
+                RokidSdkManager.setPreferredGlassBrightness(brightness)
+            },
             // Voice
             voiceLanguageManager = voiceLanguageManager,
             voiceRecognitionManager = voiceRecognitionManager,
@@ -2518,7 +2524,9 @@ private fun VoiceDeck(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .padding(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         DashboardModuleCard(
@@ -2559,7 +2567,7 @@ private fun VoiceDeck(
             ),
             onClick = { onOpenSettings(SettingsTarget.ResponseVoice) },
         )
-        TabHint("Core Live: phone speaker. Glasses button: STT or Rokid Live.")
+        TabHint("Core Live = phone speaker.\nGlasses button = STT or Rokid Live.")
     }
 }
 
@@ -2950,7 +2958,7 @@ private fun TabHint(text: String) {
     ) {
         Text(
             text,
-                                color = JsosPalette.MutedStrong,
+            color = JsosPalette.MutedStrong,
             fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
             lineHeight = 15.sp,

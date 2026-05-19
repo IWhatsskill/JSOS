@@ -12,6 +12,9 @@ import com.rokid.cxr.client.extend.listeners.BrightnessUpdateListener
 import com.rokid.cxr.client.extend.listeners.CustomCmdListener
 import com.rokid.cxr.client.utils.ValueUtil
 import android.util.Base64
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -36,6 +39,11 @@ object RokidSdkManager {
 
     private const val TAG = "RokidSdkManager"
     private const val BLUETOOTH_CLIENT_NAME = "JSOS Core"
+    private const val PREFS_NAME = "jsos_rokid_prefs"
+    private const val KEY_PREFERRED_GLASS_BRIGHTNESS = "preferred_glass_brightness"
+    private const val DEFAULT_GLASS_BRIGHTNESS = 0
+    const val GLASS_BRIGHTNESS_MIN = 0
+    const val GLASS_BRIGHTNESS_MAX = 15
 
     private var isInitialized = false
     private var cxrApi: CxrApi? = null
@@ -53,8 +61,11 @@ object RokidSdkManager {
     // Track if we're in init phase (need to call connectBluetooth after getting info)
     private var pendingConnect = false
 
-    // Last known brightness from glasses (tracked via BrightnessUpdateListener)
-    private var lastKnownBrightness: Int = 15
+    private val _preferredGlassBrightness = MutableStateFlow(DEFAULT_GLASS_BRIGHTNESS)
+    val preferredGlassBrightness: StateFlow<Int> = _preferredGlassBrightness.asStateFlow()
+
+    // Last brightness reported by the glasses. The Core slider remains the preferred wake/apply value.
+    private var lastKnownBrightness: Int = DEFAULT_GLASS_BRIGHTNESS
 
     // SN auto-generation: first attempt fails, we read the SN and retry
     private var snAutoRetryInProgress = false
@@ -179,6 +190,7 @@ object RokidSdkManager {
         }
 
         appContext = context.applicationContext
+        loadPreferredGlassBrightness()
 
         // Load cached SN encrypt content from previous session
         loadCachedSnEncryptContent()
@@ -239,8 +251,9 @@ object RokidSdkManager {
             // preferred level when waking the display from standby.
             cxrApi?.setBrightnessUpdateListener(object : BrightnessUpdateListener {
                 override fun onBrightnessUpdated(brightness: Int) {
-                    Log.d(TAG, "Glasses brightness updated: $brightness")
-                    lastKnownBrightness = brightness
+                    val sanitized = brightness.coerceIn(GLASS_BRIGHTNESS_MIN, GLASS_BRIGHTNESS_MAX)
+                    Log.d(TAG, "Glasses brightness updated: $sanitized")
+                    lastKnownBrightness = sanitized
                 }
             })
 
@@ -690,6 +703,49 @@ object RokidSdkManager {
         return cxrApi?.notifyTtsAudioFinished()
     }
 
+    fun setPreferredGlassBrightness(brightness: Int): Boolean {
+        val sanitized = brightness.coerceIn(GLASS_BRIGHTNESS_MIN, GLASS_BRIGHTNESS_MAX)
+        _preferredGlassBrightness.value = sanitized
+        savePreferredGlassBrightness(sanitized)
+        return applyPreferredGlassBrightness()
+    }
+
+    fun getPreferredGlassBrightness(): Int = _preferredGlassBrightness.value
+
+    fun applyPreferredGlassBrightness(): Boolean {
+        if (!isInitialized || !isBluetoothConnectedState) {
+            Log.d(TAG, "Cannot apply glasses brightness: init=$isInitialized, bt=$isBluetoothConnectedState")
+            return false
+        }
+        val brightness = _preferredGlassBrightness.value.coerceIn(GLASS_BRIGHTNESS_MIN, GLASS_BRIGHTNESS_MAX)
+        return try {
+            cxrApi?.setGlassBrightness(brightness)
+            lastKnownBrightness = brightness
+            Log.i(TAG, "Applied glasses brightness: $brightness")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to apply glasses brightness", e)
+            false
+        }
+    }
+
+    private fun loadPreferredGlassBrightness() {
+        val brightness = appContext
+            ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.getInt(KEY_PREFERRED_GLASS_BRIGHTNESS, DEFAULT_GLASS_BRIGHTNESS)
+            ?: DEFAULT_GLASS_BRIGHTNESS
+        val sanitized = brightness.coerceIn(GLASS_BRIGHTNESS_MIN, GLASS_BRIGHTNESS_MAX)
+        _preferredGlassBrightness.value = sanitized
+        lastKnownBrightness = sanitized
+    }
+
+    private fun savePreferredGlassBrightness(brightness: Int) {
+        appContext
+            ?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putInt(KEY_PREFERRED_GLASS_BRIGHTNESS, brightness)
+            ?.apply()
+    }
     // --- Screen off timeout & wake ---
 
     /**
@@ -720,9 +776,11 @@ object RokidSdkManager {
             return false
         }
         return try {
-            cxrApi?.setGlassBrightness(lastKnownBrightness)
+            val brightness = _preferredGlassBrightness.value.coerceIn(GLASS_BRIGHTNESS_MIN, GLASS_BRIGHTNESS_MAX)
+            cxrApi?.setGlassBrightness(brightness)
             cxrApi?.setScreenOffTimeout(30)
-            Log.i(TAG, "Wake glasses screen: brightness=$lastKnownBrightness, timeout reset to 30s")
+            lastKnownBrightness = brightness
+            Log.i(TAG, "Wake glasses screen: brightness=$brightness, timeout reset to 30s")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to wake glasses screen", e)
