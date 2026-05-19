@@ -917,10 +917,10 @@ class HudActivity : ComponentActivity() {
                     moreSubMenuType = MoreSubMenuType.DISPLAY
                 )
             }
-            MoreMenuItem.CODI_CLI -> {
+            MoreMenuItem.CODEX_CLI -> {
                 openCliTerminal()
             }
-            MoreMenuItem.CODI_CLEAR -> {
+            MoreMenuItem.CODEX_CLEAR -> {
                 clearCliTerminal()
             }
             MoreMenuItem.VOICE -> {

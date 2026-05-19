@@ -122,8 +122,8 @@ enum class MoreMenuItem(val icon: String, val label: String) {
     VOICE_SEND("SEND", "Send Mode"),
     AR_TOOLS("AR", "AR Tools"),
     DISPLAY("DISP", "Display"),
-    CODI_CLI("CODI", "Codi CLI"),
-    CODI_CLEAR("CLR", "Codi Clear"),
+    CODEX_CLI("CODX", "Codex CLI"),
+    CODEX_CLEAR("CLR", "Codex Clear"),
     VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
 }
 
@@ -1780,8 +1780,8 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "SEND AUTO" else "SEND ASK"
                         MoreMenuItem.AR_TOOLS -> "AR TOOLS"
                         MoreMenuItem.DISPLAY -> "DISPLAY"
-                        MoreMenuItem.CODI_CLI -> "CODI CLI"
-                        MoreMenuItem.CODI_CLEAR -> "CODI CLEAR"
+                        MoreMenuItem.CODEX_CLI -> "CODEX CLI"
+                        MoreMenuItem.CODEX_CLEAR -> "CODEX CLEAR"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
                     }
                     val activeMark = if (isActive) "*" else " "
@@ -2137,7 +2137,7 @@ private fun CliTerminalOverlay(
     }
 
     HudOverlayPanel(
-        title = "CODI CLI",
+        title = "CODEX CLI",
         fontFamily = fontFamily,
         modifier = modifier,
         horizontalPadding = 10.dp,

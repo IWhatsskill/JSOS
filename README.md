@@ -7,12 +7,12 @@
 It consists of two Android apps:
 
 - **JSOS Core** - the phone app. It connects to OpenClaw, stores local runtime settings, handles voice input, TTS settings, sessions, camera handoff, Rokid pairing, HUD deployment, and the experimental private Codex CLI bridge client.
-- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, can trigger Rokid AR picture/recording scenes, and includes an experimental CODI CLI terminal view.
+- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, can trigger Rokid AR picture/recording scenes, and includes an experimental Codex CLI terminal view.
 
 JSOS started as a fork of the upstream Clawsses project and has been substantially reworked into a separate development-preview project. It is being prepared as a public fork base and is not presented as a finished consumer product.
 
 <p align="center">
-  <img src="docs/images/Top-Picture.png" alt="JSOS smart-glasses HUD preview" width="100%">
+  <img src="docs/images/jsos-social-preview.png" alt="JSOS smart-glasses HUD preview" width="100%">
 </p>
 
 ## Showcase
@@ -35,7 +35,7 @@ Development-preview areas:
 
 - Rokid device behavior depends on the proprietary Rokid CXR SDK and device firmware.
 - OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version and audio route.
-- The CODI CLI HUD/Core path is experimental. It expects a user-managed private WebSocket bridge and does not include a hosted service, Codex credentials, or server setup.
+- The Codex CLI HUD/Core path is experimental. It expects a user-managed private WebSocket bridge and does not include a hosted service, Codex credentials, or server setup.
 - Release signing is intentionally local-only and requires private signing properties that must not be published.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage.
 
@@ -66,7 +66,7 @@ Main JSOS changes include:
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
 - Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
 - Added JSOS HUD `AR PIC` and `AR REC` options that trigger Rokid AR picture / mixed-recording scene commands from the glasses app.
-- Added an experimental CODI CLI HUD view and JSOS Core bridge client for private Codex CLI bridge setups.
+- Added an experimental Codex CLI HUD view and JSOS Core bridge client for private Codex CLI bridge setups.
 - Chunked phone-to-glasses message transport for larger JSON payloads.
 - Wake acknowledgments and status messages between phone and HUD.
 - Public-readiness cleanup: neutral assets, README rewrite, safer `.gitignore`, redacted sensitive logs, local-only signing, and clearer security notes.
@@ -103,14 +103,14 @@ adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 | OpenClaw Gateway | WebSocket to JSOS Core | AI sessions, chat streaming, tool execution |
 | JSOS Core / Phone App | WebSocket to OpenClaw; Bluetooth CXR to JSOS HUD | Bridge + voice, TTS playback, wake management |
 | JSOS HUD / Glasses App | Bluetooth CXR messages from JSOS Core; local Rokid scene commands | HUD + gestures, camera capture, AR picture/record triggers, session picker |
-| Optional private Codex CLI bridge | WebSocket from JSOS Core to a user-managed private bridge | Experimental CODI CLI output in JSOS HUD |
+| Optional private Codex CLI bridge | WebSocket from JSOS Core to a user-managed private bridge | Experimental Codex CLI output in JSOS HUD |
 
 ## Repository Layout
 
 | Path | Purpose |
 | --- | --- |
 | `phone-app/` | JSOS Core Android phone app. Bridges OpenClaw, Rokid CXR, voice, TTS, sessions, camera handoff, and HUD deployment. |
-| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, sessions, staged input, voice state, camera requests, Rokid AR picture/record triggers, and the experimental CODI CLI view. |
+| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, sessions, staged input, voice state, camera requests, Rokid AR picture/record triggers, and the experimental Codex CLI view. |
 | `shared/` | Shared JSON protocol models used between phone, glasses, and OpenClaw-facing code. |
 | `docs/` | Public notes and neutral visual assets. Keep screenshots redacted before publication. |
 | `gradle/` | Gradle wrapper files. |
@@ -269,7 +269,7 @@ JSOS Core is responsible for:
 - Optional ElevenLabs TTS settings and playback path.
 - Photo capture handoff from the glasses to the phone/OpenClaw flow.
 - HUD deployment flow for selecting a separate JSOS HUD APK and handing installation to Hi Rokid / CXR-L.
-- Experimental private Codex CLI bridge client for the HUD CODI CLI view.
+- Experimental private Codex CLI bridge client for the HUD Codex CLI view.
 
 ### JSOS HUD glasses app
 
@@ -289,7 +289,7 @@ JSOS HUD is responsible for:
 - Camera request flow and photo thumbnail staging.
 - Rokid AR Picture and AR Record scene triggers from the HUD AR TOOLS submenu.
 - Wake acknowledgments and TTS toggle messages back to the phone.
-- Experimental CODI CLI terminal view for private Codex CLI bridge setups.
+- Experimental Codex CLI terminal view for private Codex CLI bridge setups.
 
 ## Usage
 
@@ -345,14 +345,14 @@ JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene comma
 
 This path does not merge media inside JSOS. It delegates capture/processing to Rokid's glasses-side system flow; availability depends on the target Rokid firmware and services.
 
-### Experimental CODI CLI Bridge
+### Experimental Codex CLI Bridge
 
 JSOS includes an experimental private Codex CLI bridge path for local/VPN setups:
 
-- JSOS HUD opens `MORE` -> `CODI CLI`.
+- JSOS HUD opens `MORE` -> `Codex CLI`.
 - JSOS Core connects to a user-managed WebSocket bridge derived from the configured OpenClaw host, using port `18890` and path `/codex-cli`.
-- HUD input is sent to that bridge, and returned output is displayed in the CODI CLI terminal overlay.
-- `CODI CLEAR` clears the local HUD terminal view only; it does not reset the remote Codex session or workspace.
+- HUD input is sent to that bridge, and returned output is displayed in the Codex CLI terminal overlay.
+- `CODEX CLEAR` clears the local HUD terminal view only; it does not reset the remote Codex session or workspace.
 
 The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private VPS configuration, or any credentials. Keep this bridge private, for example on a trusted LAN or Tailnet, and do not expose it directly to the public internet.
 
@@ -453,7 +453,7 @@ Common glasses-to-phone messages:
 
 Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime speech-to-text runs phone-side. Core Agent Wake also runs phone-side and routes leading agent names through JSOS Core's session resolver before sending text to OpenClaw. OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths and can be started either from Core Live Talk on the phone or from the glasses voice button in `LIVE TALK` mode.
 
-The experimental CODI CLI terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Codex CLI bridge over its own WebSocket connection.
+The experimental Codex CLI terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Codex CLI bridge over its own WebSocket connection.
 
 Large phone-to-glasses JSON payloads are split into `chunk_part` messages and reassembled on JSOS HUD.
 
