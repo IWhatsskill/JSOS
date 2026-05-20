@@ -2419,6 +2419,7 @@ private fun CodexCliDeck(
         CodexCliBridgeClient.State.ERROR -> Color(0xFFFF5F6D)
         CodexCliBridgeClient.State.DISCONNECTED -> JsosPalette.Muted
     }
+    val lineBlocks = remember(lines) { codexCliLineBlocks(lines) }
 
     Column(
         modifier = Modifier
@@ -2432,8 +2433,8 @@ private fun CodexCliDeck(
             accent = accent,
             rows = listOf(
                 "State" to status.name,
-                "Bridge" to (detail?.takeIf { it.isNotBlank() } ?: "Private CLI"),
-                "Tap" to if (connected) "SEND" else "CONNECT",
+                "Workspace" to "Admin",
+                "Action" to if (connected) "SEND" else "CONNECT",
             ),
         )
 
@@ -2450,16 +2451,58 @@ private fun CodexCliDeck(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(lines) { line ->
-                    Text(
-                        text = line,
-                        color = if (line.startsWith("[error]", ignoreCase = true)) Color(0xFFFF5F6D) else JsosPalette.Green,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        lineHeight = 17.sp,
-                    )
+                items(lineBlocks) { block ->
+                    when (block.type) {
+                        CodexCliLineType.PROMPT -> Text(
+                            text = block.text,
+                            color = JsosPalette.Cyan,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                        )
+
+                        CodexCliLineType.RESPONSE -> Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF061214).copy(alpha = 0.88f),
+                            border = BorderStroke(1.dp, JsosPalette.Green.copy(alpha = 0.82f)),
+                        ) {
+                            Text(
+                                text = block.text,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                color = JsosPalette.Green,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                            )
+                        }
+
+                        CodexCliLineType.ERROR -> Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF1B0C10).copy(alpha = 0.86f),
+                            border = BorderStroke(1.dp, Color(0xFFFF5F6D).copy(alpha = 0.82f)),
+                        ) {
+                            Text(
+                                text = block.text,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                color = Color(0xFFFF5F6D),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                            )
+                        }
+
+                        CodexCliLineType.SYSTEM -> Text(
+                            text = block.text,
+                            color = JsosPalette.Muted,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                        )
+                    }
                 }
             }
         }
@@ -2505,6 +2548,57 @@ private fun CodexCliDeck(
         }
     }
 }
+
+private enum class CodexCliLineType {
+    PROMPT,
+    RESPONSE,
+    ERROR,
+    SYSTEM,
+}
+
+private data class CodexCliLineBlock(
+    val type: CodexCliLineType,
+    val text: String,
+)
+
+private fun codexCliLineBlocks(lines: List<String>): List<CodexCliLineBlock> {
+    val blocks = mutableListOf<CodexCliLineBlock>()
+    val responseBuffer = mutableListOf<String>()
+
+    fun flushResponse() {
+        if (responseBuffer.isNotEmpty()) {
+            blocks += CodexCliLineBlock(CodexCliLineType.RESPONSE, responseBuffer.joinToString("\n"))
+            responseBuffer.clear()
+        }
+    }
+
+    lines.forEach { rawLine ->
+        val line = rawLine.trimEnd()
+        if (line.isBlank()) return@forEach
+
+        when {
+            line.startsWith(">") -> {
+                flushResponse()
+                blocks += CodexCliLineBlock(CodexCliLineType.PROMPT, line)
+            }
+            line.startsWith("[error]", ignoreCase = true) -> {
+                flushResponse()
+                blocks += CodexCliLineBlock(CodexCliLineType.ERROR, line)
+            }
+            line.startsWith("[link]", ignoreCase = true) ||
+                line.endsWith("cleared.", ignoreCase = true) ||
+                line.endsWith("ready.", ignoreCase = true) -> {
+                flushResponse()
+                blocks += CodexCliLineBlock(CodexCliLineType.SYSTEM, line)
+            }
+            else -> responseBuffer += line
+        }
+    }
+
+    flushResponse()
+    return blocks
+}
+
 @Composable
 private fun VoiceDeck(
     isListening: Boolean,
