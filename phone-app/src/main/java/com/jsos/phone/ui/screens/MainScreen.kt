@@ -870,8 +870,13 @@ fun MainScreen() {
                     }
                     "cli_input" -> {
                         val text = json.optString("text", "")
-                        android.util.Log.d("MainScreen", "Codex CLI input from glasses (${text.length} chars)")
-                        codexCliBridgeClient.sendInput(text)
+                        val photosToSend = pendingPhotos
+                        android.util.Log.d("MainScreen", "Codex CLI input from glasses (${text.length} chars, photos=${photosToSend.size})")
+                        val sent = codexCliBridgeClient.sendInput(text, photosToSend)
+                        if (sent && photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
+                            pendingPhotos = emptyList()
+                            glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                        }
                     }
                     "cli_stop" -> {
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI stop")

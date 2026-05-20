@@ -1,12 +1,17 @@
 package com.jsos.phone.codex
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -14,7 +19,7 @@ import java.util.concurrent.TimeUnit
  *
  * The bridge is intentionally simple: JSOS Core owns the WebSocket, JSOS HUD
  * remains a terminal-style controller, and the VPS service can decide how it
- * starts /usr/local/bin/codexcli.
+ * starts /usr/local/bin/codex.
  */
 class CodexCliBridgeClient {
     enum class State {
@@ -53,25 +58,40 @@ class CodexCliBridgeClient {
         Log.d(TAG, "Connecting Codex CLI bridge")
     }
 
-    fun sendInput(text: String) {
+    fun sendInput(text: String, photos: List<String> = emptyList()): Boolean {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty()) return false
 
         val socket = webSocket
         if (socket == null || currentState != State.CONNECTED) {
             currentState = State.ERROR
             emitStatus("Bridge offline")
-            return
+            return false
         }
 
+        val bridgeImages = photos.mapNotNull { prepareBridgeImage(it) }
         val payload = JSONObject().apply {
             put("type", "input")
             put("text", trimmed)
+            if (bridgeImages.isNotEmpty()) {
+                put("imageBase64", bridgeImages.first().base64)
+                put("mimeType", bridgeImages.first().mimeType)
+                put("images", JSONArray().apply {
+                    bridgeImages.forEach { image ->
+                        put(JSONObject().apply {
+                            put("imageBase64", image.base64)
+                            put("mimeType", image.mimeType)
+                        })
+                    }
+                })
+            }
         }
-        if (!socket.send(payload.toString())) {
+        val sent = socket.send(payload.toString())
+        if (!sent) {
             currentState = State.ERROR
             emitStatus("Send failed")
         }
+        return sent
     }
 
     fun stop() {
@@ -158,6 +178,53 @@ class CodexCliBridgeClient {
     private fun emitStatus(detail: String?) {
         onStatus?.invoke(currentState, detail)
     }
+
+    private fun prepareBridgeImage(base64: String): BridgeImage? {
+        val sourceBytes = runCatching {
+            Base64.decode(base64, Base64.DEFAULT)
+        }.getOrNull() ?: return null
+
+        return when {
+            sourceBytes.isJpeg() -> BridgeImage(
+                base64 = Base64.encodeToString(sourceBytes, Base64.NO_WRAP),
+                mimeType = "image/jpeg"
+            )
+            sourceBytes.isPng() -> BridgeImage(
+                base64 = Base64.encodeToString(sourceBytes, Base64.NO_WRAP),
+                mimeType = "image/png"
+            )
+            else -> transcodeToJpeg(sourceBytes)
+        }
+    }
+
+    private fun transcodeToJpeg(sourceBytes: ByteArray): BridgeImage? {
+        val bitmap = BitmapFactory.decodeByteArray(sourceBytes, 0, sourceBytes.size) ?: return null
+        return try {
+            val stream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+            BridgeImage(
+                base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP),
+                mimeType = "image/jpeg"
+            )
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    private fun ByteArray.isJpeg(): Boolean =
+        size >= 3 && this[0] == 0xFF.toByte() && this[1] == 0xD8.toByte() && this[2] == 0xFF.toByte()
+
+    private fun ByteArray.isPng(): Boolean =
+        size >= 8 &&
+                this[0] == 0x89.toByte() &&
+                this[1] == 'P'.code.toByte() &&
+                this[2] == 'N'.code.toByte() &&
+                this[3] == 'G'.code.toByte()
+
+    private data class BridgeImage(
+        val base64: String,
+        val mimeType: String
+    )
 
     private companion object {
         const val TAG = "CodexCliBridge"

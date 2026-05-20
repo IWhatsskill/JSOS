@@ -27,6 +27,7 @@ import com.jsos.glasses.service.PhoneConnectionService
 import com.jsos.glasses.ui.AgentState
 import com.jsos.glasses.ui.ChatFocusArea
 import com.jsos.glasses.ui.ChatHudState
+import com.jsos.glasses.ui.CliActionItem
 import com.jsos.glasses.ui.DisplayMessage
 import com.jsos.glasses.ui.HudDisplaySize
 import com.jsos.glasses.ui.HudPosition
@@ -940,7 +941,7 @@ class HudActivity : ComponentActivity() {
 
     private fun clearCliTerminal() {
         val current = hudState.value
-        val lines = listOf("CLI screen cleared.")
+        val lines = listOf("Codex output cleared.")
         hudState.value = current.copy(
             showCliTerminal = true,
             showMoreMenu = false,
@@ -948,6 +949,7 @@ class HudActivity : ComponentActivity() {
             cliDetail = "",
             cliLines = lines,
             cliScrollPosition = 0,
+            cliActionIndex = CliActionItem.SEND.ordinal,
             focusedArea = ChatFocusArea.CONTENT
         )
     }
@@ -955,7 +957,7 @@ class HudActivity : ComponentActivity() {
     private fun openCliTerminal() {
         val current = hudState.value
         val lines = if (current.cliLines.isEmpty()) {
-            listOf("JSOS Core will connect to the private Codex CLI bridge.")
+            listOf("Admin Codex ready.")
         } else {
             current.cliLines
         }
@@ -967,6 +969,7 @@ class HudActivity : ComponentActivity() {
             cliDetail = "",
             cliLines = lines,
             cliScrollPosition = maxOf(0, lines.size - 1),
+            cliActionIndex = CliActionItem.SEND.ordinal,
             focusedArea = ChatFocusArea.CONTENT
         )
         phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
@@ -974,22 +977,69 @@ class HudActivity : ComponentActivity() {
 
     private fun handleCliTerminalGesture(gesture: Gesture) {
         val current = hudState.value
+        val actionCount = CliActionItem.entries.size
         when (gesture) {
             Gesture.SWIPE_FORWARD -> {
-                val newIndex = maxOf(0, current.cliScrollPosition - 5)
-                hudState.value = current.copy(cliScrollPosition = newIndex)
+                val newIndex = if (current.cliActionIndex <= 0) actionCount - 1 else current.cliActionIndex - 1
+                hudState.value = current.copy(cliActionIndex = newIndex)
             }
             Gesture.SWIPE_BACKWARD -> {
-                val newIndex = minOf(maxOf(0, current.cliLines.size - 1), current.cliScrollPosition + 5)
-                hudState.value = current.copy(cliScrollPosition = newIndex)
+                val newIndex = (current.cliActionIndex + 1) % actionCount
+                hudState.value = current.copy(cliActionIndex = newIndex)
             }
             Gesture.TAP -> {
-                val staged = current.stagingText.trim()
-                val typed = current.inputText.trim()
-                val text = staged.ifEmpty { typed }
-                if (text.isNotEmpty()) {
-                    hudState.value = current.copy(inputText = text)
-                    submitInput()
+                when (CliActionItem.entries[current.cliActionIndex.coerceIn(CliActionItem.entries.indices)]) {
+                    CliActionItem.CAM -> {
+                        if (current.photoThumbnails.size >= MAX_PHOTOS) {
+                            Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring Codex photo request")
+                        } else if (DEBUG_MODE) {
+                            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                cameraCapture.capture()
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        } else {
+                            phoneConnection.sendToPhone("""{"type":"take_photo"}""")
+                            Log.d(GlassesApp.TAG, "Requested Codex photo capture from phone")
+                        }
+                    }
+                    CliActionItem.LINK -> {
+                        val connected = current.cliStatus.equals("CONNECTED", ignoreCase = true)
+                        if (connected) {
+                            phoneConnection.sendToPhone("""{"type":"cli_disconnect"}""")
+                            hudState.value = current.copy(cliStatus = "OFFLINE", cliDetail = "Disconnected")
+                        } else {
+                            hudState.value = current.copy(cliStatus = "CONNECTING", cliDetail = "")
+                            phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
+                        }
+                    }
+                    CliActionItem.SEND -> {
+                        val staged = current.stagingText.trim()
+                        val typed = current.inputText.trim()
+                        val text = staged.ifEmpty { typed }
+                        if (text.isNotEmpty()) {
+                            hudState.value = current.copy(inputText = text)
+                            submitInput()
+                        }
+                    }
+                    CliActionItem.STOP -> {
+                        phoneConnection.sendToPhone("""{"type":"cli_stop"}""")
+                    }
+                    CliActionItem.CLEAR -> {
+                        if (current.stagingText.isNotBlank() || current.photoThumbnails.isNotEmpty() || current.showInputStaging) {
+                            hudState.value = current.copy(
+                                showInputStaging = false,
+                                stagingText = "",
+                                photoThumbnails = emptyList(),
+                                inputActionIndex = 0,
+                                voiceState = VoiceInputState.Idle,
+                                voiceText = ""
+                            )
+                            phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
+                        } else {
+                            clearCliTerminal()
+                        }
+                    }
                 }
             }
             Gesture.DOUBLE_TAP -> {
@@ -1633,7 +1683,6 @@ class HudActivity : ComponentActivity() {
                         current.copy(
                             cliStatus = state,
                             cliDetail = detail,
-                            cliLines = if (current.cliLines.isEmpty()) listOf("Codex CLI bridge: $state") else current.cliLines,
                             cliScrollPosition = maxOf(0, current.cliLines.size - 1)
                         )
                     }

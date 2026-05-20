@@ -356,6 +356,7 @@ JSOS includes an experimental private Admin Codex bridge path for local/VPN setu
 - JSOS HUD opens `MORE` -> `Codex CLI`.
 - JSOS Core connects to a user-managed WebSocket bridge using port `18890` and path `/codex-cli`. The default host is derived from the configured OpenClaw host only as a convenience for private LAN/VPN/Tailnet setups.
 - Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view.
+- Staged photos can be attached to Admin Codex input when the private bridge supports image payloads. JSOS Core sends JPEG/PNG Base64 image payloads and transcodes other decodable staged image formats to JPEG before sending.
 - `CLEAR` / `CODEX CLEAR` clears the local terminal view only; it does not reset the remote Codex session or workspace.
 
 The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private VPS configuration, OpenClaw server configuration, or any credentials. Keep this bridge private, for example on a trusted LAN or Tailnet, and do not expose it directly to the public internet.
@@ -457,7 +458,7 @@ Common glasses-to-phone messages:
 
 Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime speech-to-text runs phone-side. Core Agent Wake also runs phone-side and routes leading agent names through JSOS Core's session resolver before sending text to OpenClaw. OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths and can be started either from Core Live Talk on the phone or from the glasses voice button in `LIVE TALK` mode.
 
-The experimental Admin Codex terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Admin Codex bridge over its own WebSocket connection.
+The experimental Admin Codex terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Admin Codex bridge over its own WebSocket connection. When staged photos are present, Core can attach them to the bridge request as image payloads.
 
 Large phone-to-glasses JSON payloads are split into `chunk_part` messages and reassembled on JSOS HUD.
 

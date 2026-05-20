@@ -132,6 +132,14 @@ enum class VoiceSendMode {
     AUTO
 }
 
+enum class CliActionItem(val label: String) {
+    CAM("Cam"),
+    LINK("Link"),
+    SEND("Send"),
+    STOP("Stop"),
+    CLEAR("Clear")
+}
+
 /**
  * A display-ready chat message for the HUD.
  * Stores raw content; wrapping is computed at render time.
@@ -256,7 +264,8 @@ data class ChatHudState(
     val cliStatus: String = "OFFLINE",
     val cliDetail: String = "",
     val cliLines: List<String> = emptyList(),
-    val cliScrollPosition: Int = 0
+    val cliScrollPosition: Int = 0,
+    val cliActionIndex: Int = CliActionItem.SEND.ordinal
 ) {
     /** Total number of messages */
     val totalMessages: Int get() = messages.size
@@ -673,7 +682,13 @@ fun HudScreen(
                 status = state.cliStatus,
                 detail = state.cliDetail,
                 scrollPosition = state.cliScrollPosition,
-                voiceSendMode = state.voiceSendMode,
+                selectedActionIndex = state.cliActionIndex,
+                stagingText = state.stagingText,
+                voiceText = state.voiceText,
+                showInputStaging = state.showInputStaging,
+                photos = state.photoThumbnails,
+                voiceState = state.voiceState,
+                displaySize = state.displaySize,
                 fontFamily = monoFontFamily
             )
         }
@@ -2118,86 +2133,380 @@ private fun SlashParamOverlay(
 // CODEX CLI TERMINAL OVERLAY
 // ============================================================================
 
+private enum class CliBlockKind {
+    INPUT,
+    RESPONSE,
+    SYSTEM,
+    ERROR
+}
+
+private data class CliLineBlock(
+    val kind: CliBlockKind,
+    val text: String
+)
+
+private fun buildCliLineBlocks(lines: List<String>): List<CliLineBlock> {
+    if (lines.isEmpty()) {
+        return listOf(CliLineBlock(CliBlockKind.SYSTEM, "Admin Codex ready."))
+    }
+
+    val blocks = mutableListOf<CliLineBlock>()
+    val responseBuffer = mutableListOf<String>()
+
+    fun flushResponse() {
+        val text = responseBuffer.joinToString("\n").trim()
+        if (text.isNotEmpty()) {
+            blocks += CliLineBlock(CliBlockKind.RESPONSE, text)
+        }
+        responseBuffer.clear()
+    }
+
+    lines.forEach { rawLine ->
+        val line = rawLine.trimEnd()
+        val trimmed = line.trim()
+        if (trimmed.isEmpty()) return@forEach
+
+        when {
+            trimmed.startsWith("[status]", ignoreCase = true) -> {
+                // Status is already shown in the header; keep the transcript clean.
+            }
+            trimmed.startsWith("[error]", ignoreCase = true) -> {
+                flushResponse()
+                blocks += CliLineBlock(
+                    CliBlockKind.ERROR,
+                    trimmed.removePrefix("[error]").trim().ifEmpty { "Codex bridge error" }
+                )
+            }
+            trimmed.startsWith(">") -> {
+                flushResponse()
+                blocks += CliLineBlock(CliBlockKind.INPUT, trimmed.removePrefix(">").trim())
+            }
+            trimmed.startsWith("[link]", ignoreCase = true) ||
+                    trimmed.contains("screen cleared", ignoreCase = true) ||
+                    trimmed.contains("output cleared", ignoreCase = true) ||
+                    trimmed.contains("bridge ready", ignoreCase = true) ||
+                    trimmed.contains("Admin Codex ready", ignoreCase = true) -> {
+                flushResponse()
+                blocks += CliLineBlock(CliBlockKind.SYSTEM, trimmed)
+            }
+            else -> responseBuffer += line
+        }
+    }
+
+    flushResponse()
+    return blocks.ifEmpty { listOf(CliLineBlock(CliBlockKind.SYSTEM, "Admin Codex ready.")) }
+}
+
 @Composable
 private fun CliTerminalOverlay(
     lines: List<String>,
     status: String,
     detail: String,
     scrollPosition: Int,
-    voiceSendMode: VoiceSendMode,
+    selectedActionIndex: Int,
+    stagingText: String,
+    voiceText: String,
+    showInputStaging: Boolean,
+    photos: List<Bitmap>,
+    voiceState: VoiceInputState,
+    displaySize: HudDisplaySize,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    val visibleLines = if (lines.isEmpty()) listOf("Waiting for Codex CLI bridge...") else lines
+    val visibleBlocks = remember(lines) { buildCliLineBlocks(lines) }
+    val lastResponseIndex = visibleBlocks.indexOfLast { it.kind == CliBlockKind.RESPONSE }
+    val bodyFontSize = displaySize.fontSizeSp.sp
+    val smallFontSize = (displaySize.fontSizeSp - 2).coerceAtLeast(8).sp
+    val selectedAction = selectedActionIndex.coerceIn(CliActionItem.entries.indices)
+    val statusColor = when (status.uppercase()) {
+        "CONNECTED" -> HudColors.green
+        "CONNECTING" -> HudColors.yellow
+        "ERROR" -> HudColors.error
+        else -> HudColors.primaryText
+    }
+    val statusLabel = when (status.uppercase()) {
+        "CONNECTED" -> "READY"
+        "CONNECTING" -> "LINK"
+        "ERROR" -> "ERROR"
+        else -> status.ifBlank { "OFFLINE" }
+    }
 
-    LaunchedEffect(visibleLines.size, scrollPosition) {
-        val target = scrollPosition.coerceIn(visibleLines.indices)
+    LaunchedEffect(visibleBlocks.size, scrollPosition) {
+        val target = scrollPosition.coerceIn(visibleBlocks.indices)
         listState.animateScrollToItem(target)
     }
 
-    HudOverlayPanel(
-        title = "CODEX CLI",
-        fontFamily = fontFamily,
-        modifier = modifier,
-        horizontalPadding = 10.dp,
-        verticalPadding = 14.dp,
-        footerText = if (voiceSendMode == VoiceSendMode.AUTO) {
-            "SWIPE SCROLL  LONG VOICE  AUTO SEND  2XTAP HIDE"
-        } else {
-            "SWIPE SCROLL  LONG VOICE  TAP SEND  2XTAP HIDE"
-        }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black),
+        contentAlignment = Alignment.TopStart
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(22.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(top = TopGhostSafeZone)
+                .padding(horizontal = 2.dp, vertical = 6.dp)
+                .background(Color.Black.copy(alpha = 0.96f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 2.dp, vertical = 6.dp)
         ) {
-            Text(
-                text = "STATE $status",
-                color = when (status.uppercase()) {
-                    "CONNECTED" -> HudColors.green
-                    "CONNECTING" -> HudColors.yellow
-                    "ERROR" -> HudColors.error
-                    else -> HudColors.primaryText
-                },
-                fontSize = 10.sp,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 22.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = statusLabel,
+                    color = statusColor,
+                    fontSize = smallFontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "CODEX CLI",
+                    color = HudColors.green,
+                    fontSize = smallFontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = detail.takeIf { it.isNotBlank() }?.take(24) ?: "Admin",
+                    color = HudColors.primaryText.copy(alpha = 0.86f),
+                    fontSize = smallFontSize,
+                    fontFamily = fontFamily,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End
+                )
+            }
+            HudDivider(alpha = 0.18f)
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clipToBounds(),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+                contentPadding = PaddingValues(bottom = 4.dp)
+            ) {
+                itemsIndexed(
+                    visibleBlocks,
+                    key = { index, block -> "$index-${block.kind}-${block.text.take(12)}" }
+                ) { index, block ->
+                    CliTerminalBlockItem(
+                        block = block,
+                        isCurrent = block.kind == CliBlockKind.RESPONSE && index == lastResponseIndex,
+                        fontSize = bodyFontSize,
+                        fontFamily = fontFamily
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            CodexInputPreview(
+                text = stagingText,
+                voiceText = voiceText,
+                showText = showInputStaging,
+                photos = photos,
+                isProcessing = voiceState is VoiceInputState.Processing,
                 fontFamily = fontFamily,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontSize = bodyFontSize
             )
-            Text(
-                text = detail.take(32),
-                color = HudColors.primaryText.copy(alpha = 0.86f),
-                fontSize = 9.sp,
+            Spacer(modifier = Modifier.height(4.dp))
+            CliBottomMenu(
+                selectedActionIndex = selectedAction,
+                connected = status.uppercase() == "CONNECTED",
                 fontFamily = fontFamily,
+                fontSize = bodyFontSize
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodexInputPreview(
+    text: String,
+    voiceText: String,
+    showText: Boolean,
+    photos: List<Bitmap>,
+    isProcessing: Boolean,
+    fontFamily: FontFamily,
+    fontSize: androidx.compose.ui.unit.TextUnit
+) {
+    val previewText = text.ifBlank { voiceText }
+    val hasText = previewText.isNotBlank()
+    if (!showText && !isProcessing && photos.isEmpty() && !hasText) return
+
+    val cursorVisible = if (isProcessing) {
+        val infiniteTransition = rememberInfiniteTransition(label = "codexInputCursor")
+        val cursorAlpha by infiniteTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(animation = tween(500)),
+            label = "codexInputBlink"
+        )
+        cursorAlpha > 0.5f
+    } else {
+        false
+    }
+    val displayText = if (isProcessing) {
+        val cursor = if (cursorVisible) "\u2588" else " "
+        if (previewText.isNotEmpty()) "$previewText $cursor" else cursor
+    } else {
+        previewText.ifEmpty { "Codex input" }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black, RoundedCornerShape(4.dp))
+            .border(
+                width = 1.dp,
+                color = if (isProcessing) HudColors.cyan.copy(alpha = 0.72f) else HudColors.green.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .heightIn(min = 22.dp, max = 80.dp)
+    ) {
+        if (photos.isNotEmpty()) {
+            PhotoThumbnailRow(
+                thumbnails = photos,
+                modifier = Modifier.padding(bottom = if (showText || isProcessing || hasText) 3.dp else 0.dp)
+            )
+        }
+        if (showText || isProcessing || hasText) {
+            Text(
+                text = displayText,
+                color = if (previewText.isBlank() && isProcessing) HudColors.cyan else HudColors.primaryText,
+                fontSize = fontSize,
+                fontFamily = fontFamily,
+                lineHeight = (fontSize.value + 2).sp,
+                letterSpacing = 0.sp,
+                softWrap = true,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun CliBottomMenu(
+    selectedActionIndex: Int,
+    connected: Boolean,
+    fontFamily: FontFamily,
+    fontSize: androidx.compose.ui.unit.TextUnit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 30.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CliActionItem.entries.forEachIndexed { index, item ->
+            val selected = index == selectedActionIndex
+            val label = when (item) {
+                CliActionItem.CAM -> "CAM"
+                CliActionItem.LINK -> if (connected) "DISC" else "LINK"
+                CliActionItem.SEND -> "SEND"
+                CliActionItem.STOP -> "STOP"
+                CliActionItem.CLEAR -> "CLEAR"
+            }
+            Text(
+                text = label,
+                color = if (selected) HudColors.green else HudColors.primaryText.copy(alpha = 0.72f),
+                fontSize = fontSize,
+                fontFamily = fontFamily,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CliTerminalBlockItem(
+    block: CliLineBlock,
+    isCurrent: Boolean,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontFamily: FontFamily
+) {
+    val shape = RoundedCornerShape(4.dp)
+    val prefix = when (block.kind) {
+        CliBlockKind.INPUT -> ">"
+        CliBlockKind.RESPONSE -> "CODEX>"
+        CliBlockKind.ERROR -> "ERR>"
+        CliBlockKind.SYSTEM -> ""
+    }
+    val textColor = when (block.kind) {
+        CliBlockKind.INPUT -> HudColors.cyan
+        CliBlockKind.RESPONSE -> HudColors.green
+        CliBlockKind.ERROR -> HudColors.error
+        CliBlockKind.SYSTEM -> HudColors.primaryText.copy(alpha = 0.7f)
+    }
+    val decoratedModifier = when {
+        block.kind == CliBlockKind.RESPONSE && isCurrent -> Modifier.border(1.dp, HudColors.green, shape)
+        block.kind == CliBlockKind.ERROR -> Modifier.border(1.dp, HudColors.error, shape)
+        block.kind == CliBlockKind.RESPONSE -> Modifier.drawBehind {
+            drawLine(
+                color = HudColors.green,
+                start = Offset(0f, 0f),
+                end = Offset(0f, size.height),
+                strokeWidth = 1.dp.toPx()
+            )
+        }
+        else -> Modifier
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(decoratedModifier)
+            .padding(horizontal = 4.dp, vertical = if (block.kind == CliBlockKind.SYSTEM) 2.dp else 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        if (prefix.isNotEmpty()) {
+            Text(
+                text = prefix,
+                color = when (block.kind) {
+                    CliBlockKind.INPUT -> HudColors.cyan
+                    CliBlockKind.ERROR -> HudColors.error
+                    else -> HudColors.green
+                },
+                fontSize = fontSize,
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.widthIn(min = 34.dp, max = 76.dp)
             )
         }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            itemsIndexed(visibleLines) { _, line ->
-                Text(
-                    text = line,
-                    color = if (line.startsWith("[error]", ignoreCase = true)) HudColors.error else HudColors.primaryText,
-                    fontSize = 10.sp,
-                    fontFamily = fontFamily,
-                    lineHeight = 12.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
+        Text(
+            text = block.text,
+            color = textColor,
+            fontSize = if (block.kind == CliBlockKind.SYSTEM) (fontSize.value - 2).coerceAtLeast(8f).sp else fontSize,
+            fontFamily = fontFamily,
+            lineHeight = (fontSize.value + 2).sp,
+            letterSpacing = 0.sp,
+            softWrap = true,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 // ============================================================================
