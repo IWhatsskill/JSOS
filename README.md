@@ -585,6 +585,7 @@ Additional notes:
 - Do not expose an experimental Admin Codex bridge directly to the public internet. Keep it on a trusted LAN/VPN/Tailnet and manage Codex authentication outside the public repository.
 - Do not distribute APKs built with real Rokid, OpenAI, ElevenLabs, OpenClaw, or signing credentials.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage. Non-secret UI preferences and some Rokid pairing metadata remain local app data.
+- JSOS suppresses verbose Rokid CXR SDK runtime logging before Bluetooth connection, but local device logs should still be treated as private diagnostic data.
 - Avoid publishing logs, screenshots, or APKs that contain transcripts, session keys, API keys, device identifiers, or account data.
 
 ## Attribution And License

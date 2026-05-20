@@ -157,7 +157,7 @@ object RokidSdkManager {
                     val clientSecret = BuildConfig.ROKID_CLIENT_SECRET.replace("-", "")
                     val encrypted = generateSnEncryptContent(glassesSn, clientSecret)
                     if (encrypted != null) {
-                        Log.i(TAG, "Generated snEncryptContent (${encrypted.size} bytes)")
+                        Log.i(TAG, "Generated SN verification payload (${encrypted.size} bytes)")
                         generatedSnEncryptContent = encrypted
                         saveCachedSnEncryptContent(encrypted, glassesSn)
                         snAutoRetryInProgress = true
@@ -165,17 +165,30 @@ object RokidSdkManager {
                         val uuid = savedSocketUuid
                         val mac = savedMacAddress
                         if (!uuid.isNullOrEmpty() && !mac.isNullOrEmpty()) {
-                            Log.i(TAG, "Retrying connectBluetooth with generated snEncryptContent...")
+                            Log.i(TAG, "Retrying connectBluetooth with generated SN verification payload...")
                             connectBluetoothInternal(uuid, mac, savedRokidAccount ?: "")
                             return
                         }
                     }
                 }
-                Log.e(TAG, "SN auto-recovery failed - could not read glasses SN or generate encrypted content")
+                Log.e(TAG, "SN auto-recovery failed - could not prepare verification payload")
             }
 
             snAutoRetryInProgress = false
             onBluetoothFailed?.invoke(errorCode?.name ?: "Unknown error")
+        }
+    }
+
+    private fun suppressRokidSdkVerboseLogs() {
+        runCatching {
+            val logUtil = Class.forName("com.rokid.cxr.client.utils.LogUtil")
+            val setLogLevel = logUtil.getDeclaredMethod("setLogLevel", Int::class.javaPrimitiveType!!)
+            setLogLevel.isAccessible = true
+            setLogLevel.invoke(null, Log.ERROR)
+        }.onSuccess {
+            Log.d(TAG, "Rokid SDK verbose logging suppressed")
+        }.onFailure {
+            Log.d(TAG, "Rokid SDK log suppression unavailable")
         }
     }
 
@@ -199,15 +212,17 @@ object RokidSdkManager {
         loadSavedConnectionInfo()
 
         try {
+            suppressRokidSdkVerboseLogs()
             cxrApi = CxrApi.getInstance()
+            suppressRokidSdkVerboseLogs()
 
             // Register access key for SN verification (required for connectBluetooth)
             val accessKey = BuildConfig.ROKID_ACCESS_KEY
             if (accessKey.isNotEmpty()) {
                 cxrApi?.updateRokidAccount(accessKey)
-                Log.d(TAG, "Rokid account registered (accessKey length=${accessKey.length})")
+                Log.d(TAG, "Rokid account registered")
             } else {
-                Log.w(TAG, "No ROKID_ACCESS_KEY configured - SN verification may fail")
+                Log.w(TAG, "Rokid account configuration missing - SN verification may fail")
             }
 
             // Set up custom command listener to receive messages from glasses
@@ -318,13 +333,14 @@ object RokidSdkManager {
             // Only use dummy content on the very first connection attempt when we don't
             // know the glasses SN yet. This avoids a redundant two-pass flow on reconnects.
             val encryptContent = if (generatedSnEncryptContent != null) {
-                Log.i(TAG, "Using cached snEncryptContent (${generatedSnEncryptContent!!.size} bytes)")
+                Log.i(TAG, "Using cached SN verification payload (${generatedSnEncryptContent!!.size} bytes)")
                 generatedSnEncryptContent!!
             } else {
-                Log.i(TAG, "First attempt - using dummy snEncryptContent (SN_CHECK_FAILED expected)")
+                Log.i(TAG, "First attempt - using dummy SN verification payload (SN_CHECK_FAILED expected)")
                 ByteArray(16)
             }
 
+            suppressRokidSdkVerboseLogs()
             cxrApi?.connectBluetooth(
                 context,
                 socketUuid,
@@ -391,7 +407,7 @@ object RokidSdkManager {
             cipher.init(Cipher.ENCRYPT_MODE, key, iv)
             cipher.doFinal(glassesSn.toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate snEncryptContent", e)
+            Log.e(TAG, "Failed to generate SN verification payload", e)
             null
         }
     }
@@ -421,7 +437,7 @@ object RokidSdkManager {
                 }
             }
             .apply()
-        Log.i(TAG, "Saved SN encrypt content to SharedPreferences")
+        Log.i(TAG, "Saved SN verification payload to SharedPreferences")
     }
 
     private fun loadCachedSnEncryptContent() {
@@ -432,9 +448,9 @@ object RokidSdkManager {
             generatedSnEncryptContent = Base64.decode(base64, Base64.NO_WRAP)
             cachedSnPlain = prefs.getString(SN_PLAIN_KEY, null)
             cachedDeviceName = prefs.getString(DEVICE_NAME_KEY, null)
-            Log.i(TAG, "Loaded cached SN encrypt content (${generatedSnEncryptContent!!.size} bytes)")
+            Log.i(TAG, "Loaded cached SN verification payload (${generatedSnEncryptContent!!.size} bytes)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load cached SN encrypt content", e)
+            Log.e(TAG, "Failed to load cached SN verification payload", e)
         }
     }
 
