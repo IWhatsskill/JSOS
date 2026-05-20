@@ -336,13 +336,8 @@ fun MainScreen() {
         }
         codexCliBridgeClient.onOutput = { output, append ->
             mainHandler.post {
-                val incomingLines = output.lines().filter { it.isNotBlank() }
-                if (incomingLines.isNotEmpty()) {
-                    codexCliLines = if (append) {
-                        (codexCliLines + incomingLines).takeLast(220)
-                    } else {
-                        incomingLines.takeLast(220)
-                    }
+                if (output.isNotBlank()) {
+                    codexCliLines = mergeCodexCliOutput(codexCliLines, output, append).takeLast(220)
                 }
             }
             val outputMsg = org.json.JSONObject().apply {
@@ -2565,6 +2560,44 @@ private data class CodexCliLineBlock(
     val type: CodexCliLineType,
     val text: String,
 )
+
+private fun mergeCodexCliOutput(
+    current: List<String>,
+    output: String,
+    append: Boolean,
+): List<String> {
+    val incomingLines = output.split('\n')
+        .map { it.trimEnd('\r') }
+        .filter { it.isNotEmpty() }
+    if (incomingLines.isEmpty()) return current
+    if (!append) return incomingLines
+
+    val merged = current.toMutableList()
+    incomingLines.forEachIndexed { index, line ->
+        val isFirst = index == 0
+        val isControlLine = line.startsWith(">") ||
+            line.startsWith("[error]", ignoreCase = true) ||
+            line.startsWith("[link]", ignoreCase = true) ||
+            line.startsWith("[status]", ignoreCase = true)
+        val canAppendToResponse = isFirst &&
+            merged.isNotEmpty() &&
+            !isControlLine &&
+            merged.last().isNotBlank() &&
+            !merged.last().startsWith(">") &&
+            !merged.last().startsWith("[error]", ignoreCase = true) &&
+            !merged.last().startsWith("[link]", ignoreCase = true) &&
+            !merged.last().startsWith("[status]", ignoreCase = true) &&
+            !merged.last().endsWith("cleared.", ignoreCase = true) &&
+            !merged.last().endsWith("ready.", ignoreCase = true)
+
+        if (canAppendToResponse) {
+            merged[merged.lastIndex] = merged.last() + line
+        } else {
+            merged += line
+        }
+    }
+    return merged
+}
 
 private fun codexCliLineBlocks(lines: List<String>): List<CodexCliLineBlock> {
     val blocks = mutableListOf<CodexCliLineBlock>()
