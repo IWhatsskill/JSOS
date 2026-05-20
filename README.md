@@ -6,8 +6,8 @@
 
 It consists of two Android apps:
 
-- **JSOS Core** - the phone app. It connects to OpenClaw, stores local runtime settings, handles voice input, TTS settings, sessions, camera handoff, Rokid pairing, HUD deployment, and the experimental private Codex CLI bridge client.
-- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, can trigger Rokid AR picture/recording scenes, and includes an experimental Codex CLI terminal view.
+- **JSOS Core** - the phone app. It connects to OpenClaw, stores local runtime settings, handles voice input, TTS settings, sessions, camera handoff, Rokid pairing, HUD deployment, and the experimental private Admin Codex bridge client.
+- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, can trigger Rokid AR picture/recording scenes, and includes an experimental Admin Codex terminal view.
 
 JSOS started as a fork of the upstream Clawsses project and has been substantially reworked into a separate development-preview project. It is being prepared as a public fork base and is not presented as a finished consumer product.
 
@@ -28,14 +28,14 @@ Current state:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Codex CLI bridge client are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Admin Codex bridge client are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview areas:
 
 - Rokid device behavior depends on the proprietary Rokid CXR SDK and device firmware.
 - OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version and audio route.
-- The Codex CLI HUD/Core path is experimental. It expects a user-managed private WebSocket bridge and does not include a hosted service, Codex credentials, or server setup.
+- The Admin Codex HUD/Core path is experimental. It expects a user-managed private WebSocket bridge to a separate Codex CLI environment and does not include a hosted service, Codex credentials, or server setup.
 - Release signing is intentionally local-only and requires private signing properties that must not be published.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage.
 
@@ -66,7 +66,7 @@ Main JSOS changes include:
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
 - Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
 - Added JSOS HUD `AR PIC` and `AR REC` options that trigger Rokid AR picture / mixed-recording scene commands from the glasses app.
-- Added an experimental Codex CLI HUD view and JSOS Core bridge client for private Codex CLI bridge setups.
+- Added an experimental Admin Codex HUD view and JSOS Core bridge client for private Admin Codex bridge setups.
 - Chunked phone-to-glasses message transport for larger JSON payloads.
 - Wake acknowledgments and status messages between phone and HUD.
 - Public-readiness cleanup: neutral assets, README rewrite, safer `.gitignore`, redacted sensitive logs, local-only signing, and clearer security notes.
@@ -103,7 +103,7 @@ adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 | OpenClaw Gateway | WebSocket to JSOS Core | AI sessions, chat streaming, tool execution |
 | JSOS Core / Phone App | WebSocket to OpenClaw; Bluetooth CXR to JSOS HUD | Bridge + voice, TTS playback, wake management |
 | JSOS HUD / Glasses App | Bluetooth CXR messages from JSOS Core; local Rokid scene commands | HUD + gestures, camera capture, AR picture/record triggers, session picker |
-| Optional private Codex CLI bridge | WebSocket from JSOS Core to a user-managed private bridge | Experimental Codex CLI output in JSOS HUD |
+| Optional private Admin Codex bridge | WebSocket from JSOS Core to a user-managed private bridge | Experimental Codex CLI output in JSOS HUD/Core, separate from OpenClaw agents |
 
 ## Repository Layout
 
@@ -270,7 +270,7 @@ JSOS Core is responsible for:
 - Optional ElevenLabs TTS settings and playback path.
 - Photo capture handoff from the glasses to the phone/OpenClaw flow.
 - HUD deployment flow for selecting a separate JSOS HUD APK and handing installation to Hi Rokid / CXR-L.
-- Experimental private Codex CLI bridge client for the Core Codex tab and HUD Codex CLI view.
+- Experimental private Admin Codex bridge client for the Core Codex tab and HUD Codex CLI view.
 
 ### JSOS HUD glasses app
 
@@ -290,7 +290,7 @@ JSOS HUD is responsible for:
 - Camera request flow and photo thumbnail staging.
 - Rokid AR Picture and AR Record scene triggers from the HUD AR TOOLS submenu.
 - Wake acknowledgments and TTS toggle messages back to the phone.
-- Experimental Codex CLI terminal view for private Codex CLI bridge setups.
+- Experimental Admin Codex terminal view for private Admin Codex bridge setups.
 
 ## Usage
 
@@ -348,17 +348,17 @@ JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene comma
 
 This path does not merge media inside JSOS. It delegates capture/processing to Rokid's glasses-side system flow; availability depends on the target Rokid firmware and services.
 
-### Experimental Codex CLI Bridge
+### Experimental Admin Codex Bridge
 
-JSOS includes an experimental private Codex CLI bridge path for local/VPN setups:
+JSOS includes an experimental private Admin Codex bridge path for local/VPN setups. This path is separate from OpenClaw: it is intended for a user-managed Codex CLI environment such as a private VPS admin workspace, not for an OpenClaw agent, Discord bot, or OpenClaw session.
 
 - JSOS Core provides a `Codex` tab with link, send, stop, and clear controls.
 - JSOS HUD opens `MORE` -> `Codex CLI`.
-- JSOS Core connects to a user-managed WebSocket bridge derived from the configured OpenClaw host, using port `18890` and path `/codex-cli`.
+- JSOS Core connects to a user-managed WebSocket bridge using port `18890` and path `/codex-cli`. The default host is derived from the configured OpenClaw host only as a convenience for private LAN/VPN/Tailnet setups.
 - Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view.
 - `CLEAR` / `CODEX CLEAR` clears the local terminal view only; it does not reset the remote Codex session or workspace.
 
-The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private VPS configuration, or any credentials. Keep this bridge private, for example on a trusted LAN or Tailnet, and do not expose it directly to the public internet.
+The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private VPS configuration, OpenClaw server configuration, or any credentials. Keep this bridge private, for example on a trusted LAN or Tailnet, and do not expose it directly to the public internet.
 
 ### Text-To-Speech
 
@@ -457,7 +457,7 @@ Common glasses-to-phone messages:
 
 Direct voice and Realtime are represented by the voice message flow: JSOS HUD sends `start_voice`, JSOS Core replies with `voice_state` including the recognition mode (`openai`, `device`, or `live`), and then sends `voice_result`. OpenAI Realtime speech-to-text runs phone-side. Core Agent Wake also runs phone-side and routes leading agent names through JSOS Core's session resolver before sending text to OpenClaw. OpenClaw Live Talk uses the `talk.session.*` / `talk.event` gateway protocol paths and can be started either from Core Live Talk on the phone or from the glasses voice button in `LIVE TALK` mode.
 
-The experimental Codex CLI terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Codex CLI bridge over its own WebSocket connection.
+The experimental Admin Codex terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Admin Codex bridge over its own WebSocket connection.
 
 Large phone-to-glasses JSON payloads are split into `chunk_part` messages and reassembled on JSOS HUD.
 
@@ -581,7 +581,7 @@ Additional notes:
 
 - `ws://` / cleartext traffic is intended for local or private OpenClaw setups. Bare host entries intentionally remain `ws://host:port` for compatibility with local gateways. Prefer trusted LAN/VPN/Tailnet access and use an explicit `wss://` URL when your gateway supports TLS.
 - Do not expose an OpenClaw Gateway directly to the public internet just to use JSOS.
-- Do not expose an experimental Codex CLI bridge directly to the public internet. Keep it on a trusted LAN/VPN/Tailnet and manage Codex authentication outside the public repository.
+- Do not expose an experimental Admin Codex bridge directly to the public internet. Keep it on a trusted LAN/VPN/Tailnet and manage Codex authentication outside the public repository.
 - Do not distribute APKs built with real Rokid, OpenAI, ElevenLabs, OpenClaw, or signing credentials.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage. Non-secret UI preferences and some Rokid pairing metadata remain local app data.
 - Avoid publishing logs, screenshots, or APKs that contain transcripts, session keys, API keys, device identifiers, or account data.

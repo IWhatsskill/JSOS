@@ -322,7 +322,7 @@ fun MainScreen() {
             mainHandler.post {
                 codexCliStatus = state
                 codexCliDetail = detail
-                if (state == CodexCliBridgeClient.State.ERROR || !detail.isNullOrBlank()) {
+                if (state == CodexCliBridgeClient.State.ERROR) {
                     codexCliLines = (codexCliLines + "[status] ${state.name}: ${detail ?: ""}").takeLast(220)
                 }
             }
