@@ -240,7 +240,9 @@ fun MainScreen() {
     var codexCliInput by remember { mutableStateOf("") }
     var codexCliStatus by remember { mutableStateOf(CodexCliBridgeClient.State.DISCONNECTED) }
     var codexCliDetail by remember { mutableStateOf<String?>(null) }
-    var codexCliLines by remember { mutableStateOf(listOf("Codex CLI bridge ready.")) }
+    var codexCliLines by remember { mutableStateOf(listOf("Admin Codex ready.")) }
+    var codexCliMemoryPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
+    var codexCliUseMemoryPhotoOnce by remember { mutableStateOf(false) }
     val codexCliUrl = remember(openClawHost) { codexCliBridgeUrl(openClawHost) }
     var glassesVoiceButtonMode by remember {
         mutableStateOf(GlassesVoiceButtonMode.fromPref(prefs.getString("glasses_voice_button_mode", "command")))
@@ -406,12 +408,6 @@ fun MainScreen() {
     // reliable than checking phoneLoadingMore which may already be false by the
     // time this effect runs (both StateFlows update in the same coroutine frame).
     var previousFirstMsgId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(selectedTab, codexCliLines.size) {
-        if (selectedTab == CoreTab.Codex && codexCliLines.isNotEmpty()) {
-            codexCliListState.animateScrollToItem(codexCliLines.lastIndex)
-        }
-    }
-
     LaunchedEffect(chatMessages.size) {
         if (chatMessages.isNotEmpty()) {
             val currentFirstId = chatMessages.first().id
@@ -861,16 +857,39 @@ fun MainScreen() {
                     }
                     "cli_disconnect" -> {
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI bridge disconnect")
+                        codexCliMemoryPhotos = emptyList()
+                        codexCliUseMemoryPhotoOnce = false
                         codexCliBridgeClient.disconnect()
+                    }
+                    "cli_toggle_image" -> {
+                        if (codexCliMemoryPhotos.isNotEmpty()) {
+                            codexCliUseMemoryPhotoOnce = !codexCliUseMemoryPhotoOnce
+                            glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":$codexCliUseMemoryPhotoOnce}""")
+                        } else {
+                            glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":false}""")
+                        }
                     }
                     "cli_input" -> {
                         val text = json.optString("text", "")
                         val photosToSend = pendingPhotos
+                        val useLastPhoto = json.optBoolean("useLastImage", false) || codexCliUseMemoryPhotoOnce
+                        val photosForCodex = if (photosToSend.isNotEmpty()) {
+                            photosToSend
+                        } else if (useLastPhoto) {
+                            codexCliMemoryPhotos
+                        } else {
+                            emptyList()
+                        }
                         android.util.Log.d("MainScreen", "Codex CLI input from glasses (${text.length} chars, photos=${photosToSend.size})")
-                        val sent = codexCliBridgeClient.sendInput(text, photosToSend)
-                        if (sent && photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
-                            pendingPhotos = emptyList()
-                            glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                        val sent = codexCliBridgeClient.sendInput(text, photosForCodex)
+                        if (sent) {
+                            codexCliUseMemoryPhotoOnce = false
+                            glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":false}""")
+                            if (photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
+                                codexCliMemoryPhotos = photosToSend
+                                pendingPhotos = emptyList()
+                                glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                            }
                         }
                     }
                     "cli_stop" -> {
@@ -1310,17 +1329,45 @@ fun MainScreen() {
                         inputText = codexCliInput,
                         onInputChange = { codexCliInput = it },
                         listState = codexCliListState,
+                        hasMemoryPhoto = codexCliMemoryPhotos.isNotEmpty(),
+                        useMemoryPhotoOnce = codexCliUseMemoryPhotoOnce,
                         onConnect = {
                             codexCliLines = (codexCliLines + "[link] $codexCliUrl").takeLast(220)
                             codexCliBridgeClient.connect(codexCliUrl)
                         },
-                        onDisconnect = { codexCliBridgeClient.disconnect() },
+                        onDisconnect = {
+                            codexCliMemoryPhotos = emptyList()
+                            codexCliUseMemoryPhotoOnce = false
+                            codexCliBridgeClient.disconnect()
+                        },
+                        onToggleImage = {
+                            if (codexCliMemoryPhotos.isNotEmpty()) {
+                                codexCliUseMemoryPhotoOnce = !codexCliUseMemoryPhotoOnce
+                            }
+                        },
                         onSend = {
                             val textToSend = codexCliInput.trim()
                             if (textToSend.isNotEmpty()) {
                                 codexCliLines = (codexCliLines + "> $textToSend").takeLast(220)
                                 codexCliInput = ""
-                                codexCliBridgeClient.sendInput(textToSend)
+                                val photosToSend = pendingPhotos
+                                val photosForCodex = if (photosToSend.isNotEmpty()) {
+                                    photosToSend
+                                } else if (codexCliUseMemoryPhotoOnce) {
+                                    codexCliMemoryPhotos
+                                } else {
+                                    emptyList()
+                                }
+                                val sent = codexCliBridgeClient.sendInput(textToSend, photosForCodex)
+                                if (sent) {
+                                    codexCliUseMemoryPhotoOnce = false
+                                    glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":false}""")
+                                    if (photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
+                                        codexCliMemoryPhotos = photosToSend
+                                        pendingPhotos = emptyList()
+                                        glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                                    }
+                                }
                             }
                         },
                         onStop = { codexCliBridgeClient.stop() },
@@ -2406,8 +2453,11 @@ private fun CodexCliDeck(
     inputText: String,
     onInputChange: (String) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    hasMemoryPhoto: Boolean,
+    useMemoryPhotoOnce: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    onToggleImage: () -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
     onClear: () -> Unit,
@@ -2420,6 +2470,11 @@ private fun CodexCliDeck(
         CodexCliBridgeClient.State.DISCONNECTED -> JsosPalette.Muted
     }
     val lineBlocks = remember(lines) { codexCliLineBlocks(lines) }
+    val lastBlockText = lineBlocks.lastOrNull()?.text.orEmpty()
+
+    LaunchedEffect(lineBlocks.size, lastBlockText) {
+        listState.animateScrollToItem(lineBlocks.size)
+    }
 
     Column(
         modifier = Modifier
@@ -2504,6 +2559,9 @@ private fun CodexCliDeck(
                         )
                     }
                 }
+                items(listOf(Unit), key = { "codex-cli-end" }) {
+                    Spacer(modifier = Modifier.height(1.dp))
+                }
             }
         }
 
@@ -2535,6 +2593,9 @@ private fun CodexCliDeck(
         ) {
             TextButton(onClick = if (connected) onDisconnect else onConnect, modifier = Modifier.weight(1f)) {
                 Text(if (connected) "DISC" else "LINK", fontFamily = FontFamily.Monospace)
+            }
+            TextButton(onClick = onToggleImage, enabled = hasMemoryPhoto, modifier = Modifier.weight(1f)) {
+                Text(if (useMemoryPhotoOnce) "IMG ON" else "IMG", fontFamily = FontFamily.Monospace)
             }
             TextButton(onClick = onSend, enabled = inputText.isNotBlank() && connected, modifier = Modifier.weight(1f)) {
                 Text("SEND", fontFamily = FontFamily.Monospace)
@@ -2623,8 +2684,16 @@ private fun codexCliLineBlocks(lines: List<String>): List<CodexCliLineBlock> {
                 flushResponse()
                 blocks += CodexCliLineBlock(CodexCliLineType.ERROR, line)
             }
-            line.startsWith("[link]", ignoreCase = true) ||
-                line.endsWith("cleared.", ignoreCase = true) ||
+            line.startsWith("[status]", ignoreCase = true) -> {
+                flushResponse()
+                if (line.contains("ERROR", ignoreCase = true)) {
+                    blocks += CodexCliLineBlock(CodexCliLineType.ERROR, line)
+                }
+            }
+            line.startsWith("[link]", ignoreCase = true) -> {
+                flushResponse()
+            }
+            line.endsWith("cleared.", ignoreCase = true) ||
                 line.endsWith("ready.", ignoreCase = true) -> {
                 flushResponse()
                 blocks += CodexCliLineBlock(CodexCliLineType.SYSTEM, line)

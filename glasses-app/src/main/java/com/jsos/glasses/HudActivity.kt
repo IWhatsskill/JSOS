@@ -757,6 +757,7 @@ class HudActivity : ComponentActivity() {
             val json = JSONObject().apply {
                 put("type", "cli_input")
                 put("text", text)
+                put("useLastImage", current.cliUseLastImage)
             }
             phoneConnection.sendToPhone(json.toString())
             val commandLine = "> $text"
@@ -770,6 +771,7 @@ class HudActivity : ComponentActivity() {
                 voiceState = VoiceInputState.Idle,
                 voiceText = "",
                 cliLines = updatedLines,
+                cliUseLastImage = false,
                 cliScrollPosition = maxOf(0, updatedLines.size - 1)
             )
             return
@@ -1003,11 +1005,20 @@ class HudActivity : ComponentActivity() {
                             Log.d(GlassesApp.TAG, "Requested Codex photo capture from phone")
                         }
                     }
+                    CliActionItem.IMG -> {
+                        val next = !current.cliUseLastImage
+                        hudState.value = current.copy(cliUseLastImage = next)
+                        phoneConnection.sendToPhone("""{"type":"cli_toggle_image"}""")
+                    }
                     CliActionItem.LINK -> {
                         val connected = current.cliStatus.equals("CONNECTED", ignoreCase = true)
                         if (connected) {
                             phoneConnection.sendToPhone("""{"type":"cli_disconnect"}""")
-                            hudState.value = current.copy(cliStatus = "OFFLINE", cliDetail = "Disconnected")
+                            hudState.value = current.copy(
+                                cliStatus = "OFFLINE",
+                                cliDetail = "Disconnected",
+                                cliUseLastImage = false
+                            )
                         } else {
                             hudState.value = current.copy(cliStatus = "CONNECTING", cliDetail = "")
                             phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
@@ -1033,7 +1044,8 @@ class HudActivity : ComponentActivity() {
                                 photoThumbnails = emptyList(),
                                 inputActionIndex = 0,
                                 voiceState = VoiceInputState.Idle,
-                                voiceText = ""
+                                voiceText = "",
+                                cliUseLastImage = false
                             )
                             phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
                         } else {
@@ -1440,22 +1452,60 @@ class HudActivity : ComponentActivity() {
     }
 
     private fun appendCliOutput(text: String, replace: Boolean = false) {
-        val newLines = text
-            .replace("\r\n", "\n")
-            .replace('\r', '\n')
-            .lines()
-            .filter { it.isNotBlank() }
-        if (newLines.isEmpty()) return
-
         hudState.update { current ->
-            val base = if (replace) emptyList() else current.cliLines
-            val merged = (base + newLines).takeLast(MAX_CLI_LINES)
+            val merged = mergeCliOutputLines(
+                current = current.cliLines,
+                output = text,
+                replace = replace
+            ).takeLast(MAX_CLI_LINES)
+            if (merged.isEmpty()) return@update current
             current.copy(
                 cliLines = merged,
                 cliScrollPosition = maxOf(0, merged.size - 1),
                 showCliTerminal = current.showCliTerminal
             )
         }
+    }
+
+    private fun mergeCliOutputLines(
+        current: List<String>,
+        output: String,
+        replace: Boolean
+    ): List<String> {
+        val normalized = output.replace("\r\n", "\n").replace('\r', '\n')
+        if (normalized.isEmpty()) return current
+
+        fun isControlLine(line: String): Boolean {
+            val trimmed = line.trimStart()
+            return trimmed.startsWith(">") ||
+                trimmed.startsWith("[error]", ignoreCase = true) ||
+                trimmed.startsWith("[link]", ignoreCase = true) ||
+                trimmed.startsWith("[status]", ignoreCase = true)
+        }
+
+        fun canAppendToLast(lines: List<String>, incoming: String): Boolean {
+            if (lines.isEmpty() || incoming.isEmpty() || isControlLine(incoming)) return false
+            val last = lines.last()
+            return last.isNotBlank() &&
+                !isControlLine(last) &&
+                !last.endsWith("cleared.", ignoreCase = true) &&
+                !last.endsWith("ready.", ignoreCase = true)
+        }
+
+        if (replace) {
+            return normalized.split('\n').filter { it.isNotBlank() }
+        }
+
+        val merged = current.toMutableList()
+        normalized.split('\n').forEachIndexed { index, segment ->
+            if (segment.isEmpty()) return@forEachIndexed
+            if (index == 0 && canAppendToLast(merged, segment)) {
+                merged[merged.lastIndex] = merged.last() + segment
+            } else {
+                merged += segment
+            }
+        }
+        return merged
     }
     // ============== Phone Message Handling ==============
 
@@ -1685,6 +1735,13 @@ class HudActivity : ComponentActivity() {
                             cliDetail = detail,
                             cliScrollPosition = maxOf(0, current.cliLines.size - 1)
                         )
+                    }
+                }
+
+                "cli_image_state" -> {
+                    val enabled = msg.optBoolean("enabled", false)
+                    hudState.update { current ->
+                        current.copy(cliUseLastImage = enabled)
                     }
                 }
 
