@@ -47,6 +47,9 @@ Requirements:
 - Phone Wi-Fi enabled, because the Hi Rokid / CXR-L path uses the glasses link.
 - A locally built JSOS HUD APK selected from JSOS Core.
 - Hi Rokid authorization approved when JSOS Core asks for it.
+- Current Global Hi Rokid builds expect a normal density-specific PNG launcher
+  icon and require JSOS Core to identify its caller package during the CXR-L
+  service bind. The JSOS Core source includes that compatibility path.
 
 Flow:
 

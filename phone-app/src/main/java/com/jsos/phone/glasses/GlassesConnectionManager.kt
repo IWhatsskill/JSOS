@@ -160,7 +160,7 @@ class GlassesConnectionManager(private val context: Context) {
         }
 
         RokidSdkManager.onBluetoothFailed = { error ->
-            Log.e(TAG, "SDK: Bluetooth failed: $error")
+            Log.e(TAG, "SDK: Bluetooth failed (redacted)")
 
             // Schedule reconnect if this wasn't user-initiated.
             // This covers both: failures during active reconnect attempts AND

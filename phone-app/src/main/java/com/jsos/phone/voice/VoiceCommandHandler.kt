@@ -217,7 +217,7 @@ class VoiceCommandHandler(private val context: Context) {
                 _lastResult.value = result
                 onResult?.invoke(result)
             } else {
-                Log.e(TAG, ">>> Recognition error ($error): $errorMessage")
+                Log.e(TAG, ">>> Recognition error (redacted)")
                 val result = VoiceResult.Error(errorMessage)
                 _lastResult.value = result
                 onResult?.invoke(result)

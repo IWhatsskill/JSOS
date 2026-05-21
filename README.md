@@ -530,6 +530,7 @@ After approval, reconnect from JSOS Core. The device token is stored locally by 
 - Rebuild `:glasses-app:assembleDebug` so you have a fresh JSOS HUD debug APK.
 - In JSOS Core, select the JSOS HUD APK in the HUD Deployment section, authorize Hi Rokid when prompted, and install through the Hi Rokid / CXR-L flow.
 - Hi Rokid must be installed on the phone and already connected to the glasses before JSOS Core can hand off the install.
+- Current Global Hi Rokid builds require a normal density-specific PNG launcher icon and the caller package to be included during the CXR-L service bind. This source tree includes that compatibility path for JSOS Core.
 - If the JSOS Core deployment flow times out or reports that the Hi Rokid/glasses link dropped, open Hi Rokid, confirm the glasses connection, then retry the same selected APK.
 - Manual Hi Rokid / APK Manager installation remains a fallback if the integrated deployment flow is not stable on a device.
 
