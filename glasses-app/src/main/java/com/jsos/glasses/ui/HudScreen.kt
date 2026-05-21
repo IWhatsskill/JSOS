@@ -134,7 +134,6 @@ enum class VoiceSendMode {
 
 enum class CliActionItem(val label: String) {
     CAM("Cam"),
-    IMG("Image"),
     LINK("Link"),
     SEND("Send"),
     STOP("Stop"),
@@ -266,8 +265,7 @@ data class ChatHudState(
     val cliDetail: String = "",
     val cliLines: List<String> = emptyList(),
     val cliScrollPosition: Int = 0,
-    val cliActionIndex: Int = CliActionItem.SEND.ordinal,
-    val cliUseLastImage: Boolean = false
+    val cliActionIndex: Int = CliActionItem.SEND.ordinal
 ) {
     /** Total number of messages */
     val totalMessages: Int get() = messages.size
@@ -689,7 +687,6 @@ fun HudScreen(
                 voiceText = state.voiceText,
                 showInputStaging = state.showInputStaging,
                 photos = state.photoThumbnails,
-                useLastImage = state.cliUseLastImage,
                 voiceState = state.voiceState,
                 displaySize = state.displaySize,
                 fontFamily = monoFontFamily
@@ -2213,7 +2210,6 @@ private fun CliTerminalOverlay(
     voiceText: String,
     showInputStaging: Boolean,
     photos: List<Bitmap>,
-    useLastImage: Boolean,
     voiceState: VoiceInputState,
     displaySize: HudDisplaySize,
     fontFamily: FontFamily,
@@ -2336,7 +2332,6 @@ private fun CliTerminalOverlay(
             CliBottomMenu(
                 selectedActionIndex = selectedAction,
                 connected = status.uppercase() == "CONNECTED",
-                useLastImage = useLastImage,
                 fontFamily = fontFamily,
                 fontSize = bodyFontSize
             )
@@ -2416,7 +2411,6 @@ private fun CodexInputPreview(
 private fun CliBottomMenu(
     selectedActionIndex: Int,
     connected: Boolean,
-    useLastImage: Boolean,
     fontFamily: FontFamily,
     fontSize: androidx.compose.ui.unit.TextUnit
 ) {
@@ -2431,19 +2425,17 @@ private fun CliBottomMenu(
             val selected = index == selectedActionIndex
             val label = when (item) {
                 CliActionItem.CAM -> "CAM"
-                CliActionItem.IMG -> if (useLastImage) "IMG*" else "IMG"
                 CliActionItem.LINK -> if (connected) "DISC" else "LINK"
                 CliActionItem.SEND -> "SEND"
                 CliActionItem.STOP -> "STOP"
                 CliActionItem.CLEAR -> "CLEAR"
             }
-            val activeImage = item == CliActionItem.IMG && useLastImage
             Text(
                 text = label,
-                color = if (selected || activeImage) HudColors.green else HudColors.primaryText.copy(alpha = 0.72f),
+                color = if (selected) HudColors.green else HudColors.primaryText.copy(alpha = 0.72f),
                 fontSize = fontSize,
                 fontFamily = fontFamily,
-                fontWeight = if (selected || activeImage) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)

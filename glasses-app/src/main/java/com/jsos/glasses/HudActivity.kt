@@ -76,6 +76,7 @@ class HudActivity : ComponentActivity() {
         private const val CHUNK_TIMEOUT_MS = 30_000L
         private const val ROKID_AR_COMMAND_COOLDOWN_MS = 1_200L
         private const val MAX_CLI_LINES = 220
+        private const val DEFAULT_CODEX_IMAGE_PROMPT = "Describe this image."
 
         /** Sentinel key for the "New Session" entry in the session picker. */
         const val NEW_SESSION_KEY = "__new_session__"
@@ -747,17 +748,19 @@ class HudActivity : ComponentActivity() {
 
     private fun submitInput() {
         val current = hudState.value
-        val text = current.inputText.trim()
+        val thumbnails = current.photoThumbnails.toList()
+        val hasCliImageContext = current.showCliTerminal && thumbnails.isNotEmpty()
+        val text = current.inputText.trim().ifBlank {
+            if (hasCliImageContext) DEFAULT_CODEX_IMAGE_PROMPT else ""
+        }
         if (text.isEmpty()) return
 
-        val thumbnails = current.photoThumbnails.toList()
         Log.d(GlassesApp.TAG, "submitInput: textLength=${text.length}, photos=${thumbnails.size}, focusArea=${current.focusedArea}")
 
         if (current.showCliTerminal) {
             val json = JSONObject().apply {
                 put("type", "cli_input")
                 put("text", text)
-                put("useLastImage", current.cliUseLastImage)
             }
             phoneConnection.sendToPhone(json.toString())
             val commandLine = "> $text"
@@ -771,7 +774,6 @@ class HudActivity : ComponentActivity() {
                 voiceState = VoiceInputState.Idle,
                 voiceText = "",
                 cliLines = updatedLines,
-                cliUseLastImage = false,
                 cliScrollPosition = maxOf(0, updatedLines.size - 1)
             )
             return
@@ -1005,19 +1007,13 @@ class HudActivity : ComponentActivity() {
                             Log.d(GlassesApp.TAG, "Requested Codex photo capture from phone")
                         }
                     }
-                    CliActionItem.IMG -> {
-                        val next = !current.cliUseLastImage
-                        hudState.value = current.copy(cliUseLastImage = next)
-                        phoneConnection.sendToPhone("""{"type":"cli_toggle_image"}""")
-                    }
                     CliActionItem.LINK -> {
                         val connected = current.cliStatus.equals("CONNECTED", ignoreCase = true)
                         if (connected) {
                             phoneConnection.sendToPhone("""{"type":"cli_disconnect"}""")
                             hudState.value = current.copy(
                                 cliStatus = "OFFLINE",
-                                cliDetail = "Disconnected",
-                                cliUseLastImage = false
+                                cliDetail = "Disconnected"
                             )
                         } else {
                             hudState.value = current.copy(cliStatus = "CONNECTING", cliDetail = "")
@@ -1028,7 +1024,7 @@ class HudActivity : ComponentActivity() {
                         val staged = current.stagingText.trim()
                         val typed = current.inputText.trim()
                         val text = staged.ifEmpty { typed }
-                        if (text.isNotEmpty()) {
+                        if (text.isNotEmpty() || current.photoThumbnails.isNotEmpty()) {
                             hudState.value = current.copy(inputText = text)
                             submitInput()
                         }
@@ -1044,8 +1040,7 @@ class HudActivity : ComponentActivity() {
                                 photoThumbnails = emptyList(),
                                 inputActionIndex = 0,
                                 voiceState = VoiceInputState.Idle,
-                                voiceText = "",
-                                cliUseLastImage = false
+                                voiceText = ""
                             )
                             phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
                         } else {
@@ -1735,13 +1730,6 @@ class HudActivity : ComponentActivity() {
                             cliDetail = detail,
                             cliScrollPosition = maxOf(0, current.cliLines.size - 1)
                         )
-                    }
-                }
-
-                "cli_image_state" -> {
-                    val enabled = msg.optBoolean("enabled", false)
-                    hudState.update { current ->
-                        current.copy(cliUseLastImage = enabled)
                     }
                 }
 

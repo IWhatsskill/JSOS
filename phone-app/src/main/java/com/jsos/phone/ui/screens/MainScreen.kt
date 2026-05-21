@@ -241,8 +241,6 @@ fun MainScreen() {
     var codexCliStatus by remember { mutableStateOf(CodexCliBridgeClient.State.DISCONNECTED) }
     var codexCliDetail by remember { mutableStateOf<String?>(null) }
     var codexCliLines by remember { mutableStateOf(listOf("Admin Codex ready.")) }
-    var codexCliMemoryPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
-    var codexCliUseMemoryPhotoOnce by remember { mutableStateOf(false) }
     val codexCliUrl = remember(openClawHost) { codexCliBridgeUrl(openClawHost) }
     var glassesVoiceButtonMode by remember {
         mutableStateOf(GlassesVoiceButtonMode.fromPref(prefs.getString("glasses_voice_button_mode", "command")))
@@ -530,6 +528,39 @@ fun MainScreen() {
                 }
             }
         }
+    }
+    fun capturePendingPhoto() {
+        android.util.Log.d("MainScreen", "Taking photo from glasses camera")
+        android.widget.Toast.makeText(context, "Capturing photo...", android.widget.Toast.LENGTH_SHORT).show()
+        RokidSdkManager.onPhotoResult = { status, photoBytes ->
+            mainHandler.post {
+                android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
+                if (photoBytes != null && photoBytes.isNotEmpty()) {
+                    val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
+                    pendingPhotos = pendingPhotos + base64
+                    android.util.Log.d("MainScreen", "Photo added (total: ${pendingPhotos.size})")
+                    android.widget.Toast.makeText(context, "Photo ${pendingPhotos.size} captured!", android.widget.Toast.LENGTH_SHORT).show()
+                    val thumbnail = createThumbnailBase64(photoBytes, 80, 60)
+                    val resultMsg = org.json.JSONObject().apply {
+                        put("type", "photo_result")
+                        put("status", "captured")
+                        put("thumbnail", thumbnail)
+                    }
+                    glassesManager.sendRawMessage(resultMsg.toString())
+                } else {
+                    android.util.Log.e("MainScreen", "Photo capture failed: status=$status")
+                    android.widget.Toast.makeText(context, "Photo failed: $status", android.widget.Toast.LENGTH_LONG).show()
+                    val resultMsg = org.json.JSONObject().apply {
+                        put("type", "photo_result")
+                        put("status", "error")
+                        put("message", "Capture failed")
+                    }
+                    glassesManager.sendRawMessage(resultMsg.toString())
+                }
+                RokidSdkManager.onPhotoResult = null
+            }
+        }
+        RokidSdkManager.takeGlassPhotoGlobal(640, 480, 75)
     }
     fun submitAgentWakeMessage(session: SessionInfo, message: String) {
         if (message.isBlank()) return
@@ -857,39 +888,20 @@ fun MainScreen() {
                     }
                     "cli_disconnect" -> {
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI bridge disconnect")
-                        codexCliMemoryPhotos = emptyList()
-                        codexCliUseMemoryPhotoOnce = false
                         codexCliBridgeClient.disconnect()
-                    }
-                    "cli_toggle_image" -> {
-                        if (codexCliMemoryPhotos.isNotEmpty()) {
-                            codexCliUseMemoryPhotoOnce = !codexCliUseMemoryPhotoOnce
-                            glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":$codexCliUseMemoryPhotoOnce}""")
-                        } else {
-                            glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":false}""")
-                        }
                     }
                     "cli_input" -> {
                         val text = json.optString("text", "")
                         val photosToSend = pendingPhotos
-                        val useLastPhoto = json.optBoolean("useLastImage", false) || codexCliUseMemoryPhotoOnce
-                        val photosForCodex = if (photosToSend.isNotEmpty()) {
-                            photosToSend
-                        } else if (useLastPhoto) {
-                            codexCliMemoryPhotos
-                        } else {
-                            emptyList()
-                        }
                         android.util.Log.d("MainScreen", "Codex CLI input from glasses (${text.length} chars, photos=${photosToSend.size})")
-                        val sent = codexCliBridgeClient.sendInput(text, photosForCodex)
+                        val sent = codexCliBridgeClient.sendInput(text, photosToSend)
                         if (sent) {
-                            codexCliUseMemoryPhotoOnce = false
-                            glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":false}""")
-                            if (photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
-                                codexCliMemoryPhotos = photosToSend
+                            if (photosToSend.isNotEmpty()) {
                                 pendingPhotos = emptyList()
                                 glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
                             }
+                        } else {
+                            glassesManager.sendRawMessage("""{"type":"cli_output","text":"[error] Codex send failed","append":true}""")
                         }
                     }
                     "cli_stop" -> {
@@ -1329,45 +1341,41 @@ fun MainScreen() {
                         inputText = codexCliInput,
                         onInputChange = { codexCliInput = it },
                         listState = codexCliListState,
-                        hasMemoryPhoto = codexCliMemoryPhotos.isNotEmpty(),
-                        useMemoryPhotoOnce = codexCliUseMemoryPhotoOnce,
+                        hasPendingPhoto = pendingPhotos.isNotEmpty(),
+                        pendingPhotoCount = pendingPhotos.size,
                         onConnect = {
                             codexCliLines = (codexCliLines + "[link] $codexCliUrl").takeLast(220)
                             codexCliBridgeClient.connect(codexCliUrl)
                         },
                         onDisconnect = {
-                            codexCliMemoryPhotos = emptyList()
-                            codexCliUseMemoryPhotoOnce = false
                             codexCliBridgeClient.disconnect()
-                        },
-                        onToggleImage = {
-                            if (codexCliMemoryPhotos.isNotEmpty()) {
-                                codexCliUseMemoryPhotoOnce = !codexCliUseMemoryPhotoOnce
-                            }
                         },
                         onSend = {
                             val textToSend = codexCliInput.trim()
-                            if (textToSend.isNotEmpty()) {
-                                codexCliLines = (codexCliLines + "> $textToSend").takeLast(220)
+                            val photosToSend = pendingPhotos
+                            if (textToSend.isNotEmpty() || photosToSend.isNotEmpty()) {
+                                val promptToSend = textToSend.ifBlank { "Describe this image." }
+                                val visiblePrompt = textToSend.ifBlank { "[image] Describe this image." }
+                                codexCliLines = (codexCliLines + "> $visiblePrompt").takeLast(220)
                                 codexCliInput = ""
-                                val photosToSend = pendingPhotos
-                                val photosForCodex = if (photosToSend.isNotEmpty()) {
-                                    photosToSend
-                                } else if (codexCliUseMemoryPhotoOnce) {
-                                    codexCliMemoryPhotos
-                                } else {
-                                    emptyList()
-                                }
-                                val sent = codexCliBridgeClient.sendInput(textToSend, photosForCodex)
+                                android.util.Log.d("MainScreen", "Codex Core send requested (${promptToSend.length} chars, stagedPhotos=${photosToSend.size})")
+                                val sent = codexCliBridgeClient.sendInput(promptToSend, photosToSend)
                                 if (sent) {
-                                    codexCliUseMemoryPhotoOnce = false
-                                    glassesManager.sendRawMessage("""{"type":"cli_image_state","enabled":false}""")
-                                    if (photosToSend.isNotEmpty() && pendingPhotos == photosToSend) {
-                                        codexCliMemoryPhotos = photosToSend
+                                    if (photosToSend.isNotEmpty()) {
                                         pendingPhotos = emptyList()
                                         glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
                                     }
+                                } else {
+                                    codexCliInput = textToSend
+                                    codexCliLines = (codexCliLines + "[error] Codex send failed").takeLast(220)
                                 }
+                            }
+                        },
+                        onTakePhoto = {
+                            if (glassesState is GlassesConnectionManager.ConnectionState.Connected) {
+                                capturePendingPhoto()
+                            } else {
+                                android.widget.Toast.makeText(context, "Glasses offline", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         },
                         onStop = { codexCliBridgeClient.stop() },
@@ -2453,12 +2461,12 @@ private fun CodexCliDeck(
     inputText: String,
     onInputChange: (String) -> Unit,
     listState: androidx.compose.foundation.lazy.LazyListState,
-    hasMemoryPhoto: Boolean,
-    useMemoryPhotoOnce: Boolean,
+    hasPendingPhoto: Boolean,
+    pendingPhotoCount: Int,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
-    onToggleImage: () -> Unit,
     onSend: () -> Unit,
+    onTakePhoto: () -> Unit,
     onStop: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -2591,13 +2599,21 @@ private fun CodexCliDeck(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            TextButton(onClick = onTakePhoto, modifier = Modifier.weight(1f)) {
+                Text(
+                    if (pendingPhotoCount > 0) "CAM $pendingPhotoCount" else "CAM",
+                    fontFamily = FontFamily.Monospace,
+                    color = if (hasPendingPhoto) JsosPalette.Green else JsosPalette.Cyan,
+                )
+            }
             TextButton(onClick = if (connected) onDisconnect else onConnect, modifier = Modifier.weight(1f)) {
                 Text(if (connected) "DISC" else "LINK", fontFamily = FontFamily.Monospace)
             }
-            TextButton(onClick = onToggleImage, enabled = hasMemoryPhoto, modifier = Modifier.weight(1f)) {
-                Text(if (useMemoryPhotoOnce) "IMG ON" else "IMG", fontFamily = FontFamily.Monospace)
-            }
-            TextButton(onClick = onSend, enabled = inputText.isNotBlank() && connected, modifier = Modifier.weight(1f)) {
+            TextButton(
+                onClick = onSend,
+                enabled = connected && (inputText.isNotBlank() || hasPendingPhoto),
+                modifier = Modifier.weight(1f)
+            ) {
                 Text("SEND", fontFamily = FontFamily.Monospace)
             }
             TextButton(onClick = onStop, enabled = connected, modifier = Modifier.weight(1f)) {

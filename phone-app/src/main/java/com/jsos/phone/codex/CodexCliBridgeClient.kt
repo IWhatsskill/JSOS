@@ -61,15 +61,25 @@ class CodexCliBridgeClient {
     fun sendInput(text: String, photos: List<String> = emptyList()): Boolean {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return false
+        Log.d(TAG, "sendInput requested: textChars=${trimmed.length}, photos=${photos.size}")
 
         val socket = webSocket
         if (socket == null || currentState != State.CONNECTED) {
             currentState = State.ERROR
             emitStatus("Bridge offline")
+            Log.w(TAG, "sendInput rejected: bridge offline")
             return false
         }
 
         val bridgeImages = photos.mapNotNull { prepareBridgeImage(it) }
+        Log.d(TAG, "sendInput prepared images: ${bridgeImages.size}/${photos.size}")
+        if (photos.isNotEmpty() && bridgeImages.isEmpty()) {
+            currentState = State.ERROR
+            emitStatus("Image encode failed")
+            onOutput?.invoke("[error] Codex image encode failed", true)
+            Log.w(TAG, "sendInput rejected: no valid bridge images")
+            return false
+        }
         val payload = JSONObject().apply {
             put("type", "input")
             put("text", trimmed)
@@ -87,6 +97,7 @@ class CodexCliBridgeClient {
             }
         }
         val sent = socket.send(payload.toString())
+        Log.d(TAG, "sendInput queued: sent=$sent, payloadChars=${payload.toString().length}, images=${bridgeImages.size}")
         if (!sent) {
             currentState = State.ERROR
             emitStatus("Send failed")
@@ -99,6 +110,7 @@ class CodexCliBridgeClient {
     }
 
     fun disconnect() {
+        webSocket?.send(JSONObject().put("type", "stop").toString())
         webSocket?.close(1000, "JSOS CLI disconnect")
         webSocket = null
         currentState = State.DISCONNECTED
@@ -158,7 +170,8 @@ class CodexCliBridgeClient {
                     "disconnected", "offline", "closed" -> State.DISCONNECTED
                     else -> currentState
                 }
-                emitStatus(parsed.optString("message", "").ifBlank { null })
+                val message = parsed.optString("message", "").ifBlank { null }
+                emitStatus(message)
             }
             "error" -> {
                 currentState = State.ERROR
