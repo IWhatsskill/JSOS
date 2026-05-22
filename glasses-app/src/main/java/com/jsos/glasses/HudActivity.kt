@@ -44,7 +44,9 @@ import com.jsos.glasses.ui.SlashParamMenuType
 import com.jsos.glasses.ui.VoiceInputState
 import com.jsos.glasses.ui.RecognitionMode
 import com.jsos.glasses.ui.VoiceSendMode
+import com.jsos.glasses.ui.cliVisibleBlockCount
 import com.jsos.glasses.ui.moreSubMenuOptions
+import com.jsos.glasses.ui.menuBarItemsForPage
 import com.jsos.glasses.ui.slashParamOptions
 import com.jsos.glasses.ui.theme.GlassesHudTheme
 import com.jsos.glasses.voice.GlassesVoiceHandler
@@ -243,6 +245,12 @@ class HudActivity : ComponentActivity() {
                         val current = hudState.value
                         if (current.isScrolledToEnd != atEnd) {
                             hudState.value = current.copy(isScrolledToEnd = atEnd)
+                        }
+                    },
+                    onCliScrolledToEndChanged = { atEnd ->
+                        val current = hudState.value
+                        if (current.cliIsScrolledToEnd != atEnd) {
+                            hudState.value = current.copy(cliIsScrolledToEnd = atEnd)
                         }
                     }
                 )
@@ -635,41 +643,50 @@ class HudActivity : ComponentActivity() {
     // MENU area gestures
     private fun handleMenuGesture(gesture: Gesture) {
         val current = hudState.value
-        val items = MenuBarItem.entries
+        val pageItems = menuBarItemsForPage(current.menuBarPage)
+        val safeIndex = current.menuBarIndex.coerceIn(0, pageItems.lastIndex)
+
+        fun leaveMenuTowardContent() {
+            if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
+                val lastIndex = if (current.stagingText.isNotEmpty()) {
+                    current.photoThumbnails.size + 1
+                } else {
+                    maxOf(0, current.photoThumbnails.size - 1)
+                }
+                hudState.value = current.copy(
+                    focusedArea = ChatFocusArea.INPUT,
+                    inputActionIndex = lastIndex
+                )
+            } else {
+                hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+            }
+        }
 
         when (gesture) {
             Gesture.SWIPE_FORWARD -> {
-                if (current.menuBarIndex == 0) {
-                    // Push through: MENU -> INPUT (if staging or photos) -> CONTENT
-                    if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
-                        // Focus on last visible item in combined row
-                        val lastIndex = if (current.stagingText.isNotEmpty()) {
-                            current.photoThumbnails.size + 1  // Send button
-                        } else {
-                            maxOf(0, current.photoThumbnails.size - 1)  // last photo
-                        }
-                        hudState.value = current.copy(
-                            focusedArea = ChatFocusArea.INPUT,
-                            inputActionIndex = lastIndex
-                        )
-                    } else {
-                        hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
-                    }
-                } else {
-                    hudState.value = current.copy(menuBarIndex = current.menuBarIndex - 1)
+                when {
+                    current.menuBarPage == 0 && safeIndex == 0 -> leaveMenuTowardContent()
+                    current.menuBarPage == 1 && safeIndex == 0 -> hudState.value = current.copy(
+                        menuBarPage = 0,
+                        menuBarIndex = menuBarItemsForPage(0).lastIndex
+                    )
+                    else -> hudState.value = current.copy(menuBarIndex = safeIndex - 1)
                 }
             }
             Gesture.SWIPE_BACKWARD -> {
-                // Next menu item
-                val newIndex = minOf(items.size - 1, current.menuBarIndex + 1)
-                hudState.value = current.copy(menuBarIndex = newIndex)
+                when {
+                    current.menuBarPage == 0 && safeIndex == pageItems.lastIndex -> hudState.value = current.copy(
+                        menuBarPage = 1,
+                        menuBarIndex = 0
+                    )
+                    current.menuBarPage == 1 && safeIndex == pageItems.lastIndex -> hudState.value = current.copy(menuBarIndex = safeIndex)
+                    else -> hudState.value = current.copy(menuBarIndex = safeIndex + 1)
+                }
             }
             Gesture.TAP -> {
-                // Execute selected menu item
-                executeMenuItem(items[current.menuBarIndex])
+                executeMenuItem(pageItems[safeIndex])
             }
             Gesture.DOUBLE_TAP -> {
-                // Show exit confirmation dialog
                 hudState.value = current.copy(showExitConfirm = true)
             }
             Gesture.LONG_PRESS -> startVoice()
@@ -698,6 +715,14 @@ class HudActivity : ComponentActivity() {
         val current = hudState.value
 
         when (item) {
+            MenuBarItem.VOICE_SEND -> {
+                val newMode = when (current.voiceSendMode) {
+                    VoiceSendMode.ASK -> VoiceSendMode.AUTO
+                    VoiceSendMode.AUTO -> VoiceSendMode.ASK
+                }
+                hudState.value = current.copy(voiceSendMode = newMode)
+                Log.d(GlassesApp.TAG, "Voice send mode: $newMode")
+            }
             MenuBarItem.PHOTO -> {
                 if (current.photoThumbnails.size >= MAX_PHOTOS) {
                     Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring photo request")
@@ -731,6 +756,17 @@ class HudActivity : ComponentActivity() {
                     showSlashMenu = true,
                     selectedSlashIndex = 0
                 )
+            }
+            MenuBarItem.AR_TOOLS -> {
+                hudState.value = current.copy(
+                    showMoreMenu = false,
+                    showMoreSubMenu = true,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = MoreSubMenuType.AR
+                )
+            }
+            MenuBarItem.CODEX_CLI -> {
+                openCliTerminal()
             }
             MenuBarItem.MORE -> {
                 hudState.value = current.copy(
@@ -774,7 +810,7 @@ class HudActivity : ComponentActivity() {
                 voiceState = VoiceInputState.Idle,
                 voiceText = "",
                 cliLines = updatedLines,
-                cliScrollPosition = maxOf(0, updatedLines.size - 1)
+                cliScrollPosition = maxOf(0, cliVisibleBlockCount(updatedLines) - 1)
             )
             return
         }
@@ -972,7 +1008,7 @@ class HudActivity : ComponentActivity() {
             cliStatus = "CONNECTING",
             cliDetail = "",
             cliLines = lines,
-            cliScrollPosition = maxOf(0, lines.size - 1),
+            cliScrollPosition = maxOf(0, cliVisibleBlockCount(lines) - 1),
             cliActionIndex = CliActionItem.SEND.ordinal,
             focusedArea = ChatFocusArea.CONTENT
         )
@@ -982,82 +1018,191 @@ class HudActivity : ComponentActivity() {
     private fun handleCliTerminalGesture(gesture: Gesture) {
         val current = hudState.value
         val actionCount = CliActionItem.entries.size
-        when (gesture) {
-            Gesture.SWIPE_FORWARD -> {
-                val newIndex = if (current.cliActionIndex <= 0) actionCount - 1 else current.cliActionIndex - 1
-                hudState.value = current.copy(cliActionIndex = newIndex)
+
+        fun hasCliInput(state: com.jsos.glasses.ui.ChatHudState): Boolean =
+            state.stagingText.isNotBlank() || state.voiceText.isNotBlank() || state.photoThumbnails.isNotEmpty()
+
+        fun focusCliInput(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
+            val inputIndex = when {
+                state.stagingText.isNotBlank() || state.voiceText.isNotBlank() -> state.photoThumbnails.size + 1
+                state.photoThumbnails.isNotEmpty() -> state.photoThumbnails.lastIndex
+                else -> 0
             }
-            Gesture.SWIPE_BACKWARD -> {
-                val newIndex = (current.cliActionIndex + 1) % actionCount
-                hudState.value = current.copy(cliActionIndex = newIndex)
+            hudState.value = state.copy(
+                focusedArea = ChatFocusArea.INPUT,
+                inputActionIndex = inputIndex,
+                showInputStaging = hasCliInput(state)
+            )
+        }
+
+        fun focusCliMenu(state: com.jsos.glasses.ui.ChatHudState = hudState.value, index: Int = state.cliActionIndex) {
+            hudState.value = state.copy(
+                focusedArea = ChatFocusArea.MENU,
+                cliActionIndex = index.coerceIn(0, actionCount - 1)
+            )
+        }
+
+        fun scrollCliUp(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
+            hudState.value = state.copy(
+                cliScrollCommand = state.cliScrollCommand + 1,
+                cliScrollDirection = -1
+            )
+        }
+
+        fun scrollCliToBottom(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
+            val maxScroll = maxOf(0, cliVisibleBlockCount(state.cliLines) - 1)
+            hudState.value = state.copy(
+                cliScrollPosition = maxScroll,
+                cliScrollTrigger = state.cliScrollTrigger + 1
+            )
+        }
+
+        fun scrollCliDownOrMenu(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
+            if (state.cliIsScrolledToEnd) {
+                if (hasCliInput(state)) {
+                    focusCliInput(state)
+                } else {
+                    focusCliMenu(state, CliActionItem.CAM.ordinal)
+                }
+            } else {
+                hudState.value = state.copy(
+                    cliScrollCommand = state.cliScrollCommand + 1,
+                    cliScrollDirection = 1
+                )
             }
-            Gesture.TAP -> {
-                when (CliActionItem.entries[current.cliActionIndex.coerceIn(CliActionItem.entries.indices)]) {
-                    CliActionItem.CAM -> {
-                        if (current.photoThumbnails.size >= MAX_PHOTOS) {
-                            Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring Codex photo request")
-                        } else if (DEBUG_MODE) {
-                            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                cameraCapture.capture()
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
+        }
+
+        fun handleCliMenuTap(item: CliActionItem) {
+            val latest = hudState.value
+            when (item) {
+                CliActionItem.CAM -> {
+                    if (latest.photoThumbnails.size >= MAX_PHOTOS) {
+                        Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring Codex photo request")
+                    } else if (DEBUG_MODE) {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            cameraCapture.capture()
                         } else {
-                            phoneConnection.sendToPhone("""{"type":"take_photo"}""")
-                            Log.d(GlassesApp.TAG, "Requested Codex photo capture from phone")
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                         }
+                    } else {
+                        phoneConnection.sendToPhone("""{"type":"take_photo"}""")
+                        Log.d(GlassesApp.TAG, "Requested Codex photo capture from phone")
                     }
-                    CliActionItem.LINK -> {
-                        val connected = current.cliStatus.equals("CONNECTED", ignoreCase = true)
-                        if (connected) {
-                            phoneConnection.sendToPhone("""{"type":"cli_disconnect"}""")
-                            hudState.value = current.copy(
-                                cliStatus = "OFFLINE",
-                                cliDetail = "Disconnected"
-                            )
-                        } else {
-                            hudState.value = current.copy(cliStatus = "CONNECTING", cliDetail = "")
-                            phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
-                        }
+                    focusCliInput(hudState.value)
+                }
+                CliActionItem.LINK -> {
+                    val connected = latest.cliStatus.equals("CONNECTED", ignoreCase = true)
+                    if (connected) {
+                        phoneConnection.sendToPhone("""{"type":"cli_disconnect"}""")
+                        hudState.value = latest.copy(
+                            cliStatus = "OFFLINE",
+                            cliDetail = "Disconnected"
+                        )
+                    } else {
+                        hudState.value = latest.copy(cliStatus = "CONNECTING", cliDetail = "")
+                        phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
                     }
-                    CliActionItem.SEND -> {
-                        val staged = current.stagingText.trim()
-                        val typed = current.inputText.trim()
-                        val text = staged.ifEmpty { typed }
-                        if (text.isNotEmpty() || current.photoThumbnails.isNotEmpty()) {
-                            hudState.value = current.copy(inputText = text)
-                            submitInput()
-                        }
+                }
+                CliActionItem.SEND -> {
+                    val staged = latest.stagingText.trim()
+                    val typed = latest.inputText.trim()
+                    val text = staged.ifEmpty { typed }
+                    if (text.isNotEmpty() || latest.photoThumbnails.isNotEmpty()) {
+                        hudState.value = latest.copy(inputText = text)
+                        submitInput()
                     }
-                    CliActionItem.STOP -> {
-                        phoneConnection.sendToPhone("""{"type":"cli_stop"}""")
+                }
+                CliActionItem.STOP -> {
+                    phoneConnection.sendToPhone("""{"type":"cli_stop"}""")
+                }
+                CliActionItem.MODE -> {
+                    val newMode = when (latest.voiceSendMode) {
+                        VoiceSendMode.ASK -> VoiceSendMode.AUTO
+                        VoiceSendMode.AUTO -> VoiceSendMode.ASK
                     }
-                    CliActionItem.CLEAR -> {
-                        if (current.stagingText.isNotBlank() || current.photoThumbnails.isNotEmpty() || current.showInputStaging) {
-                            hudState.value = current.copy(
-                                showInputStaging = false,
-                                stagingText = "",
-                                photoThumbnails = emptyList(),
-                                inputActionIndex = 0,
-                                voiceState = VoiceInputState.Idle,
-                                voiceText = ""
-                            )
-                            phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
-                        } else {
-                            clearCliTerminal()
-                        }
+                    hudState.value = latest.copy(voiceSendMode = newMode)
+                    saveHudPreferences()
+                    Log.d(GlassesApp.TAG, "Codex voice send mode: $newMode")
+                }
+                CliActionItem.CLEAR -> {
+                    if (latest.stagingText.isNotBlank() || latest.photoThumbnails.isNotEmpty() || latest.showInputStaging) {
+                        hudState.value = latest.copy(
+                            showInputStaging = false,
+                            stagingText = "",
+                            photoThumbnails = emptyList(),
+                            inputActionIndex = 0,
+                            voiceState = VoiceInputState.Idle,
+                            voiceText = "",
+                            focusedArea = ChatFocusArea.MENU
+                        )
+                        phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
+                    } else {
+                        clearCliTerminal()
                     }
                 }
             }
-            Gesture.DOUBLE_TAP -> {
-                hudState.value = current.copy(
-                    showCliTerminal = false,
-                    showInputStaging = false,
-                    stagingText = "",
-                    inputActionIndex = 0
-                )
+        }
+
+        when (current.focusedArea) {
+            ChatFocusArea.CONTENT -> when (gesture) {
+                Gesture.SWIPE_FORWARD -> scrollCliUp(current)
+                Gesture.SWIPE_BACKWARD -> scrollCliDownOrMenu(current)
+                Gesture.TAP -> scrollCliToBottom(current)
+                Gesture.DOUBLE_TAP -> {
+                    if (hasCliInput(current)) {
+                        focusCliInput(current)
+                    } else {
+                        focusCliMenu(current, CliActionItem.CAM.ordinal)
+                    }
+                }
+                Gesture.LONG_PRESS -> startVoice()
             }
-            Gesture.LONG_PRESS -> startVoice()
+            ChatFocusArea.INPUT -> when (gesture) {
+                Gesture.SWIPE_FORWARD -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+                Gesture.SWIPE_BACKWARD -> focusCliMenu(current, CliActionItem.SEND.ordinal)
+                Gesture.TAP -> {
+                    val staged = current.stagingText.trim()
+                    val typed = current.inputText.trim()
+                    val text = staged.ifEmpty { typed }
+                    if (text.isNotEmpty() || current.photoThumbnails.isNotEmpty()) {
+                        hudState.value = current.copy(inputText = text)
+                        submitInput()
+                    }
+                }
+                Gesture.DOUBLE_TAP -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+                Gesture.LONG_PRESS -> startVoice()
+            }
+            ChatFocusArea.MENU -> when (gesture) {
+                Gesture.SWIPE_FORWARD -> {
+                    if (current.cliActionIndex <= 0) {
+                        if (hasCliInput(current)) {
+                            focusCliInput(current)
+                        } else {
+                            hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+                        }
+                    } else {
+                        hudState.value = current.copy(cliActionIndex = current.cliActionIndex - 1)
+                    }
+                }
+                Gesture.SWIPE_BACKWARD -> {
+                    if (current.cliActionIndex >= actionCount - 1) {
+                        hudState.value = current.copy(cliActionIndex = current.cliActionIndex)
+                    } else {
+                        hudState.value = current.copy(cliActionIndex = current.cliActionIndex + 1)
+                    }
+                }
+                Gesture.TAP -> handleCliMenuTap(CliActionItem.entries[current.cliActionIndex.coerceIn(CliActionItem.entries.indices)])
+                Gesture.DOUBLE_TAP -> {
+                    hudState.value = current.copy(
+                        showCliTerminal = false,
+                        showInputStaging = false,
+                        stagingText = "",
+                        inputActionIndex = 0,
+                        focusedArea = ChatFocusArea.CONTENT
+                    )
+                }
+                Gesture.LONG_PRESS -> startVoice()
+            }
         }
     }
     private fun handleMoreSubMenuGesture(gesture: Gesture) {
@@ -1456,7 +1601,7 @@ class HudActivity : ComponentActivity() {
             if (merged.isEmpty()) return@update current
             current.copy(
                 cliLines = merged,
-                cliScrollPosition = maxOf(0, merged.size - 1),
+                cliScrollPosition = maxOf(0, cliVisibleBlockCount(merged) - 1),
                 showCliTerminal = current.showCliTerminal
             )
         }
@@ -1728,7 +1873,7 @@ class HudActivity : ComponentActivity() {
                         current.copy(
                             cliStatus = state,
                             cliDetail = detail,
-                            cliScrollPosition = maxOf(0, current.cliLines.size - 1)
+                            cliScrollPosition = maxOf(0, cliVisibleBlockCount(current.cliLines) - 1)
                         )
                     }
                 }

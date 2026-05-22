@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -28,7 +29,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalDensity
@@ -108,11 +114,14 @@ enum class AgentState {
  * Menu bar items
  */
 enum class MenuBarItem(val icon: String, val label: String) {
-    PHOTO("\uD83D\uDCF7", "Photo"),
-    SESSION("\u25CE", "Sess"),
-    SIZE("\u2588", "Size"),  // Icon overridden dynamically based on next HudPosition
-    SLASH("/", "Cmds"),
-    MORE("\u2026", "More"),
+    PHOTO("CAM", "Cam"),
+    SESSION("SESS", "Sess"),
+    VOICE_SEND("MIC", "Ask"),
+    AR_TOOLS("AR", "AR"),
+    SIZE("SIZE", "Size"),
+    MORE("...", "More"),
+    SLASH("/", "Cmd"),
+    CODEX_CLI("CODX", "Codex"),
 }
 
 /**
@@ -137,6 +146,7 @@ enum class CliActionItem(val label: String) {
     LINK("Link"),
     SEND("Send"),
     STOP("Stop"),
+    MODE("Mode"),
     CLEAR("Clear")
 }
 
@@ -214,6 +224,7 @@ data class ChatHudState(
     val isConnected: Boolean = false,
     val agentState: AgentState = AgentState.IDLE,
     val menuBarIndex: Int = 0,
+    val menuBarPage: Int = 0,
     val hudPosition: HudPosition = HudPosition.FULL,
     val displaySize: HudDisplaySize = HudDisplaySize.NORMAL,
     val focusedArea: ChatFocusArea = ChatFocusArea.CONTENT,
@@ -265,6 +276,10 @@ data class ChatHudState(
     val cliDetail: String = "",
     val cliLines: List<String> = emptyList(),
     val cliScrollPosition: Int = 0,
+    val cliScrollTrigger: Int = 0,
+    val cliScrollCommand: Int = 0,
+    val cliScrollDirection: Int = 0,
+    val cliIsScrolledToEnd: Boolean = false,
     val cliActionIndex: Int = CliActionItem.SEND.ordinal
 ) {
     /** Total number of messages */
@@ -386,7 +401,8 @@ fun HudScreen(
     onTap: () -> Unit = {},
     onDoubleTap: () -> Unit = {},
     onLongPress: () -> Unit = {},
-    onScrolledToEndChanged: (Boolean) -> Unit = {}
+    onScrolledToEndChanged: (Boolean) -> Unit = {},
+    onCliScrolledToEndChanged: (Boolean) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val textMeasurer = rememberTextMeasurer()
@@ -590,12 +606,14 @@ fun HudScreen(
                         Spacer(modifier = Modifier.height(4.dp))
                         ChatMenuBar(
                             selectedIndex = state.menuBarIndex,
+                            menuBarPage = state.menuBarPage,
                             isFocused = menuFocused,
                             hudPosition = state.hudPosition,
                             batteryLevel = null,
                             batteryCharging = false,
                             currentTime = "",
                             fontFamily = monoFontFamily,
+                            voiceSendMode = state.voiceSendMode,
                             alpha = menuAlpha
                         )
                     }
@@ -682,14 +700,21 @@ fun HudScreen(
                 status = state.cliStatus,
                 detail = state.cliDetail,
                 scrollPosition = state.cliScrollPosition,
+                scrollTrigger = state.cliScrollTrigger,
+                scrollCommand = state.cliScrollCommand,
+                scrollDirection = state.cliScrollDirection,
                 selectedActionIndex = state.cliActionIndex,
+                focusedArea = state.focusedArea,
+                inputActionIndex = state.inputActionIndex,
                 stagingText = state.stagingText,
                 voiceText = state.voiceText,
                 showInputStaging = state.showInputStaging,
                 photos = state.photoThumbnails,
                 voiceState = state.voiceState,
+                voiceSendMode = state.voiceSendMode,
                 displaySize = state.displaySize,
-                fontFamily = monoFontFamily
+                fontFamily = monoFontFamily,
+                onScrolledToEndChanged = onCliScrolledToEndChanged
             )
         }
         // Exit confirmation overlay
@@ -1497,17 +1522,19 @@ private fun InputStagingArea(
 @Composable
 private fun ChatMenuBar(
     selectedIndex: Int,
+    menuBarPage: Int,
     isFocused: Boolean,
     hudPosition: HudPosition,
     batteryLevel: Int?,
     batteryCharging: Boolean,
     currentTime: String,
     fontFamily: FontFamily,
+    voiceSendMode: VoiceSendMode,
     alpha: Float,
     modifier: Modifier = Modifier
 ) {
     val commandFontSize = 8.sp  // Fixed size - FONT only affects content
-    val items = MenuBarItem.entries
+    val pageItems = menuBarItemsForPage(menuBarPage.coerceIn(0, 1))
     val scrollState = rememberScrollState()
 
     Row(
@@ -1523,42 +1550,53 @@ private fun ChatMenuBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            items.forEachIndexed { index, item ->
+            pageItems.forEachIndexed { index, item ->
                 val isSelected = index == selectedIndex && isFocused
+
 
                 val displayLabel = when (item) {
                     MenuBarItem.PHOTO -> "CAM"
-                    MenuBarItem.SESSION -> "SESS"
-                    MenuBarItem.SIZE -> when (hudPosition) {
-                        HudPosition.FULL -> "FULL"
-                        HudPosition.BOTTOM_HALF -> "BOT"
-                        HudPosition.TOP_HALF -> "MID"
-                    }
-                    MenuBarItem.SLASH -> "/"
+                    MenuBarItem.SESSION -> "SESSION"
+                    MenuBarItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "AUTO" else "ASK"
+                    MenuBarItem.AR_TOOLS -> "AR"
+                    MenuBarItem.SIZE -> "SIZE"
                     MenuBarItem.MORE -> "MORE"
+                    MenuBarItem.SLASH -> "CMD"
+                    MenuBarItem.CODEX_CLI -> "CODEX"
                 }
-                val buttonText = if (isSelected) "> $displayLabel <" else displayLabel
 
                 Box(
                     modifier = Modifier
-                        .width(54.dp)
-                        .height(24.dp)
+                        .width(56.dp)
+                        .height(30.dp)
                         .border(
                             width = 1.dp,
                             color = if (isSelected) HudColors.green else HudColors.green.copy(alpha = 0.38f),
                             shape = RoundedCornerShape(2.dp)
                         )
-                        .padding(horizontal = 2.dp, vertical = 3.dp),
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = buttonText,
-                        color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.86f),
-                        fontSize = commandFontSize,
-                        fontFamily = fontFamily,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        maxLines = 1
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        HudMenuIcon(
+                            item = item,
+                            color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.92f),
+                            voiceSendMode = voiceSendMode,
+                            modifier = Modifier
+                                .width(30.dp)
+                                .height(15.dp)
+                        )
+                        Text(
+                            text = displayLabel.uppercase(),
+                            color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.92f),
+                            fontSize = 6.sp,
+                            fontFamily = fontFamily,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -1583,6 +1621,139 @@ private fun ChatMenuBar(
                 fontFamily = fontFamily,
                 modifier = Modifier.padding(start = 4.dp)
             )
+        }
+    }
+}
+
+fun menuBarItemsForPage(page: Int): List<MenuBarItem> = if (page == 0) {
+    listOf(MenuBarItem.PHOTO, MenuBarItem.SESSION, MenuBarItem.VOICE_SEND, MenuBarItem.AR_TOOLS)
+} else {
+    listOf(MenuBarItem.SIZE, MenuBarItem.MORE, MenuBarItem.SLASH, MenuBarItem.CODEX_CLI)
+}
+
+private fun pageForMenuBarItem(item: MenuBarItem): Int = if (item in menuBarItemsForPage(0)) 0 else 1
+
+private fun indexForMenuBarItem(item: MenuBarItem): Int = menuBarItemsForPage(pageForMenuBarItem(item)).indexOf(item).coerceAtLeast(0)
+
+@Composable
+private fun HudMenuIcon(
+    item: MenuBarItem,
+    color: Color,
+    voiceSendMode: VoiceSendMode,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(
+            width = 1.9.dp.toPx(),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round
+        )
+        val thin = Stroke(
+            width = 1.25.dp.toPx(),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round
+        )
+
+        when (item) {
+            MenuBarItem.VOICE_SEND -> {
+                if (voiceSendMode == VoiceSendMode.AUTO) {
+                    drawLine(color, Offset(w * 0.32f, h * 0.24f), Offset(w * 0.32f, h * 0.76f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.50f, h * 0.14f), Offset(w * 0.50f, h * 0.86f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.68f, h * 0.24f), Offset(w * 0.68f, h * 0.76f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawCircle(color = color, radius = 1.6.dp.toPx(), center = Offset(w * 0.50f, h * 0.50f))
+                } else {
+                    drawRoundRect(
+                        color = color,
+                        topLeft = Offset(w * 0.34f, h * 0.10f),
+                        size = Size(w * 0.32f, h * 0.54f),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.16f, w * 0.16f),
+                        style = stroke
+                    )
+                    drawLine(color, Offset(w * 0.50f, h * 0.64f), Offset(w * 0.50f, h * 0.84f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.34f, h * 0.84f), Offset(w * 0.66f, h * 0.84f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.20f, h * 0.42f), Offset(w * 0.20f, h * 0.58f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.80f, h * 0.42f), Offset(w * 0.80f, h * 0.58f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                }
+            }
+            MenuBarItem.PHOTO -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.15f, h * 0.34f),
+                    size = Size(w * 0.70f, h * 0.50f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.10f, w * 0.10f),
+                    style = stroke
+                )
+                drawLine(color, Offset(w * 0.30f, h * 0.34f), Offset(w * 0.40f, h * 0.16f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.40f, h * 0.16f), Offset(w * 0.62f, h * 0.16f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.62f, h * 0.16f), Offset(w * 0.72f, h * 0.34f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawCircle(color = color, radius = h * 0.16f, center = Offset(w * 0.50f, h * 0.60f), style = stroke)
+                drawCircle(color = color, radius = h * 0.04f, center = Offset(w * 0.72f, h * 0.46f))
+            }
+            MenuBarItem.SESSION -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.13f, h * 0.18f),
+                    size = Size(w * 0.74f, h * 0.48f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.10f, w * 0.10f),
+                    style = stroke
+                )
+                drawLine(color, Offset(w * 0.38f, h * 0.66f), Offset(w * 0.28f, h * 0.88f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.28f, h * 0.88f), Offset(w * 0.50f, h * 0.66f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.27f, h * 0.39f), Offset(w * 0.72f, h * 0.39f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.27f, h * 0.52f), Offset(w * 0.58f, h * 0.52f), strokeWidth = thin.width, cap = StrokeCap.Round)
+            }
+            MenuBarItem.SIZE -> {
+                drawCircle(color = color, radius = h * 0.045f, center = Offset(w * 0.20f, h * 0.25f))
+                drawCircle(color = color, radius = h * 0.045f, center = Offset(w * 0.20f, h * 0.50f))
+                drawCircle(color = color, radius = h * 0.045f, center = Offset(w * 0.20f, h * 0.75f))
+                drawLine(color, Offset(w * 0.34f, h * 0.25f), Offset(w * 0.86f, h * 0.25f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.34f, h * 0.50f), Offset(w * 0.74f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.34f, h * 0.75f), Offset(w * 0.62f, h * 0.75f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            MenuBarItem.SLASH -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.12f, h * 0.16f),
+                    size = Size(w * 0.76f, h * 0.68f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.10f, w * 0.10f),
+                    style = thin
+                )
+                drawLine(color, Offset(w * 0.32f, h * 0.72f), Offset(w * 0.68f, h * 0.28f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            MenuBarItem.AR_TOOLS -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.08f, h * 0.34f),
+                    size = Size(w * 0.38f, h * 0.38f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f, w * 0.12f),
+                    style = stroke
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.54f, h * 0.34f),
+                    size = Size(w * 0.38f, h * 0.38f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f, w * 0.12f),
+                    style = stroke
+                )
+                drawLine(color, Offset(w * 0.46f, h * 0.50f), Offset(w * 0.54f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.22f, h * 0.18f), Offset(w * 0.16f, h * 0.08f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.50f, h * 0.16f), Offset(w * 0.50f, h * 0.04f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.78f, h * 0.18f), Offset(w * 0.84f, h * 0.08f), strokeWidth = thin.width, cap = StrokeCap.Round)
+            }
+            MenuBarItem.CODEX_CLI -> {
+                drawLine(color, Offset(w * 0.38f, h * 0.18f), Offset(w * 0.14f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.14f, h * 0.50f), Offset(w * 0.38f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.62f, h * 0.18f), Offset(w * 0.86f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.86f, h * 0.50f), Offset(w * 0.62f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.52f, h * 0.18f), Offset(w * 0.48f, h * 0.82f), strokeWidth = thin.width, cap = StrokeCap.Round)
+            }
+            MenuBarItem.MORE -> {
+                drawCircle(color = color, radius = h * 0.11f, center = Offset(w * 0.28f, h * 0.50f))
+                drawCircle(color = color, radius = h * 0.11f, center = Offset(w * 0.50f, h * 0.50f))
+                drawCircle(color = color, radius = h * 0.11f, center = Offset(w * 0.72f, h * 0.50f))
+            }
         }
     }
 }
@@ -2145,6 +2316,60 @@ private data class CliLineBlock(
     val text: String
 )
 
+private const val CLI_RESPONSE_SEGMENT_CHARS = 280
+private const val CLI_RESPONSE_SEGMENT_LINES = 5
+
+private fun splitCliResponseText(text: String): List<String> {
+    val segments = mutableListOf<String>()
+    val currentLines = mutableListOf<String>()
+    var currentLength = 0
+
+    fun flush() {
+        val segment = currentLines.joinToString("\n").trim()
+        if (segment.isNotEmpty()) {
+            segments += segment
+        }
+        currentLines.clear()
+        currentLength = 0
+    }
+
+    fun splitLongLine(line: String): List<String> {
+        val chunks = mutableListOf<String>()
+        var remaining = line.trim()
+        while (remaining.length > CLI_RESPONSE_SEGMENT_CHARS) {
+            val window = remaining.take(CLI_RESPONSE_SEGMENT_CHARS + 1)
+            val whitespaceIndex = window.lastIndexOf(' ').takeIf { it >= CLI_RESPONSE_SEGMENT_CHARS / 2 }
+            val splitAt = whitespaceIndex ?: CLI_RESPONSE_SEGMENT_CHARS
+            val chunk = remaining.take(splitAt).trim()
+            if (chunk.isNotEmpty()) chunks += chunk
+            remaining = remaining.drop(splitAt).trimStart()
+        }
+        if (remaining.isNotEmpty()) chunks += remaining
+        return chunks
+    }
+
+    text.lines().forEach { rawLine ->
+        val line = rawLine.trimEnd()
+        if (line.isBlank()) {
+            flush()
+            return@forEach
+        }
+
+        splitLongLine(line).forEach { chunk ->
+            val wouldOverflow = currentLines.size >= CLI_RESPONSE_SEGMENT_LINES ||
+                    currentLength + chunk.length > CLI_RESPONSE_SEGMENT_CHARS
+            if (wouldOverflow) flush()
+            currentLines += chunk
+            currentLength += chunk.length
+        }
+    }
+
+    flush()
+    return segments.ifEmpty { listOf(text.trim()) }
+}
+
+internal fun cliVisibleBlockCount(lines: List<String>): Int = buildCliLineBlocks(lines).size
+
 private fun buildCliLineBlocks(lines: List<String>): List<CliLineBlock> {
     if (lines.isEmpty()) {
         return listOf(CliLineBlock(CliBlockKind.SYSTEM, "Admin Codex ready."))
@@ -2156,7 +2381,9 @@ private fun buildCliLineBlocks(lines: List<String>): List<CliLineBlock> {
     fun flushResponse() {
         val text = responseBuffer.joinToString("\n").trim()
         if (text.isNotEmpty()) {
-            blocks += CliLineBlock(CliBlockKind.RESPONSE, text)
+            splitCliResponseText(text).forEach { segment ->
+                blocks += CliLineBlock(CliBlockKind.RESPONSE, segment)
+            }
         }
         responseBuffer.clear()
     }
@@ -2198,21 +2425,27 @@ private fun buildCliLineBlocks(lines: List<String>): List<CliLineBlock> {
     flushResponse()
     return blocks.ifEmpty { listOf(CliLineBlock(CliBlockKind.SYSTEM, "Admin Codex ready.")) }
 }
-
 @Composable
 private fun CliTerminalOverlay(
     lines: List<String>,
     status: String,
     detail: String,
     scrollPosition: Int,
+    scrollTrigger: Int,
+    scrollCommand: Int,
+    scrollDirection: Int,
     selectedActionIndex: Int,
+    focusedArea: ChatFocusArea,
+    inputActionIndex: Int,
     stagingText: String,
     voiceText: String,
     showInputStaging: Boolean,
     photos: List<Bitmap>,
     voiceState: VoiceInputState,
+    voiceSendMode: VoiceSendMode,
     displaySize: HudDisplaySize,
     fontFamily: FontFamily,
+    onScrolledToEndChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -2235,8 +2468,41 @@ private fun CliTerminalOverlay(
         else -> status.ifBlank { "OFFLINE" }
     }
 
-    LaunchedEffect(visibleBlocks.size, scrollPosition, lastBlockText) {
-        listState.animateScrollToItem(visibleBlocks.size)
+    val canScrollForward = listState.canScrollForward
+    LaunchedEffect(canScrollForward) {
+        onScrolledToEndChanged(!canScrollForward)
+    }
+
+    LaunchedEffect(scrollCommand) {
+        if (scrollCommand != 0 && scrollDirection != 0) {
+            val viewportHeight = listState.layoutInfo.viewportSize.height
+            val fallbackHeight = 420
+            val distance = (if (viewportHeight > 0) viewportHeight else fallbackHeight) * 0.72f
+            listState.animateScrollBy(scrollDirection * distance)
+        }
+    }
+
+    LaunchedEffect(scrollPosition, scrollTrigger, visibleBlocks.size, lastBlockText) {
+        if (visibleBlocks.isNotEmpty()) {
+            val totalItems = visibleBlocks.size
+            val targetIndex = scrollPosition.coerceIn(0, totalItems - 1)
+            val currentIndex = listState.firstVisibleItemIndex
+            if (targetIndex < currentIndex) {
+                val viewportHeight = listState.layoutInfo.viewportSize.height
+                val itemsToScroll = currentIndex - targetIndex
+                val visibleItems = listState.layoutInfo.visibleItemsInfo
+                val avgItemHeight = if (visibleItems.isNotEmpty()) {
+                    visibleItems.sumOf { it.size } / visibleItems.size.toFloat()
+                } else {
+                    viewportHeight / 5f
+                }
+                listState.animateScrollBy(-(itemsToScroll * avgItemHeight))
+            } else if (targetIndex == totalItems - 1) {
+                listState.animateScrollToItem(targetIndex, Int.MAX_VALUE)
+            } else {
+                listState.animateScrollToItem(targetIndex)
+            }
+        }
     }
 
     Box(
@@ -2324,6 +2590,7 @@ private fun CliTerminalOverlay(
                 voiceText = voiceText,
                 showText = showInputStaging,
                 photos = photos,
+                isFocused = focusedArea == ChatFocusArea.INPUT,
                 isProcessing = voiceState is VoiceInputState.Processing,
                 fontFamily = fontFamily,
                 fontSize = bodyFontSize
@@ -2331,9 +2598,10 @@ private fun CliTerminalOverlay(
             Spacer(modifier = Modifier.height(4.dp))
             CliBottomMenu(
                 selectedActionIndex = selectedAction,
+                selectedFocused = focusedArea == ChatFocusArea.MENU,
                 connected = status.uppercase() == "CONNECTED",
-                fontFamily = fontFamily,
-                fontSize = bodyFontSize
+                voiceSendMode = voiceSendMode,
+                fontFamily = fontFamily
             )
         }
     }
@@ -2345,13 +2613,14 @@ private fun CodexInputPreview(
     voiceText: String,
     showText: Boolean,
     photos: List<Bitmap>,
+    isFocused: Boolean,
     isProcessing: Boolean,
     fontFamily: FontFamily,
     fontSize: androidx.compose.ui.unit.TextUnit
 ) {
     val previewText = text.ifBlank { voiceText }
     val hasText = previewText.isNotBlank()
-    if (!showText && !isProcessing && photos.isEmpty() && !hasText) return
+    if (!isProcessing && photos.isEmpty() && !hasText) return
 
     val cursorVisible = if (isProcessing) {
         val infiniteTransition = rememberInfiniteTransition(label = "codexInputCursor")
@@ -2369,7 +2638,7 @@ private fun CodexInputPreview(
         val cursor = if (cursorVisible) "\u2588" else " "
         if (previewText.isNotEmpty()) "$previewText $cursor" else cursor
     } else {
-        previewText.ifEmpty { "Codex input" }
+        previewText
     }
 
     Column(
@@ -2378,7 +2647,11 @@ private fun CodexInputPreview(
             .background(Color.Black, RoundedCornerShape(4.dp))
             .border(
                 width = 1.dp,
-                color = if (isProcessing) HudColors.cyan.copy(alpha = 0.72f) else HudColors.green.copy(alpha = 0.7f),
+                color = when {
+                    isFocused -> HudColors.cyan.copy(alpha = 0.9f)
+                    isProcessing -> HudColors.cyan.copy(alpha = 0.72f)
+                    else -> HudColors.green.copy(alpha = 0.7f)
+                },
                 shape = RoundedCornerShape(4.dp)
             )
             .padding(horizontal = 6.dp, vertical = 4.dp)
@@ -2410,40 +2683,169 @@ private fun CodexInputPreview(
 @Composable
 private fun CliBottomMenu(
     selectedActionIndex: Int,
+    selectedFocused: Boolean,
     connected: Boolean,
-    fontFamily: FontFamily,
-    fontSize: androidx.compose.ui.unit.TextUnit
+    voiceSendMode: VoiceSendMode,
+    fontFamily: FontFamily
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 30.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
+            .height(36.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         CliActionItem.entries.forEachIndexed { index, item ->
-            val selected = index == selectedActionIndex
+            val selected = selectedFocused && index == selectedActionIndex
+            val color = if (selected) HudColors.green else HudColors.primaryText.copy(alpha = 0.74f)
+            val borderColor = if (selected) HudColors.green.copy(alpha = 0.92f) else HudColors.green.copy(alpha = 0.42f)
             val label = when (item) {
                 CliActionItem.CAM -> "CAM"
                 CliActionItem.LINK -> if (connected) "DISC" else "LINK"
                 CliActionItem.SEND -> "SEND"
                 CliActionItem.STOP -> "STOP"
+                CliActionItem.MODE -> if (voiceSendMode == VoiceSendMode.AUTO) "AUTO" else "ASK"
                 CliActionItem.CLEAR -> "CLEAR"
             }
-            Text(
-                text = label,
-                color = if (selected) HudColors.green else HudColors.primaryText.copy(alpha = 0.72f),
-                fontSize = fontSize,
-                fontFamily = fontFamily,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .border(
+                        width = if (selected) 1.dp else 0.5.dp,
+                        color = borderColor,
+                        shape = RoundedCornerShape(3.dp)
+                    )
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    CliMenuIcon(
+                        item = item,
+                        color = color,
+                        connected = connected,
+                        voiceSendMode = voiceSendMode,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(18.dp)
+                    )
+                    Spacer(modifier = Modifier.height(1.dp))
+                    Text(
+                        text = label,
+                        color = color,
+                        fontSize = 5.sp,
+                        fontFamily = fontFamily,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        overflow = TextOverflow.Clip
+                    )
+                }
+            }
         }
     }
 }
 
+@Composable
+private fun CliMenuIcon(
+    item: CliActionItem,
+    color: Color,
+    connected: Boolean,
+    voiceSendMode: VoiceSendMode,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val thin = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        when (item) {
+            CliActionItem.CAM -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.25f, h * 0.34f),
+                    size = Size(w * 0.5f, h * 0.42f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                    style = stroke
+                )
+                drawCircle(color = color, radius = h * 0.12f, center = Offset(w * 0.5f, h * 0.55f), style = stroke)
+                drawLine(color, Offset(w * 0.36f, h * 0.34f), Offset(w * 0.42f, h * 0.22f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.42f, h * 0.22f), Offset(w * 0.58f, h * 0.22f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.58f, h * 0.22f), Offset(w * 0.64f, h * 0.34f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            CliActionItem.LINK -> {
+                val linkColor = if (connected) HudColors.green else color
+                drawRoundRect(
+                    color = linkColor,
+                    topLeft = Offset(w * 0.22f, h * 0.32f),
+                    size = Size(w * 0.28f, h * 0.28f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()),
+                    style = stroke
+                )
+                drawRoundRect(
+                    color = linkColor,
+                    topLeft = Offset(w * 0.50f, h * 0.42f),
+                    size = Size(w * 0.28f, h * 0.28f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()),
+                    style = stroke
+                )
+                drawLine(linkColor, Offset(w * 0.42f, h * 0.52f), Offset(w * 0.58f, h * 0.48f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            CliActionItem.SEND -> {
+                val path = Path().apply {
+                    moveTo(w * 0.34f, h * 0.25f)
+                    lineTo(w * 0.72f, h * 0.50f)
+                    lineTo(w * 0.34f, h * 0.75f)
+                    close()
+                }
+                drawPath(path, color = color, style = stroke)
+                drawLine(color, Offset(w * 0.22f, h * 0.50f), Offset(w * 0.56f, h * 0.50f), strokeWidth = thin.width, cap = StrokeCap.Round)
+            }
+            CliActionItem.STOP -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.34f, h * 0.30f),
+                    size = Size(w * 0.32f, h * 0.40f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()),
+                    style = stroke
+                )
+            }
+            CliActionItem.MODE -> {
+                if (voiceSendMode == VoiceSendMode.AUTO) {
+                    drawLine(color, Offset(w * 0.35f, h * 0.25f), Offset(w * 0.35f, h * 0.74f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.50f, h * 0.18f), Offset(w * 0.50f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.65f, h * 0.25f), Offset(w * 0.65f, h * 0.74f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawCircle(color = color, radius = 1.4.dp.toPx(), center = Offset(w * 0.50f, h * 0.50f))
+                } else {
+                    drawRoundRect(
+                        color = color,
+                        topLeft = Offset(w * 0.34f, h * 0.18f),
+                        size = Size(w * 0.32f, h * 0.46f),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()),
+                        style = stroke
+                    )
+                    drawLine(color, Offset(w * 0.50f, h * 0.64f), Offset(w * 0.50f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                    drawLine(color, Offset(w * 0.40f, h * 0.82f), Offset(w * 0.60f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                }
+            }
+            CliActionItem.CLEAR -> {
+                drawLine(color, Offset(w * 0.34f, h * 0.30f), Offset(w * 0.66f, h * 0.70f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.66f, h * 0.30f), Offset(w * 0.34f, h * 0.70f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawRoundRect(
+                    color = color.copy(alpha = 0.65f),
+                    topLeft = Offset(w * 0.25f, h * 0.18f),
+                    size = Size(w * 0.50f, h * 0.64f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                    style = thin
+                )
+            }
+        }
+    }
+}
 @Composable
 private fun CliTerminalBlockItem(
     block: CliLineBlock,

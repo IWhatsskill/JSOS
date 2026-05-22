@@ -66,7 +66,7 @@ Main JSOS changes include:
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
 - Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
 - Added JSOS HUD `AR PIC` and `AR REC` options that trigger Rokid AR picture / mixed-recording scene commands from the glasses app.
-- Added an experimental Admin Codex HUD view and JSOS Core bridge client for private Admin Codex bridge setups.
+- Added an experimental Admin Codex HUD/Core bridge client for private bridge setups, with JSOS-style terminal panels, link/send/stop/clear controls, staged photo input, and scrollable glasses output.
 - Chunked phone-to-glasses message transport for larger JSON payloads.
 - Wake acknowledgments and status messages between phone and HUD.
 - Public-readiness cleanup: neutral assets, README rewrite, safer `.gitignore`, redacted sensitive logs, local-only signing, and clearer security notes.
@@ -353,9 +353,9 @@ This path does not merge media inside JSOS. It delegates capture/processing to R
 JSOS includes an experimental private Admin Codex bridge path for local/VPN setups. This path is separate from OpenClaw: it is intended for a user-managed Codex CLI environment such as a private VPS admin workspace, not for an OpenClaw agent, Discord bot, or OpenClaw session.
 
 - JSOS Core provides a `Codex` tab with camera/image staging, link, send, stop, and clear controls.
-- JSOS HUD opens `MORE` -> `Codex CLI`.
+- JSOS HUD opens `MORE` -> `Codex CLI` with a JSOS-style terminal view, staged input/photos, and local link/send/stop/clear controls.
 - JSOS Core connects to a user-managed WebSocket bridge using port `18890` and path `/codex-cli`. The default host is derived from the configured OpenClaw host only as a convenience for private LAN/VPN/Tailnet setups.
-- Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view.
+- Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view. The HUD output auto-scrolls to new responses but remains manually scrollable for review.
 - Staged photos can be attached to Admin Codex input when the private bridge supports image payloads. JSOS Core sends JPEG/PNG Base64 image payloads and transcodes other decodable staged image formats to JPEG before sending. Image sends are explicit one-shot requests: JSOS sends the currently staged photos with that input and does not automatically reattach older images to later follow-up turns.
 - `CLEAR` / `CODEX CLEAR` clears the local terminal view only; it does not reset the remote Codex session or workspace.
 
