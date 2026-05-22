@@ -1090,6 +1090,15 @@ class HudActivity : ComponentActivity() {
                     }
                     focusCliInput(hudState.value)
                 }
+                CliActionItem.BACK -> {
+                    hudState.value = latest.copy(
+                        showCliTerminal = false,
+                        showInputStaging = false,
+                        stagingText = "",
+                        inputActionIndex = 0,
+                        focusedArea = ChatFocusArea.CONTENT
+                    )
+                }
                 CliActionItem.LINK -> {
                     val connected = latest.cliStatus.equals("CONNECTED", ignoreCase = true)
                     if (connected) {

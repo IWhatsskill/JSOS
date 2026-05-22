@@ -143,10 +143,11 @@ enum class VoiceSendMode {
 
 enum class CliActionItem(val label: String) {
     CAM("Cam"),
-    LINK("Link"),
+    BACK("JSOS"),
+    MODE("Mic"),
     SEND("Send"),
+    LINK("Link"),
     STOP("Stop"),
-    MODE("Mode"),
     CLEAR("Clear")
 }
 
@@ -714,6 +715,7 @@ fun HudScreen(
                 voiceSendMode = state.voiceSendMode,
                 displaySize = state.displaySize,
                 fontFamily = monoFontFamily,
+                hudPosition = state.hudPosition,
                 onScrolledToEndChanged = onCliScrolledToEndChanged
             )
         }
@@ -1547,7 +1549,7 @@ private fun ChatMenuBar(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(scrollState),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
             pageItems.forEachIndexed { index, item ->
@@ -1556,8 +1558,8 @@ private fun ChatMenuBar(
 
                 val displayLabel = when (item) {
                     MenuBarItem.PHOTO -> "CAM"
-                    MenuBarItem.SESSION -> "SESSION"
-                    MenuBarItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "AUTO" else "ASK"
+                    MenuBarItem.SESSION -> "SESS"
+                    MenuBarItem.VOICE_SEND -> "MIC"
                     MenuBarItem.AR_TOOLS -> "AR"
                     MenuBarItem.SIZE -> "SIZE"
                     MenuBarItem.MORE -> "MORE"
@@ -1567,14 +1569,14 @@ private fun ChatMenuBar(
 
                 Box(
                     modifier = Modifier
-                        .width(56.dp)
-                        .height(30.dp)
+                        .width(48.dp)
+                        .height(25.dp)
                         .border(
-                            width = 1.dp,
-                            color = if (isSelected) HudColors.green else HudColors.green.copy(alpha = 0.38f),
-                            shape = RoundedCornerShape(2.dp)
+                            width = if (isSelected) 0.9.dp else 0.55.dp,
+                            color = if (isSelected) HudColors.green else HudColors.green.copy(alpha = 0.42f),
+                            shape = RoundedCornerShape(3.dp)
                         )
-                        .padding(horizontal = 2.dp, vertical = 2.dp),
+                        .padding(horizontal = 1.dp, vertical = 1.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -1586,15 +1588,19 @@ private fun ChatMenuBar(
                             color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.92f),
                             voiceSendMode = voiceSendMode,
                             modifier = Modifier
-                                .width(30.dp)
-                                .height(15.dp)
+                                .width(23.dp)
+                                .height(12.dp)
                         )
                         Text(
                             text = displayLabel.uppercase(),
-                            color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.92f),
-                            fontSize = 6.sp,
+                            color = if (isSelected) HudColors.green else HudColors.primaryText.copy(alpha = 0.96f),
+                            fontSize = 7.sp,
+                            lineHeight = 7.sp,
                             fontFamily = fontFamily,
-                            maxLines = 1
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Clip
                         )
                     }
                 }
@@ -1626,9 +1632,9 @@ private fun ChatMenuBar(
 }
 
 fun menuBarItemsForPage(page: Int): List<MenuBarItem> = if (page == 0) {
-    listOf(MenuBarItem.PHOTO, MenuBarItem.SESSION, MenuBarItem.VOICE_SEND, MenuBarItem.AR_TOOLS)
+    listOf(MenuBarItem.PHOTO, MenuBarItem.CODEX_CLI, MenuBarItem.VOICE_SEND, MenuBarItem.AR_TOOLS)
 } else {
-    listOf(MenuBarItem.SIZE, MenuBarItem.MORE, MenuBarItem.SLASH, MenuBarItem.CODEX_CLI)
+    listOf(MenuBarItem.SIZE, MenuBarItem.MORE, MenuBarItem.SLASH, MenuBarItem.SESSION)
 }
 
 private fun pageForMenuBarItem(item: MenuBarItem): Int = if (item in menuBarItemsForPage(0)) 0 else 1
@@ -2445,6 +2451,7 @@ private fun CliTerminalOverlay(
     voiceSendMode: VoiceSendMode,
     displaySize: HudDisplaySize,
     fontFamily: FontFamily,
+    hudPosition: HudPosition,
     onScrolledToEndChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2466,6 +2473,20 @@ private fun CliTerminalOverlay(
         "CONNECTING" -> "LINK"
         "ERROR" -> "ERROR"
         else -> status.ifBlank { "OFFLINE" }
+    }
+    val hudHeight = when (hudPosition) {
+        HudPosition.FULL -> 1f
+        HudPosition.BOTTOM_HALF -> 0.5f
+        HudPosition.TOP_HALF -> MidSafeHudHeightFraction
+    }
+    val hudAlignment = when (hudPosition) {
+        HudPosition.FULL -> Alignment.TopStart
+        HudPosition.BOTTOM_HALF -> Alignment.BottomStart
+        HudPosition.TOP_HALF -> Alignment.TopStart
+    }
+    val topSafePadding = when (hudPosition) {
+        HudPosition.BOTTOM_HALF -> 0.dp
+        HudPosition.FULL, HudPosition.TOP_HALF -> TopGhostSafeZone
     }
 
     val canScrollForward = listState.canScrollForward
@@ -2509,12 +2530,14 @@ private fun CliTerminalOverlay(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black),
-        contentAlignment = Alignment.TopStart
+        contentAlignment = hudAlignment
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(top = TopGhostSafeZone)
+                .fillMaxWidth()
+                .fillMaxHeight(hudHeight)
+                .clipToBounds()
+                .padding(top = topSafePadding)
                 .padding(horizontal = 2.dp, vertical = 6.dp)
                 .background(Color.Black.copy(alpha = 0.96f), RoundedCornerShape(4.dp))
                 .padding(horizontal = 2.dp, vertical = 6.dp)
@@ -2691,32 +2714,34 @@ private fun CliBottomMenu(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(36.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .height(29.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CliActionItem.entries.forEachIndexed { index, item ->
-            val selected = selectedFocused && index == selectedActionIndex
+        val pageItems = cliActionItemsForPage(pageForCliActionItem(CliActionItem.entries[selectedActionIndex.coerceIn(CliActionItem.entries.indices)]))
+        pageItems.forEach { item ->
+            val selected = selectedFocused && item.ordinal == selectedActionIndex
             val color = if (selected) HudColors.green else HudColors.primaryText.copy(alpha = 0.74f)
             val borderColor = if (selected) HudColors.green.copy(alpha = 0.92f) else HudColors.green.copy(alpha = 0.42f)
             val label = when (item) {
                 CliActionItem.CAM -> "CAM"
-                CliActionItem.LINK -> if (connected) "DISC" else "LINK"
+                CliActionItem.BACK -> "JSOS"
+                CliActionItem.MODE -> "MIC"
                 CliActionItem.SEND -> "SEND"
+                CliActionItem.LINK -> if (connected) "DISC" else "LINK"
                 CliActionItem.STOP -> "STOP"
-                CliActionItem.MODE -> if (voiceSendMode == VoiceSendMode.AUTO) "AUTO" else "ASK"
                 CliActionItem.CLEAR -> "CLEAR"
             }
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
+                    .width(48.dp)
+                    .height(25.dp)
                     .border(
-                        width = if (selected) 1.dp else 0.5.dp,
+                        width = if (selected) 0.9.dp else 0.55.dp,
                         color = borderColor,
                         shape = RoundedCornerShape(3.dp)
                     )
-                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                    .padding(horizontal = 1.dp, vertical = 1.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -2730,16 +2755,16 @@ private fun CliBottomMenu(
                         connected = connected,
                         voiceSendMode = voiceSendMode,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(18.dp)
+                            .width(23.dp)
+                            .height(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(1.dp))
                     Text(
                         text = label,
-                        color = color,
-                        fontSize = 5.sp,
+                        color = if (selected) HudColors.green else HudColors.primaryText.copy(alpha = 0.96f),
+                        fontSize = 7.sp,
+                        lineHeight = 7.sp,
                         fontFamily = fontFamily,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         textAlign = TextAlign.Center,
                         overflow = TextOverflow.Clip
@@ -2749,6 +2774,14 @@ private fun CliBottomMenu(
         }
     }
 }
+
+fun cliActionItemsForPage(page: Int): List<CliActionItem> = if (page == 0) {
+    listOf(CliActionItem.CAM, CliActionItem.BACK, CliActionItem.MODE, CliActionItem.SEND)
+} else {
+    listOf(CliActionItem.LINK, CliActionItem.STOP, CliActionItem.CLEAR)
+}
+
+private fun pageForCliActionItem(item: CliActionItem): Int = if (item in cliActionItemsForPage(0)) 0 else 1
 
 @Composable
 private fun CliMenuIcon(
@@ -2776,6 +2809,13 @@ private fun CliMenuIcon(
                 drawLine(color, Offset(w * 0.36f, h * 0.34f), Offset(w * 0.42f, h * 0.22f), strokeWidth = stroke.width, cap = StrokeCap.Round)
                 drawLine(color, Offset(w * 0.42f, h * 0.22f), Offset(w * 0.58f, h * 0.22f), strokeWidth = stroke.width, cap = StrokeCap.Round)
                 drawLine(color, Offset(w * 0.58f, h * 0.22f), Offset(w * 0.64f, h * 0.34f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            CliActionItem.BACK -> {
+                drawLine(color, Offset(w * 0.36f, h * 0.18f), Offset(w * 0.14f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.14f, h * 0.50f), Offset(w * 0.36f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.64f, h * 0.18f), Offset(w * 0.86f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.86f, h * 0.50f), Offset(w * 0.64f, h * 0.82f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawCircle(color = color, radius = h * 0.08f, center = Offset(w * 0.50f, h * 0.50f), style = stroke)
             }
             CliActionItem.LINK -> {
                 val linkColor = if (connected) HudColors.green else color

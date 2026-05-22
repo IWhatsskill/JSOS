@@ -55,7 +55,7 @@ Main JSOS changes include:
 - Reading-first HUD behavior where the bottom menu stays hidden while content is being read and appears only when the user navigates to actions.
 - HUD chat behavior focused on JSOS/assistant output, while user input remains available in JSOS Core and session history.
 - Suppression of unwanted Rokid AI auto-message overlays while JSOS HUD handles the interaction.
-- Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines, no filled selection backgrounds, direct bottom-bar slash command access, and grouped `AR TOOLS` / `DISPLAY` submenus.
+- Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines, compact readable bottom-menu buttons, direct bottom-bar Codex/slash access, and grouped `AR TOOLS` / `DISPLAY` submenus.
 - Staged voice input on the glasses with `Send Ask` and `Send Auto` modes.
 - Session picker presentation updates, current-session markers, unread indicators, and session/chat forwarding behavior.
 - OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
@@ -322,14 +322,26 @@ Current limitation: Core Agent Wake uses the phone-side voice path. The glasses 
 | Double tap | Move focus to menu/input areas, cancel overlays, or show the exit confirmation depending on context. |
 | Long press | Start voice input. |
 | Photo | Request a glasses photo capture through JSOS Core. Up to four staged photos can be attached. |
+| Codex | Open the experimental Admin Codex HUD terminal view. |
 | Sess | Open the session picker and session state display. |
+| Mic | Toggle the HUD voice send mode. |
 | Size | Cycle the HUD display mode between Full, Bottom, and Mid. |
 | / | Open the COMMANDS panel directly. |
 | More | Open the OPTIONS panel for send mode, AR tools, display/font settings, and TTS toggling. |
 
 The HUD has separate focus areas for content, staged input/photos, and the bottom menu. This keeps reading, staging, and command actions usable on the limited glasses touchpad surface.
 
-The bottom HUD menu is `CAM | SESS | SIZE | / | MORE`. `MORE` opens a compact OPTIONS panel:
+The bottom HUD menu uses two compact pages:
+
+- Page 1: `CAM | CODEX | MIC | AR`
+- Page 2: `SIZE | MORE | CMD | SESS`
+
+`CODEX` opens the experimental Admin Codex HUD terminal. Inside that view, the bottom menu also uses compact buttons:
+
+- Page 1: `CAM | JSOS | MIC | SEND`
+- Page 2: `LINK | STOP | CLEAR`
+
+`JSOS` returns to the normal glasses HUD. `MORE` opens a compact OPTIONS panel:
 
 - `SEND ASK` / `SEND AUTO` toggles staged versus automatic voice-send behavior.
 - `AR TOOLS` opens `AR PIC`, `AR REC`, and `AR STOP`.
@@ -353,7 +365,7 @@ This path does not merge media inside JSOS. It delegates capture/processing to R
 JSOS includes an experimental private Admin Codex bridge path for local/VPN setups. This path is separate from OpenClaw: it is intended for a user-managed Codex CLI environment such as a private VPS admin workspace, not for an OpenClaw agent, Discord bot, or OpenClaw session.
 
 - JSOS Core provides a `Codex` tab with camera/image staging, link, send, stop, and clear controls.
-- JSOS HUD opens `MORE` -> `Codex CLI` with a JSOS-style terminal view, staged input/photos, and local link/send/stop/clear controls.
+- JSOS HUD opens `CODEX` from the bottom menu with a JSOS-style terminal view, staged input/photos, a `JSOS` return action, and local link/send/stop/clear controls.
 - JSOS Core connects to a user-managed WebSocket bridge using port `18890` and path `/codex-cli`. The default host is derived from the configured OpenClaw host only as a convenience for private LAN/VPN/Tailnet setups.
 - Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view. The HUD output auto-scrolls to new responses but remains manually scrollable for review.
 - Staged photos can be attached to Admin Codex input when the private bridge supports image payloads. JSOS Core sends JPEG/PNG Base64 image payloads and transcodes other decodable staged image formats to JPEG before sending. Image sends are explicit one-shot requests: JSOS sends the currently staged photos with that input and does not automatically reattach older images to later follow-up turns.
