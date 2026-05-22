@@ -2322,56 +2322,8 @@ private data class CliLineBlock(
     val text: String
 )
 
-private const val CLI_RESPONSE_SEGMENT_CHARS = 280
-private const val CLI_RESPONSE_SEGMENT_LINES = 5
-
 private fun splitCliResponseText(text: String): List<String> {
-    val segments = mutableListOf<String>()
-    val currentLines = mutableListOf<String>()
-    var currentLength = 0
-
-    fun flush() {
-        val segment = currentLines.joinToString("\n").trim()
-        if (segment.isNotEmpty()) {
-            segments += segment
-        }
-        currentLines.clear()
-        currentLength = 0
-    }
-
-    fun splitLongLine(line: String): List<String> {
-        val chunks = mutableListOf<String>()
-        var remaining = line.trim()
-        while (remaining.length > CLI_RESPONSE_SEGMENT_CHARS) {
-            val window = remaining.take(CLI_RESPONSE_SEGMENT_CHARS + 1)
-            val whitespaceIndex = window.lastIndexOf(' ').takeIf { it >= CLI_RESPONSE_SEGMENT_CHARS / 2 }
-            val splitAt = whitespaceIndex ?: CLI_RESPONSE_SEGMENT_CHARS
-            val chunk = remaining.take(splitAt).trim()
-            if (chunk.isNotEmpty()) chunks += chunk
-            remaining = remaining.drop(splitAt).trimStart()
-        }
-        if (remaining.isNotEmpty()) chunks += remaining
-        return chunks
-    }
-
-    text.lines().forEach { rawLine ->
-        val line = rawLine.trimEnd()
-        if (line.isBlank()) {
-            flush()
-            return@forEach
-        }
-
-        splitLongLine(line).forEach { chunk ->
-            val wouldOverflow = currentLines.size >= CLI_RESPONSE_SEGMENT_LINES ||
-                    currentLength + chunk.length > CLI_RESPONSE_SEGMENT_CHARS
-            if (wouldOverflow) flush()
-            currentLines += chunk
-            currentLength += chunk.length
-        }
-    }
-
-    flush()
-    return segments.ifEmpty { listOf(text.trim()) }
+    return listOf(text.trim()).filter { it.isNotEmpty() }
 }
 
 internal fun cliVisibleBlockCount(lines: List<String>): Int = buildCliLineBlocks(lines).size
@@ -2457,11 +2409,11 @@ private fun CliTerminalOverlay(
 ) {
     val listState = rememberLazyListState()
     val visibleBlocks = remember(lines) { buildCliLineBlocks(lines) }
-    val lastBlockText = visibleBlocks.lastOrNull()?.text.orEmpty()
     val lastResponseIndex = visibleBlocks.indexOfLast { it.kind == CliBlockKind.RESPONSE }
     val bodyFontSize = fontSize
     val smallFontSize = (fontSize.value - 4).coerceAtLeast(7f).sp
-    val inputAlpha = focusBrightness(focusedArea == ChatFocusArea.INPUT)
+    val hasStagedInput = showInputStaging || photos.isNotEmpty()
+    val inputAlpha = focusBrightness(focusedArea == ChatFocusArea.INPUT || hasStagedInput)
     val selectedAction = selectedActionIndex.coerceIn(CliActionItem.entries.indices)
     val statusColor = when (status.uppercase()) {
         "CONNECTED" -> HudColors.green
@@ -2504,7 +2456,7 @@ private fun CliTerminalOverlay(
         }
     }
 
-    LaunchedEffect(scrollPosition, scrollTrigger, visibleBlocks.size, lastBlockText) {
+    LaunchedEffect(scrollPosition, scrollTrigger, visibleBlocks.size) {
         if (visibleBlocks.isNotEmpty()) {
             val totalItems = visibleBlocks.size
             val targetIndex = scrollPosition.coerceIn(0, totalItems - 1)
@@ -2520,7 +2472,10 @@ private fun CliTerminalOverlay(
                 }
                 listState.animateScrollBy(-(itemsToScroll * avgItemHeight))
             } else if (targetIndex == totalItems - 1) {
-                listState.animateScrollToItem(targetIndex, Int.MAX_VALUE)
+                // Codex responses can grow with small streamed deltas. Use instant
+                // bottom alignment like the normal JSOS HUD streaming path, so
+                // Compose does not restart scroll animations on every chunk.
+                listState.scrollToItem(targetIndex, Int.MAX_VALUE)
             } else {
                 listState.animateScrollToItem(targetIndex)
             }
@@ -2609,13 +2564,13 @@ private fun CliTerminalOverlay(
             }
 
             AnimatedVisibility(
-                visible = showInputStaging || photos.isNotEmpty() || voiceText.isNotBlank() || voiceState is VoiceInputState.Processing,
+                visible = showInputStaging || photos.isNotEmpty(),
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
                 InputStagingArea(
-                    text = stagingText.ifBlank { voiceText },
-                    showText = showInputStaging || stagingText.isNotBlank() || voiceText.isNotBlank(),
+                    text = stagingText,
+                    showText = showInputStaging,
                     photos = photos,
                     selectedIndex = inputActionIndex,
                     isFocused = focusedArea == ChatFocusArea.INPUT,

@@ -78,7 +78,8 @@ class HudActivity : ComponentActivity() {
         private const val CHUNK_TIMEOUT_MS = 30_000L
         private const val ROKID_AR_COMMAND_COOLDOWN_MS = 1_200L
         private const val MAX_CLI_LINES = 220
-        private const val DEFAULT_CODEX_IMAGE_PROMPT = "Describe this image."
+        private const val DEFAULT_CODEX_IMAGE_PROMPT =
+            "Analyze the attached image carefully. Identify the important visible objects, text, UI elements, spatial layout, and anything unusual or relevant. If the image shows a screen, app, HUD, error message, code, document, device, or real-world scene, explain what is visible and what it likely means. Answer in the user's language. Do not invent details that are not visible."
 
         /** Sentinel key for the "New Session" entry in the session picker. */
         const val NEW_SESSION_KEY = "__new_session__"
@@ -1152,6 +1153,72 @@ class HudActivity : ComponentActivity() {
             }
         }
 
+        fun handleCliInputGesture(gesture: Gesture) {
+            val latest = hudState.value
+            val photoCount = latest.photoThumbnails.size
+            val hasText = latest.stagingText.isNotEmpty()
+            val clearIndex = photoCount
+            val sendIndex = photoCount + 1
+            val totalItems = if (hasText) photoCount + 2 else photoCount
+
+            when (gesture) {
+                Gesture.SWIPE_FORWARD -> {
+                    if (latest.inputActionIndex == 0) {
+                        hudState.value = latest.copy(focusedArea = ChatFocusArea.CONTENT)
+                    } else {
+                        hudState.value = latest.copy(inputActionIndex = latest.inputActionIndex - 1)
+                    }
+                }
+                Gesture.SWIPE_BACKWARD -> {
+                    if (totalItems <= 0 || latest.inputActionIndex >= totalItems - 1) {
+                        focusCliMenu(latest, CliActionItem.SEND.ordinal)
+                    } else {
+                        hudState.value = latest.copy(inputActionIndex = latest.inputActionIndex + 1)
+                    }
+                }
+                Gesture.TAP -> {
+                    val idx = latest.inputActionIndex
+                    when {
+                        idx < photoCount -> {
+                            val newThumbnails = latest.photoThumbnails.toMutableList().apply { removeAt(idx) }
+                            val newPhotoCount = newThumbnails.size
+                            val newIndex = if (newThumbnails.isEmpty() && !latest.showInputStaging) {
+                                phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
+                                focusCliMenu(latest.copy(photoThumbnails = emptyList(), inputActionIndex = 0), CliActionItem.SEND.ordinal)
+                                return
+                            } else if (hasText) {
+                                newPhotoCount + 1
+                            } else {
+                                maxOf(0, newPhotoCount - 1)
+                            }
+                            hudState.value = latest.copy(
+                                photoThumbnails = newThumbnails,
+                                inputActionIndex = newIndex
+                            )
+                            phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
+                        }
+                        hasText && idx == clearIndex -> {
+                            hudState.value = latest.copy(
+                                showInputStaging = false,
+                                stagingText = "",
+                                inputActionIndex = 0,
+                                focusedArea = ChatFocusArea.CONTENT
+                            )
+                        }
+                        hasText && idx == sendIndex -> {
+                            val text = latest.stagingText.trim()
+                            if (text.isNotEmpty() || latest.photoThumbnails.isNotEmpty()) {
+                                hudState.value = latest.copy(inputText = text)
+                                submitInput()
+                            }
+                        }
+                    }
+                }
+                Gesture.DOUBLE_TAP -> hudState.value = latest.copy(focusedArea = ChatFocusArea.CONTENT)
+                Gesture.LONG_PRESS -> startVoice()
+            }
+        }
+
         when (current.focusedArea) {
             ChatFocusArea.CONTENT -> when (gesture) {
                 Gesture.SWIPE_FORWARD -> scrollCliUp(current)
@@ -1166,21 +1233,7 @@ class HudActivity : ComponentActivity() {
                 }
                 Gesture.LONG_PRESS -> startVoice()
             }
-            ChatFocusArea.INPUT -> when (gesture) {
-                Gesture.SWIPE_FORWARD -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
-                Gesture.SWIPE_BACKWARD -> focusCliMenu(current, CliActionItem.SEND.ordinal)
-                Gesture.TAP -> {
-                    val staged = current.stagingText.trim()
-                    val typed = current.inputText.trim()
-                    val text = staged.ifEmpty { typed }
-                    if (text.isNotEmpty() || current.photoThumbnails.isNotEmpty()) {
-                        hudState.value = current.copy(inputText = text)
-                        submitInput()
-                    }
-                }
-                Gesture.DOUBLE_TAP -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
-                Gesture.LONG_PRESS -> startVoice()
-            }
+            ChatFocusArea.INPUT -> handleCliInputGesture(gesture)
             ChatFocusArea.MENU -> when (gesture) {
                 Gesture.SWIPE_FORWARD -> {
                     if (current.cliActionIndex <= 0) {
@@ -1602,15 +1655,29 @@ class HudActivity : ComponentActivity() {
 
     private fun appendCliOutput(text: String, replace: Boolean = false) {
         hudState.update { current ->
+            val previousMaxScroll = maxOf(0, cliVisibleBlockCount(current.cliLines) - 1)
             val merged = mergeCliOutputLines(
                 current = current.cliLines,
                 output = text,
                 replace = replace
             ).takeLast(MAX_CLI_LINES)
             if (merged.isEmpty()) return@update current
+            val nextMaxScroll = maxOf(0, cliVisibleBlockCount(merged) - 1)
+            val shouldAutoScroll = current.focusedArea != ChatFocusArea.CONTENT ||
+                current.cliIsScrolledToEnd ||
+                current.cliScrollPosition >= previousMaxScroll - 1
             current.copy(
                 cliLines = merged,
-                cliScrollPosition = maxOf(0, cliVisibleBlockCount(merged) - 1),
+                cliScrollPosition = if (shouldAutoScroll) {
+                    nextMaxScroll
+                } else {
+                    current.cliScrollPosition.coerceAtMost(nextMaxScroll)
+                },
+                cliScrollTrigger = if (shouldAutoScroll) {
+                    current.cliScrollTrigger + 1
+                } else {
+                    current.cliScrollTrigger
+                },
                 showCliTerminal = current.showCliTerminal
             )
         }

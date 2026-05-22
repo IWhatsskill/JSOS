@@ -1354,8 +1354,10 @@ fun MainScreen() {
                             val textToSend = codexCliInput.trim()
                             val photosToSend = pendingPhotos
                             if (textToSend.isNotEmpty() || photosToSend.isNotEmpty()) {
-                                val promptToSend = textToSend.ifBlank { "Describe this image." }
-                                val visiblePrompt = textToSend.ifBlank { "[image] Describe this image." }
+                                val promptToSend = textToSend.ifBlank {
+                                    "Analyze the attached image carefully. Identify the important visible objects, text, UI elements, spatial layout, and anything unusual or relevant. If the image shows a screen, app, HUD, error message, code, document, device, or real-world scene, explain what is visible and what it likely means. Answer in the user's language. Do not invent details that are not visible."
+                                }
+                                val visiblePrompt = textToSend.ifBlank { "[image] Analyze image." }
                                 codexCliLines = (codexCliLines + "> $visiblePrompt").takeLast(220)
                                 codexCliInput = ""
                                 android.util.Log.d("MainScreen", "Codex Core send requested (${promptToSend.length} chars, stagedPhotos=${photosToSend.size})")
