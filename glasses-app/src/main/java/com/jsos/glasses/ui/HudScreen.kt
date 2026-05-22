@@ -713,7 +713,7 @@ fun HudScreen(
                 photos = state.photoThumbnails,
                 voiceState = state.voiceState,
                 voiceSendMode = state.voiceSendMode,
-                displaySize = state.displaySize,
+                fontSize = fontSize,
                 fontFamily = monoFontFamily,
                 hudPosition = state.hudPosition,
                 onScrolledToEndChanged = onCliScrolledToEndChanged
@@ -2449,7 +2449,7 @@ private fun CliTerminalOverlay(
     photos: List<Bitmap>,
     voiceState: VoiceInputState,
     voiceSendMode: VoiceSendMode,
-    displaySize: HudDisplaySize,
+    fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily,
     hudPosition: HudPosition,
     onScrolledToEndChanged: (Boolean) -> Unit,
@@ -2459,8 +2459,9 @@ private fun CliTerminalOverlay(
     val visibleBlocks = remember(lines) { buildCliLineBlocks(lines) }
     val lastBlockText = visibleBlocks.lastOrNull()?.text.orEmpty()
     val lastResponseIndex = visibleBlocks.indexOfLast { it.kind == CliBlockKind.RESPONSE }
-    val bodyFontSize = displaySize.fontSizeSp.sp
-    val smallFontSize = (displaySize.fontSizeSp - 2).coerceAtLeast(8).sp
+    val bodyFontSize = fontSize
+    val smallFontSize = (fontSize.value - 4).coerceAtLeast(7f).sp
+    val inputAlpha = focusBrightness(focusedArea == ChatFocusArea.INPUT)
     val selectedAction = selectedActionIndex.coerceIn(CliActionItem.entries.indices)
     val statusColor = when (status.uppercase()) {
         "CONNECTED" -> HudColors.green
@@ -2607,17 +2608,23 @@ private fun CliTerminalOverlay(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            CodexInputPreview(
-                text = stagingText,
-                voiceText = voiceText,
-                showText = showInputStaging,
-                photos = photos,
-                isFocused = focusedArea == ChatFocusArea.INPUT,
-                isProcessing = voiceState is VoiceInputState.Processing,
-                fontFamily = fontFamily,
-                fontSize = bodyFontSize
-            )
+            AnimatedVisibility(
+                visible = showInputStaging || photos.isNotEmpty() || voiceText.isNotBlank() || voiceState is VoiceInputState.Processing,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                InputStagingArea(
+                    text = stagingText.ifBlank { voiceText },
+                    showText = showInputStaging || stagingText.isNotBlank() || voiceText.isNotBlank(),
+                    photos = photos,
+                    selectedIndex = inputActionIndex,
+                    isFocused = focusedArea == ChatFocusArea.INPUT,
+                    isProcessing = voiceState is VoiceInputState.Processing,
+                    fontFamily = fontFamily,
+                    fontSize = bodyFontSize,
+                    alpha = inputAlpha
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             CliBottomMenu(
                 selectedActionIndex = selectedAction,
@@ -2893,70 +2900,71 @@ private fun CliTerminalBlockItem(
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily
 ) {
-    val shape = RoundedCornerShape(4.dp)
-    val prefix = when (block.kind) {
-        CliBlockKind.INPUT -> ">"
-        CliBlockKind.RESPONSE -> "CODEX>"
-        CliBlockKind.ERROR -> "ERR>"
-        CliBlockKind.SYSTEM -> ""
-    }
-    val textColor = when (block.kind) {
-        CliBlockKind.INPUT -> HudColors.cyan
-        CliBlockKind.RESPONSE -> HudColors.green
-        CliBlockKind.ERROR -> HudColors.error
-        CliBlockKind.SYSTEM -> HudColors.primaryText.copy(alpha = 0.7f)
-    }
-    val decoratedModifier = when {
-        block.kind == CliBlockKind.RESPONSE && isCurrent -> Modifier.border(1.dp, HudColors.green, shape)
-        block.kind == CliBlockKind.ERROR -> Modifier.border(1.dp, HudColors.error, shape)
-        block.kind == CliBlockKind.RESPONSE -> Modifier.drawBehind {
-            drawLine(
-                color = HudColors.green,
-                start = Offset(0f, 0f),
-                end = Offset(0f, size.height),
-                strokeWidth = 1.dp.toPx()
-            )
-        }
-        else -> Modifier
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(decoratedModifier)
-            .padding(horizontal = 4.dp, vertical = if (block.kind == CliBlockKind.SYSTEM) 2.dp else 4.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        if (prefix.isNotEmpty()) {
-            Text(
-                text = prefix,
-                color = when (block.kind) {
-                    CliBlockKind.INPUT -> HudColors.cyan
-                    CliBlockKind.ERROR -> HudColors.error
-                    else -> HudColors.green
-                },
-                fontSize = fontSize,
-                fontFamily = fontFamily,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                modifier = Modifier.widthIn(min = 34.dp, max = 76.dp)
-            )
-        }
-
-        Text(
-            text = block.text,
-            color = textColor,
-            fontSize = if (block.kind == CliBlockKind.SYSTEM) (fontSize.value - 2).coerceAtLeast(8f).sp else fontSize,
+    when (block.kind) {
+        CliBlockKind.INPUT -> ChatMessageItem(
+            message = DisplayMessage(
+                id = "cli-input-${block.text.hashCode()}",
+                role = "user",
+                content = block.text
+            ),
+            speakerLabel = "CODEX",
+            fontSize = fontSize,
             fontFamily = fontFamily,
-            lineHeight = (fontSize.value + 2).sp,
-            letterSpacing = 0.sp,
-            softWrap = true,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            isCurrent = false
+        )
+        CliBlockKind.RESPONSE -> ChatMessageItem(
+            message = DisplayMessage(
+                id = "cli-response-${block.text.hashCode()}",
+                role = "assistant",
+                content = block.text
+            ),
+            speakerLabel = "CODEX",
+            fontSize = fontSize,
+            fontFamily = fontFamily,
+            isCurrent = isCurrent
+        )
+        CliBlockKind.ERROR -> {
+            val shape = RoundedCornerShape(4.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, HudColors.error, shape)
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = "ERR>",
+                    color = HudColors.error,
+                    fontSize = fontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.widthIn(min = 44.dp, max = 92.dp)
+                )
+                Text(
+                    text = block.text,
+                    color = HudColors.error,
+                    fontSize = fontSize,
+                    fontFamily = fontFamily,
+                    lineHeight = fontSize,
+                    letterSpacing = 0.sp,
+                    softWrap = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        CliBlockKind.SYSTEM -> Text(
+            text = block.text,
+            color = HudColors.primaryText.copy(alpha = 0.7f),
+            fontSize = (fontSize.value - 2).coerceAtLeast(8f).sp,
+            fontFamily = fontFamily,
+            lineHeight = fontSize,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp)
         )
     }
-}
-// ============================================================================
+}// ============================================================================
 // EXIT CONFIRMATION OVERLAY
 // ============================================================================
 
