@@ -131,8 +131,6 @@ enum class MoreMenuItem(val icon: String, val label: String) {
     VOICE_SEND("SEND", "Send Mode"),
     AR_TOOLS("AR", "AR Tools"),
     DISPLAY("DISP", "Display"),
-    CODEX_CLI("CODX", "Codex CLI"),
-    CODEX_CLEAR("CLR", "Codex Clear"),
     VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
 }
 
@@ -1972,8 +1970,6 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "SEND AUTO" else "SEND ASK"
                         MoreMenuItem.AR_TOOLS -> "AR TOOLS"
                         MoreMenuItem.DISPLAY -> "DISPLAY"
-                        MoreMenuItem.CODEX_CLI -> "CODEX CLI"
-                        MoreMenuItem.CODEX_CLEAR -> "CODEX CLEAR"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
                     }
                     val activeMark = if (isActive) "*" else " "

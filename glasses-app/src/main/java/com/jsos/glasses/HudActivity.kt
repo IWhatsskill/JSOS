@@ -959,12 +959,6 @@ class HudActivity : ComponentActivity() {
                     moreSubMenuType = MoreSubMenuType.DISPLAY
                 )
             }
-            MoreMenuItem.CODEX_CLI -> {
-                openCliTerminal()
-            }
-            MoreMenuItem.CODEX_CLEAR -> {
-                clearCliTerminal()
-            }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
                 val newEnabled = !current.ttsEnabled
