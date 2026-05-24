@@ -4,10 +4,13 @@
 
 **JSOS** is an Android-based smart-glasses interface for a local or private **OpenClaw Gateway** and **Rokid glasses**.
 
-It consists of two Android apps:
+JSOS is split into two Android apps and one optional private bridge path:
 
-- **JSOS Core** - the phone app. It connects to OpenClaw, stores local runtime settings, handles voice input, TTS settings, sessions, camera handoff, Rokid pairing, HUD deployment, and the experimental private Admin Codex bridge client.
-- **JSOS HUD** - the glasses app. It renders the lightweight HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, can trigger Rokid AR picture/recording scenes, and includes an experimental Admin Codex terminal view.
+| Part | Runs on | Purpose |
+| --- | --- | --- |
+| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the experimental private Admin Codex bridge client. |
+| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad gestures, stages voice input, displays sessions, requests photo capture, triggers Rokid AR picture/recording scenes, and includes an experimental Admin Codex terminal view. |
+| **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex CLI-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
 
 JSOS started as a fork of the upstream Clawsses project and has been substantially reworked into a separate development-preview project. It is being prepared as a public fork base and is not presented as a finished consumer product.
 
@@ -17,17 +20,60 @@ JSOS started as a fork of the upstream Clawsses project and has been substantial
 
 ## Showcase
 
-A short JSOS showcase video is included for a quick visual overview:
+The repository includes a short JSOS showcase video for a quick visual overview:
 
 - **JSOS HUD** running on Rokid glasses with the green monochrome interface.
 - **JSOS Core** controlling gateway, sessions, voice, HUD deployment, and Codex bridge input.
 - **Admin Codex bridge** output rendered directly inside the glasses HUD.
 
-[Download the JSOS showcase video](docs/videos/JSOS-showcase.mp4)
+<p align="center">
+  <a href="docs/videos/JSOS-showcase.mp4"><strong>Download / view the JSOS showcase video</strong></a>
+</p>
 
-## Status
+## Visual Overview
 
-Current state:
+These public-safe visuals show the current JSOS interface direction. They are documentation examples, not official APK release assets.
+
+### JSOS Core
+
+JSOS Core is the phone-side control deck for gateway connection, session routing, voice, HUD deployment, brightness, and the private Admin Codex bridge client.
+
+#### Home, Chat, Voice, Diagnostics
+
+<p align="center">
+  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="22%">
+  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="22%">
+  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings and live talk mode" width="22%">
+  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="22%">
+</p>
+
+#### Config
+
+System Link, HUD Link, HUD Deployment, Voice Matrix, and Response Voice are kept as focused setup panels instead of buried Android settings screens.
+
+<p align="center">
+  <img src="docs/images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" width="19%">
+  <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" width="19%">
+  <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" width="19%">
+  <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" width="19%">
+  <img src="docs/images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" width="19%">
+</p>
+
+### JSOS HUD
+
+JSOS HUD is the glasses-side interface: green monochrome, touchpad-first, safe-zone aware, and designed to stay readable over the real world.
+
+<p align="center">
+  <img src="docs/images/jsos-hud-glasses-01.jpeg" alt="JSOS HUD options overlay captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-02.jpeg" alt="JSOS HUD slash commands option captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-03.jpeg" alt="JSOS HUD font option captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-04.jpeg" alt="JSOS HUD exit overlay captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-glasses-05.jpeg" alt="JSOS HUD sessions overlay captured through Rokid glasses" width="19%">
+</p>
+
+## Current Status
+
+Included in this development preview:
 
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
@@ -35,7 +81,7 @@ Current state:
 - OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Admin Codex bridge client are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
-Development-preview areas:
+Development-preview boundaries:
 
 - Rokid device behavior depends on the proprietary Rokid CXR SDK and device firmware.
 - OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version and audio route.
@@ -477,41 +523,6 @@ Direct voice and Realtime are represented by the voice message flow: JSOS HUD se
 The experimental Admin Codex terminal uses `cli_connect`, `cli_input`, `cli_stop`, `cli_status`, and `cli_output` messages between JSOS HUD and JSOS Core. JSOS Core then talks to the private Admin Codex bridge over its own WebSocket connection. When staged photos are present, Core can attach them to the bridge request as one-shot image payloads.
 
 Large phone-to-glasses JSON payloads are split into `chunk_part` messages and reassembled on JSOS HUD.
-
-## Screenshots And Images
-
-The README references selected JSOS assets and screenshots.
-
-### JSOS Core
-
-#### Home, Chat, Voice, Diagnostics
-
-<p align="center">
-  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="22%">
-  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="22%">
-  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings and live talk mode" width="22%">
-  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="22%">
-</p>
-
-#### Config
-
-<p align="center">
-  <img src="docs/images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" height="170">
-  <img src="docs/images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" height="170">
-  <img src="docs/images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" height="170">
-  <img src="docs/images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" height="170">
-  <img src="docs/images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" height="170">
-</p>
-
-### JSOS HUD
-
-<p align="center">
-  <img src="docs/images/jsos-hud-glasses-01.jpeg" alt="JSOS HUD options overlay captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-02.jpeg" alt="JSOS HUD slash commands option captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-03.jpeg" alt="JSOS HUD font option captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-04.jpeg" alt="JSOS HUD exit overlay captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-05.jpeg" alt="JSOS HUD sessions overlay captured through Rokid glasses" width="19%">
-</p>
 
 ## Troubleshooting
 
