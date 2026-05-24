@@ -236,9 +236,8 @@ class OpenAIRealtimeClient {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 if (!isCurrentSession(generation, webSocket)) return
-                val errorMsg = t.message ?: "Connection failed"
-                Log.e(TAG, "WebSocket failure: $errorMsg", t)
-                deliverError(errorMsg, generation)
+                Log.e(TAG, "WebSocket failure (${t.javaClass.simpleName}, redacted)")
+                deliverError("Speech recognition error", generation)
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -412,10 +411,9 @@ class OpenAIRealtimeClient {
 
                 "error" -> {
                     val error = json.optJSONObject("error")
-                    val message = error?.optString("message") ?: "Unknown error"
                     val code = error?.optString("code") ?: ""
                     Log.e(TAG, "API error (code=$code, message redacted)")
-                    deliverError(message, generation)
+                    deliverError("Speech recognition error", generation)
                 }
 
                 // Ignore response/conversation events — we only care about transcription
@@ -424,7 +422,7 @@ class OpenAIRealtimeClient {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing message: ${e.message}", e)
+            Log.e(TAG, "Error parsing message (redacted)")
         }
     }
 
@@ -480,7 +478,7 @@ class OpenAIRealtimeClient {
         } catch (e: SecurityException) {
             deliverError("Microphone permission denied", generation)
         } catch (e: Exception) {
-            deliverError("Audio capture error: ${e.message}", generation)
+            deliverError("Audio capture error", generation)
         }
     }
 
@@ -494,7 +492,7 @@ class OpenAIRealtimeClient {
         try {
             webSocket?.send(message.toString())
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to send audio: ${e.message}")
+            Log.w(TAG, "Failed to send audio (redacted)")
         }
     }
 
@@ -507,7 +505,7 @@ class OpenAIRealtimeClient {
                 record.stop()
                 record.release()
             } catch (e: Exception) {
-                Log.w(TAG, "Error stopping AudioRecord: ${e.message}")
+                Log.w(TAG, "Error stopping AudioRecord (redacted)")
             }
         }
         audioRecord = null

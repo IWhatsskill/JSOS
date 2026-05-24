@@ -88,6 +88,7 @@ class OpenClawClient(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val requestSeq = AtomicLong(1)
+    private val connectionGeneration = AtomicLong(0)
     private val pendingRequests = ConcurrentHashMap<String, CompletableDeferred<OpenClawResponse>>()
 
     // Connection params (saved for reconnect)
@@ -129,6 +130,7 @@ class OpenClawClient(
         this.token = token
         this.shouldReconnect = true
         _gatewayProtocol.value = null
+        val generation = connectionGeneration.incrementAndGet()
 
         // Bare hosts stay ws:// for local/private gateway compatibility.
         // Enter a full wss:// URL to use TLS when the gateway supports it.
@@ -143,48 +145,61 @@ class OpenClawClient(
             .header("Origin", originUrl)
             .build()
 
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
+        val socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (!isCurrentSocket(generation, webSocket)) return
                 Log.i(TAG, "WebSocket connected to $url (HTTP ${response.code})")
                 _connectionState.value = ConnectionState.Authenticating
                 // Wait for connect.challenge event from server
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (!isCurrentSocket(generation, webSocket)) return
                 handleFrame(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                if (!isCurrentSocket(generation, webSocket)) return
                 handleFrame(bytes.utf8())
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                if (!isCurrentSocket(generation, webSocket)) {
+                    webSocket.close(1000, null)
+                    return
+                }
                 Log.d(TAG, "WebSocket closing: $code - $reason")
                 webSocket.close(1000, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (!isCurrentSocket(generation, webSocket)) return
                 Log.d(TAG, "WebSocket closed: $code - $reason")
+                this@OpenClawClient.webSocket = null
                 _connectionState.value = ConnectionState.Disconnected
                 _agentActivity.value = AgentActivityState.Ready
                 _gatewayProtocol.value = null
                 notifyConnectionUpdate(false)
-                if (shouldReconnect) scheduleReconnect()
+                if (shouldReconnect) scheduleReconnect(generation)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failed: ${t.javaClass.simpleName}: ${t.message}", t)
-                _connectionState.value = ConnectionState.Error("${t.javaClass.simpleName}: ${t.message}")
+                if (!isCurrentSocket(generation, webSocket)) return
+                Log.e(TAG, "WebSocket failed (${t.javaClass.simpleName}, redacted)")
+                this@OpenClawClient.webSocket = null
+                _connectionState.value = ConnectionState.Error("Gateway connection failed")
                 _agentActivity.value = AgentActivityState.Ready
                 _gatewayProtocol.value = null
                 notifyConnectionUpdate(false)
                 failAllPending("Connection lost")
-                if (shouldReconnect) scheduleReconnect()
+                if (shouldReconnect) scheduleReconnect(generation)
             }
         })
+        webSocket = socket
     }
 
     fun disconnect() {
+        connectionGeneration.incrementAndGet()
         shouldReconnect = false
         webSocket?.close(1000, "User disconnected")
         webSocket = null
@@ -254,8 +269,7 @@ class OpenClawClient(
                     onAgentThinking?.invoke(AgentThinking(id = assistantMsgId))
                     onResult?.invoke(true)
                 } else {
-                    val errorMsg = response.error?.get("message")?.asString ?: "Agent run failed"
-                    Log.e(TAG, "Agent run failed: $errorMsg")
+                    Log.e(TAG, "Agent run failed (redacted)")
                     activeRunId = null
                     activeMessageId = null
                     activeSessionKey = null
@@ -263,7 +277,7 @@ class OpenClawClient(
                     onResult?.invoke(false)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending message", e)
+                Log.e(TAG, "Error sending message (redacted)")
                 activeRunId = null
                 activeMessageId = null
                 activeSessionKey = null
@@ -333,10 +347,10 @@ class OpenClawClient(
                         unreadSessionKeys = _unreadSessions.value.toList()
                     ))
                 } else {
-                    Log.e(TAG, "Session list request failed: ${response.error}")
+                    Log.e(TAG, "Session list request failed (redacted)")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error requesting sessions", e)
+                Log.e(TAG, "Error requesting sessions (redacted)")
             }
         }
     }
@@ -395,11 +409,10 @@ class OpenClawClient(
                     notifyConnectionUpdate(true, newKey)
                     onChatHistory?.invoke(emptyList())
                 } else {
-                    val errorMsg = response.error?.get("message")?.asString ?: "Session reset failed"
-                    Log.e(TAG, "Session reset failed: $errorMsg")
+                    Log.e(TAG, "Session reset failed (redacted)")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error creating session", e)
+                Log.e(TAG, "Error creating session (redacted)")
             }
         }
     }
@@ -477,7 +490,7 @@ class OpenClawClient(
                                     timestamp = timestamp
                                 ))
                             } catch (e: Exception) {
-                                Log.w(TAG, "Skipping unparseable history message", e)
+                                Log.w(TAG, "Skipping unparseable history message (redacted)")
                             }
                         }
                     }
@@ -486,13 +499,13 @@ class OpenClawClient(
                     _chatMessages.value = chatMessages
                     onChatHistory?.invoke(chatMessages)
                 } else {
-                    Log.e(TAG, "Chat history request failed: ${response.error}")
+                    Log.e(TAG, "Chat history request failed (redacted)")
                     // Still notify with empty list so glasses clear stale messages
                     _chatMessages.value = emptyList()
                     onChatHistory?.invoke(emptyList())
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading session history (sessionKeyLength=${key.length})", e)
+                Log.e(TAG, "Error loading session history (sessionKeyLength=${key.length}, redacted)")
                 // Still notify with empty list so glasses clear stale messages
                 _chatMessages.value = emptyList()
                 onChatHistory?.invoke(emptyList())
@@ -567,7 +580,7 @@ class OpenClawClient(
                                     timestamp = timestamp
                                 ))
                             } catch (e: Exception) {
-                                Log.w(TAG, "Skipping unparseable history message", e)
+                                Log.w(TAG, "Skipping unparseable history message (redacted)")
                             }
                         }
                     }
@@ -592,12 +605,12 @@ class OpenClawClient(
                     _isLoadingMoreHistory.value = false
                     onMoreHistoryLoaded?.invoke(newOlderCount, hasMore)
                 } else {
-                    Log.e(TAG, "More history request failed: ${response.error}")
+                    Log.e(TAG, "More history request failed (redacted)")
                     _isLoadingMoreHistory.value = false
                     onMoreHistoryLoaded?.invoke(0, false)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading more history (sessionKeyLength=${key.length})", e)
+                Log.e(TAG, "Error loading more history (sessionKeyLength=${key.length}, redacted)")
                 _isLoadingMoreHistory.value = false
                 onMoreHistoryLoaded?.invoke(0, false)
             }
@@ -724,7 +737,7 @@ class OpenClawClient(
                 else -> Log.w(TAG, "Unknown frame type")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing frame", e)
+            Log.e(TAG, "Error parsing frame (redacted)")
         }
     }
 
@@ -879,20 +892,20 @@ class OpenClawClient(
                 } else {
                     val errorMsg = response.error?.get("message")?.asString ?: "Authentication failed"
                     val errorCode = response.error?.get("code")?.asString ?: ""
-                    Log.e(TAG, "Authentication failed: $errorMsg (code=$errorCode)")
+                    Log.e(TAG, "Authentication failed (code=$errorCode, message redacted)")
 
                     if (errorCode == "pairing_required" || errorMsg.contains("pair", ignoreCase = true)) {
-                        _connectionState.value = ConnectionState.PairingRequired(errorMsg)
+                        _connectionState.value = ConnectionState.PairingRequired("Pairing required")
                         // Keep reconnecting — user needs to approve on gateway
                     } else {
-                        _connectionState.value = ConnectionState.Error(errorMsg)
+                        _connectionState.value = ConnectionState.Error("Authentication failed")
                         shouldReconnect = false
                     }
                     webSocket?.close(1000, "Auth failed")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Auth error", e)
-                _connectionState.value = ConnectionState.Error("Auth error: ${e.message}")
+                Log.e(TAG, "Auth error (redacted)")
+                _connectionState.value = ConnectionState.Error("Authentication failed")
             }
         }
     }
@@ -967,8 +980,7 @@ class OpenClawClient(
                 finalizeStreaming()
             }
             "aborted", "error" -> {
-                val errorMsg = payload.get("errorMessage")?.asString
-                Log.e(TAG, "Chat run $state: $errorMsg")
+                Log.e(TAG, "Chat run $state (redacted)")
                 finalizeStreaming()
             }
         }
@@ -1064,9 +1076,14 @@ class OpenClawClient(
         ))
     }
 
-    private fun scheduleReconnect() {
+    private fun isCurrentSocket(generation: Long, callbackSocket: WebSocket): Boolean {
+        return generation == connectionGeneration.get() && webSocket == callbackSocket
+    }
+
+    private fun scheduleReconnect(generation: Long) {
         scope.launch {
             delay(RECONNECT_DELAY_MS)
+            if (!shouldReconnect || generation != connectionGeneration.get()) return@launch
             val state = _connectionState.value
             if (state is ConnectionState.Disconnected || state is ConnectionState.Error || state is ConnectionState.PairingRequired) {
                 connect(host, port, token)

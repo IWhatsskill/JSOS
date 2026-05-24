@@ -106,7 +106,7 @@ class OpenClawTalkManager(
                 val response = openClawClient.createTalkSession(effectiveSessionKey)
                 if (!isCurrentGeneration(generation)) return@launch
                 if (!response.ok) {
-                    throw IllegalStateException(response.error?.get("message")?.asString ?: "talk.session.create failed")
+                    throw IllegalStateException("talk.session.create failed")
                 }
 
                 val payload = response.payload ?: throw IllegalStateException("talk.session.create returned no payload")
@@ -127,11 +127,10 @@ class OpenClawTalkManager(
                 }
             } catch (e: Exception) {
                 if (!isCurrentGeneration(generation)) return@launch
-                Log.e(TAG, "Failed to start Live Talk", e)
-                val errorMessage = e.message ?: "Live Talk failed"
+                Log.e(TAG, "Failed to start Live Talk (redacted)")
                 stopInternal(closeRemote = false)
                 if (isCurrentGeneration(generation)) {
-                    _state.value = LiveTalkState.Error(errorMessage)
+                    _state.value = LiveTalkState.Error("Live Talk failed")
                 }
             }
         }
@@ -206,9 +205,8 @@ class OpenClawTalkManager(
             }
             "toolCall" -> handleToolCall(payload, generation)
             "error" -> {
-                val message = payload.stringValue("message") ?: "Live Talk error"
                 Log.e(TAG, "Talk error (redacted)")
-                _state.value = LiveTalkState.Error(message)
+                _state.value = LiveTalkState.Error("Live Talk failed")
             }
             "close" -> stopInternal(closeRemote = false)
         }
@@ -234,7 +232,7 @@ class OpenClawTalkManager(
                     args = args,
                 )
                 if (!response.ok) {
-                    throw IllegalStateException(response.error?.get("message")?.asString ?: "talk.client.toolCall failed")
+                    throw IllegalStateException("talk.client.toolCall failed")
                 }
 
                 val runId = extractRunId(response.payload)
@@ -254,9 +252,9 @@ class OpenClawTalkManager(
                 openClawClient.submitTalkToolResult(sessionId, callId, result)
             } catch (e: Exception) {
                 if (!isCurrentGeneration(generation)) return@launch
-                Log.e(TAG, "Talk tool call failed", e)
+                Log.e(TAG, "Talk tool call failed (redacted)")
                 val result = JsonObject().apply {
-                    addProperty("error", e.message ?: "Tool call failed")
+                    addProperty("error", "Tool call failed")
                 }
                 runCatching { openClawClient.submitTalkToolResult(sessionId, callId, result) }
             }
@@ -294,8 +292,7 @@ class OpenClawTalkManager(
                 waiter.deferred.complete(fullText)
             }
             "aborted", "error" -> {
-                val message = payload.stringValue("errorMessage") ?: "Tool run $state"
-                waiter.deferred.completeExceptionally(Exception(message))
+                waiter.deferred.completeExceptionally(Exception("Tool run failed"))
             }
         }
     }
@@ -427,7 +424,7 @@ class OpenClawTalkManager(
         val audio = try {
             Base64.decode(audioBase64, Base64.DEFAULT)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to decode output audio: ${e.message}")
+            Log.w(TAG, "Failed to decode output audio (redacted)")
             return
         }
         if (audio.isNotEmpty()) {
@@ -485,7 +482,7 @@ class OpenClawTalkManager(
                     Log.d(TAG, "Acoustic echo cancellation enabled=${effect.enabled}")
                 }
             }.onFailure {
-                Log.w(TAG, "Acoustic echo cancellation unavailable: ${it.message}")
+                Log.w(TAG, "Acoustic echo cancellation unavailable (redacted)")
             }
         }
         if (NoiseSuppressor.isAvailable()) {
@@ -496,7 +493,7 @@ class OpenClawTalkManager(
                     Log.d(TAG, "Noise suppression enabled=${effect.enabled}")
                 }
             }.onFailure {
-                Log.w(TAG, "Noise suppression unavailable: ${it.message}")
+                Log.w(TAG, "Noise suppression unavailable (redacted)")
             }
         }
     }
@@ -542,7 +539,7 @@ class OpenClawTalkManager(
         scope?.launch {
             if (!isCurrentGeneration(generation)) return@launch
             runCatching { openClawClient.cancelTalkOutput(sessionId) }
-                .onFailure { Log.w(TAG, "Failed to cancel Live Talk output: ${it.message}") }
+                .onFailure { Log.w(TAG, "Failed to cancel Live Talk output (redacted)") }
         }
     }
 

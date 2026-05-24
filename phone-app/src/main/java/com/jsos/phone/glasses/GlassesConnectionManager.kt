@@ -123,16 +123,14 @@ class GlassesConnectionManager(private val context: Context) {
         // new manager instance from starting at Disconnected and killing the foreground
         // service + BT connection.
         if (RokidSdkManager.isReady() && RokidSdkManager.isConnected()) {
-            val name = RokidSdkManager.getSavedDeviceName() ?: "Rokid Glasses"
-            _connectionState.value = ConnectionState.Connected(name)
+            _connectionState.value = ConnectionState.Connected("Rokid Glasses")
             Log.i(TAG, "SDK already connected on init - restored Connected state (device name redacted)")
         }
     }
 
     private fun setupSdkCallbacks() {
         RokidSdkManager.onGlassesConnected = {
-            val name = RokidSdkManager.getSavedDeviceName() ?: "Rokid Glasses"
-            _connectionState.value = ConnectionState.Connected(name)
+            _connectionState.value = ConnectionState.Connected("Rokid Glasses")
             // Reset reconnect state on successful connection
             reconnectAttempts = 0
             currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
@@ -169,7 +167,7 @@ class GlassesConnectionManager(private val context: Context) {
                 RokidSdkManager.hasSavedConnectionInfo()) {
                 scheduleReconnect()
             } else {
-                _connectionState.value = ConnectionState.Error("Bluetooth failed: $error")
+                _connectionState.value = ConnectionState.Error("Bluetooth connection failed")
             }
         }
 
@@ -233,8 +231,8 @@ class GlassesConnectionManager(private val context: Context) {
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e(TAG, "BLE scan failed with error code: $errorCode")
-            _connectionState.value = ConnectionState.Error("Scan failed: $errorCode")
+            Log.e(TAG, "BLE scan failed (error code redacted)")
+            _connectionState.value = ConnectionState.Error("Scan failed")
         }
     }
 
@@ -297,7 +295,7 @@ class GlassesConnectionManager(private val context: Context) {
             }
             Log.d(TAG, "Stopped BLE scanning")
         } catch (e: SecurityException) {
-            Log.e(TAG, "Error stopping scan", e)
+            Log.e(TAG, "Error stopping scan (redacted)")
         }
     }
 

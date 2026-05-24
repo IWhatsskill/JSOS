@@ -13,6 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Phone-side client for a private VPS Codex CLI bridge.
@@ -37,6 +38,8 @@ class CodexCliBridgeClient {
     @Volatile
     private var webSocket: WebSocket? = null
 
+    private val connectionGeneration = AtomicLong(0)
+
     @Volatile
     var currentState: State = State.DISCONNECTED
         private set
@@ -52,9 +55,11 @@ class CodexCliBridgeClient {
 
         currentState = State.CONNECTING
         emitStatus(null)
+        val generation = connectionGeneration.incrementAndGet()
 
         val request = Request.Builder().url(url).build()
-        webSocket = client.newWebSocket(request, listener)
+        val socket = client.newWebSocket(request, createListener(generation))
+        webSocket = socket
         Log.d(TAG, "Connecting Codex CLI bridge")
     }
 
@@ -71,7 +76,12 @@ class CodexCliBridgeClient {
             return false
         }
 
-        val bridgeImages = photos.mapNotNull { prepareBridgeImage(it) }
+        val limitedPhotos = photos.take(MAX_BRIDGE_IMAGES)
+        if (photos.size > MAX_BRIDGE_IMAGES) {
+            Log.w(TAG, "sendInput limited images: ${photos.size} -> $MAX_BRIDGE_IMAGES")
+        }
+
+        val bridgeImages = limitedPhotos.mapNotNull { prepareBridgeImage(it) }
         Log.d(TAG, "sendInput prepared images: ${bridgeImages.size}/${photos.size}")
         if (photos.isNotEmpty() && bridgeImages.isEmpty()) {
             currentState = State.ERROR
@@ -84,8 +94,6 @@ class CodexCliBridgeClient {
             put("type", "input")
             put("text", trimmed)
             if (bridgeImages.isNotEmpty()) {
-                put("imageBase64", bridgeImages.first().base64)
-                put("mimeType", bridgeImages.first().mimeType)
                 put("images", JSONArray().apply {
                     bridgeImages.forEach { image ->
                         put(JSONObject().apply {
@@ -110,6 +118,7 @@ class CodexCliBridgeClient {
     }
 
     fun disconnect() {
+        connectionGeneration.incrementAndGet()
         webSocket?.send(JSONObject().put("type", "stop").toString())
         webSocket?.close(1000, "JSOS CLI disconnect")
         webSocket = null
@@ -122,8 +131,9 @@ class CodexCliBridgeClient {
         client.dispatcher.executorService.shutdown()
     }
 
-    private val listener = object : WebSocketListener() {
+    private fun createListener(generation: Long) = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (!isCurrentSocket(generation, webSocket, allowUnassigned = true)) return
             this@CodexCliBridgeClient.webSocket = webSocket
             currentState = State.CONNECTED
             emitStatus(null)
@@ -131,26 +141,37 @@ class CodexCliBridgeClient {
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (!isCurrentSocket(generation, webSocket)) return
             handleBridgeMessage(text)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            if (this@CodexCliBridgeClient.webSocket == webSocket) {
+            if (isCurrentSocket(generation, webSocket)) {
                 this@CodexCliBridgeClient.webSocket = null
                 currentState = State.ERROR
-                emitStatus(t.message ?: "Bridge failed")
+                emitStatus("Codex bridge error")
             }
             Log.w(TAG, "Codex CLI bridge failed (${t.javaClass.simpleName})")
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            if (this@CodexCliBridgeClient.webSocket == webSocket) {
+            if (isCurrentSocket(generation, webSocket)) {
                 this@CodexCliBridgeClient.webSocket = null
                 currentState = State.DISCONNECTED
-                emitStatus(reason.ifBlank { null })
+                emitStatus(if (reason.isBlank()) null else "Codex bridge disconnected")
             }
             Log.d(TAG, "Codex CLI bridge closed: code=$code")
         }
+    }
+
+    private fun isCurrentSocket(
+        generation: Long,
+        callbackSocket: WebSocket,
+        allowUnassigned: Boolean = false
+    ): Boolean {
+        if (generation != connectionGeneration.get()) return false
+        val currentSocket = webSocket
+        return currentSocket == callbackSocket || (allowUnassigned && currentSocket == null)
     }
 
     private fun handleBridgeMessage(raw: String) {
@@ -175,9 +196,8 @@ class CodexCliBridgeClient {
             }
             "error" -> {
                 currentState = State.ERROR
-                val message = parsed.optString("message", "Codex bridge error")
-                emitStatus(message)
-                onOutput?.invoke("[error] $message", true)
+                emitStatus("Codex bridge error")
+                onOutput?.invoke("[error] Codex bridge error", true)
             }
             else -> {
                 val output = parsed.optString("text", parsed.optString("message", ""))
@@ -196,6 +216,10 @@ class CodexCliBridgeClient {
         val sourceBytes = runCatching {
             Base64.decode(base64, Base64.DEFAULT)
         }.getOrNull() ?: return null
+        if (sourceBytes.size > MAX_BRIDGE_IMAGE_BYTES) {
+            Log.w(TAG, "Codex image rejected: decoded bytes=${sourceBytes.size}")
+            return null
+        }
 
         return when {
             sourceBytes.isJpeg() -> BridgeImage(
@@ -215,8 +239,13 @@ class CodexCliBridgeClient {
         return try {
             val stream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+            val jpegBytes = stream.toByteArray()
+            if (jpegBytes.size > MAX_BRIDGE_IMAGE_BYTES) {
+                Log.w(TAG, "Codex transcoded image rejected: bytes=${jpegBytes.size}")
+                return null
+            }
             BridgeImage(
-                base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP),
+                base64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP),
                 mimeType = "image/jpeg"
             )
         } finally {
@@ -241,5 +270,7 @@ class CodexCliBridgeClient {
 
     private companion object {
         const val TAG = "CodexCliBridge"
+        const val MAX_BRIDGE_IMAGES = 1
+        const val MAX_BRIDGE_IMAGE_BYTES = 4 * 1024 * 1024
     }
 }

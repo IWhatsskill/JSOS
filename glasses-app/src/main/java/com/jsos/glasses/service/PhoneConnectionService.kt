@@ -63,8 +63,8 @@ class PhoneConnectionService(
             try {
                 initializeBridge()
             } catch (e: Exception) {
-                Log.e(TAG, "Error initializing CXR bridge", e)
-                _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
+                Log.e(TAG, "Error initializing CXR bridge (redacted)")
+                _connectionState.value = ConnectionState.Error("Phone connection failed")
             }
         }
     }
@@ -79,8 +79,8 @@ class PhoneConnectionService(
             }
             onConnected = {
                 isConnected = true
-                connectedDeviceName = "Debug Phone (WebSocket)"
-                _connectionState.value = ConnectionState.Connected("Debug Mode: $debugHost:$debugPort")
+                connectedDeviceName = "Debug bridge"
+                _connectionState.value = ConnectionState.Connected("Debug bridge connected")
                 Log.i(TAG, "Debug: connected to phone app")
             }
             onDisconnected = {
@@ -115,9 +115,9 @@ class PhoneConnectionService(
         cxrBridge?.setStatusListener(object : CXRServiceBridge.StatusListener {
             override fun onConnected(name: String?, mac: String?, deviceType: Int) {
                 Log.i(TAG, "Phone connected via CXR bridge (device info redacted)")
-                connectedDeviceName = name
-                connectedDeviceMac = mac
-                markConnected("$name ($mac)")
+                connectedDeviceName = "Phone"
+                connectedDeviceMac = null
+                markConnected("Phone connected")
             }
 
             override fun onDisconnected() {
@@ -157,7 +157,7 @@ class PhoneConnectionService(
                         try {
                             caps.at(0).getString()
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to read string from Caps", e)
+                            Log.e(TAG, "Failed to read string from Caps (redacted)")
                             ""
                         }
                     }
@@ -202,7 +202,7 @@ class PhoneConnectionService(
                         caps.write("""{"type":"request_state"}""")
                         cxrBridge?.sendMessage(MSG_TYPE_COMMAND, caps)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Connection probe send failed", e)
+                        Log.e(TAG, "Connection probe send failed (redacted)")
                     }
                 }
                 delay(3000L)
@@ -235,7 +235,7 @@ class PhoneConnectionService(
                 val result = cxrBridge?.sendMessage(MSG_TYPE_COMMAND, caps)
                 Log.d(TAG, "Sent to phone (${message.length} chars), result: $result")
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending to phone", e)
+                Log.e(TAG, "Error sending to phone (redacted)")
             }
         }
     }
@@ -258,7 +258,7 @@ class PhoneConnectionService(
                 }
                 Log.d(TAG, "Sent message type $messageType, result: $result")
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending to phone", e)
+                Log.e(TAG, "Error sending to phone (redacted)")
             }
         }
     }

@@ -173,7 +173,7 @@ class VoiceRecognitionManager(private val context: Context) {
             },
             onError = { errorMessage ->
                 Log.w(TAG, "OpenAI error (redacted), falling back to Android")
-                _lastError.value = errorMessage
+                _lastError.value = "Speech recognition error"
                 _fallbackReason.value = FallbackReason.API_ERROR
 
                 // Fall back to Android speech recognition
@@ -226,11 +226,11 @@ class VoiceRecognitionManager(private val context: Context) {
             },
             onError = { errorMessage ->
                 Log.w(TAG, "OpenAI continuous error (redacted)")
-                _lastError.value = errorMessage
+                _lastError.value = "Speech recognition error"
                 _isListening.value = false
                 _activeMode.value = RecognitionMode.NONE
                 _fallbackReason.value = FallbackReason.API_ERROR
-                onError(errorMessage)
+                onError("Speech recognition error")
             }
         )
         return true

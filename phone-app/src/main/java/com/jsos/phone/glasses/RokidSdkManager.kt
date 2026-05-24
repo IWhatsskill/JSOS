@@ -39,6 +39,7 @@ object RokidSdkManager {
 
     private const val TAG = "RokidSdkManager"
     private const val BLUETOOTH_CLIENT_NAME = "JSOS Core"
+    private const val DEFAULT_DEVICE_NAME = "Rokid Glasses"
     private const val PREFS_NAME = "jsos_rokid_prefs"
     private const val KEY_PREFERRED_GLASS_BRIGHTNESS = "preferred_glass_brightness"
     private const val DEFAULT_GLASS_BRIGHTNESS = 0
@@ -98,23 +99,8 @@ object RokidSdkManager {
             if (!socketUuid.isNullOrEmpty() && !macAddress.isNullOrEmpty()) {
                 saveConnectionInfo(socketUuid, macAddress)
             }
-            // Try to save device name from Bluetooth device
-            try {
-                val name = cxrApi?.let { api ->
-                    val glassInfoField = api.javaClass.getDeclaredField("I")
-                    glassInfoField.isAccessible = true
-                    val glassInfo = glassInfoField.get(api)
-                    glassInfo?.javaClass?.getMethod("getDeviceName")?.invoke(glassInfo) as? String
-                }
-                if (!name.isNullOrEmpty()) {
-                    savedDeviceName = name
-                    cachedDeviceName = name
-                    saveDeviceName(name)
-                    Log.i(TAG, "  device name received")
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "Could not read device name from GlassInfo: ${e.message}")
-            }
+            savedDeviceName = DEFAULT_DEVICE_NAME
+            cachedDeviceName = null
             onConnectionInfo?.invoke(socketUuid ?: "", macAddress ?: "", rokidAccount ?: "", deviceType)
 
             // After initBluetooth, call connectBluetooth to complete the connection
@@ -144,7 +130,7 @@ object RokidSdkManager {
         }
 
         override fun onFailed(errorCode: ValueUtil.CxrBluetoothErrorCode?) {
-            Log.e(TAG, "=== onFailed === Bluetooth connection failed: $errorCode")
+            Log.e(TAG, "=== onFailed === Bluetooth connection failed")
             isBluetoothConnectedState = false
             pendingConnect = false
 
@@ -159,7 +145,7 @@ object RokidSdkManager {
                     if (encrypted != null) {
                         Log.i(TAG, "Generated SN verification payload (${encrypted.size} bytes)")
                         generatedSnEncryptContent = encrypted
-                        saveCachedSnEncryptContent(encrypted, glassesSn)
+                        saveCachedSnEncryptContent(encrypted)
                         snAutoRetryInProgress = true
                         // Retry connection with correct snEncryptContent
                         val uuid = savedSocketUuid
@@ -237,7 +223,7 @@ object RokidSdkManager {
                             Log.d(TAG, "Glasses message content received (${message.length} chars)")
                             onMessageFromGlasses?.invoke(message, caps)
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to read message from Caps", e)
+                            Log.e(TAG, "Failed to read message from Caps (redacted)")
                             cmd?.let { onMessageFromGlasses?.invoke(it, caps) }
                         }
                     } else {
@@ -277,7 +263,7 @@ object RokidSdkManager {
             return true
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Rokid SDK", e)
+            Log.e(TAG, "Failed to initialize Rokid SDK (redacted)")
             return false
         }
     }
@@ -299,7 +285,7 @@ object RokidSdkManager {
             cxrApi?.initBluetooth(context, device, bluetoothCallback)
             Log.i(TAG, "initBluetooth called, waiting for onConnectionInfo callback...")
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing Bluetooth", e)
+            Log.e(TAG, "Error initializing Bluetooth (redacted)")
             pendingConnect = false
         }
     }
@@ -330,13 +316,13 @@ object RokidSdkManager {
             Log.i(TAG, "Connecting via Bluetooth (autoRetry=$snAutoRetryInProgress, cachedSn=${generatedSnEncryptContent != null})")
 
             // Use cached snEncryptContent if available (from previous SN auto-recovery).
-            // Only use dummy content on the very first connection attempt when we don't
+            // Only use placeholder content on the very first connection attempt when we don't
             // know the glasses SN yet. This avoids a redundant two-pass flow on reconnects.
             val encryptContent = if (generatedSnEncryptContent != null) {
                 Log.i(TAG, "Using cached SN verification payload (${generatedSnEncryptContent!!.size} bytes)")
                 generatedSnEncryptContent!!
             } else {
-                Log.i(TAG, "First attempt - using dummy SN verification payload (SN_CHECK_FAILED expected)")
+                Log.i(TAG, "First attempt - using placeholder SN verification payload (SN_CHECK_FAILED expected)")
                 ByteArray(16)
             }
 
@@ -352,7 +338,7 @@ object RokidSdkManager {
             )
             Log.i(TAG, "connectBluetooth called, waiting for callback...")
         } catch (e: Exception) {
-            Log.e(TAG, "Error connecting via Bluetooth", e)
+            Log.e(TAG, "Error connecting via Bluetooth (redacted)")
         }
     }
 
@@ -386,7 +372,7 @@ object RokidSdkManager {
             Log.i(TAG, "Read glasses SN from SDK")
             sn
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to read glasses SN from SDK via reflection", e)
+            Log.e(TAG, "Failed to read glasses SN from SDK via reflection (redacted)")
             null
         }
     }
@@ -407,7 +393,7 @@ object RokidSdkManager {
             cipher.init(Cipher.ENCRYPT_MODE, key, iv)
             cipher.doFinal(glassesSn.toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate SN verification payload", e)
+            Log.e(TAG, "Failed to generate SN verification payload (redacted)")
             null
         }
     }
@@ -421,21 +407,16 @@ object RokidSdkManager {
     private const val DEVICE_NAME_KEY = "device_name"
     private const val SOCKET_UUID_KEY = "socket_uuid"
     private const val MAC_ADDRESS_KEY = "mac_address"
-    private var cachedSnPlain: String? = null
     private var cachedDeviceName: String? = null
 
-    private fun saveCachedSnEncryptContent(encrypted: ByteArray, plainSn: String? = null) {
+    private fun saveCachedSnEncryptContent(encrypted: ByteArray) {
         val ctx = appContext ?: return
         val base64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)
         ctx.getSharedPreferences(SN_PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(SN_KEY, base64)
-            .apply {
-                if (plainSn != null) {
-                    putString(SN_PLAIN_KEY, plainSn)
-                    cachedSnPlain = plainSn
-                }
-            }
+            .remove(SN_PLAIN_KEY)
+            .remove(DEVICE_NAME_KEY)
             .apply()
         Log.i(TAG, "Saved SN verification payload to SharedPreferences")
     }
@@ -446,20 +427,15 @@ object RokidSdkManager {
         val base64 = prefs.getString(SN_KEY, null) ?: return
         try {
             generatedSnEncryptContent = Base64.decode(base64, Base64.NO_WRAP)
-            cachedSnPlain = prefs.getString(SN_PLAIN_KEY, null)
-            cachedDeviceName = prefs.getString(DEVICE_NAME_KEY, null)
+            cachedDeviceName = null
+            prefs.edit()
+                .remove(SN_PLAIN_KEY)
+                .remove(DEVICE_NAME_KEY)
+                .apply()
             Log.i(TAG, "Loaded cached SN verification payload (${generatedSnEncryptContent!!.size} bytes)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load cached SN verification payload", e)
+            Log.e(TAG, "Failed to load cached SN verification payload (redacted)")
         }
-    }
-
-    private fun saveDeviceName(name: String) {
-        val ctx = appContext ?: return
-        ctx.getSharedPreferences(SN_PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(DEVICE_NAME_KEY, name)
-            .apply()
     }
 
     /**
@@ -503,7 +479,6 @@ object RokidSdkManager {
      */
     fun clearCachedSn() {
         generatedSnEncryptContent = null
-        cachedSnPlain = null
         cachedDeviceName = null
         savedSocketUuid = null
         savedMacAddress = null
@@ -527,7 +502,7 @@ object RokidSdkManager {
     /**
      * Get the cached plain-text glasses serial number, if available.
      */
-    fun getCachedSn(): String? = cachedSnPlain
+    fun getCachedSn(): String? = null
 
     /**
      * Get the cached device name (e.g., "Rokid Max 2"), if available.
@@ -554,7 +529,7 @@ object RokidSdkManager {
             Log.d(TAG, "Sent to glasses: ${command.length} chars")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error sending message to glasses", e)
+            Log.e(TAG, "Error sending message to glasses (redacted)")
             false
         }
     }
@@ -617,7 +592,7 @@ object RokidSdkManager {
                     return true
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "initBluetooth failed during reconnect: ${e.message}")
+                Log.w(TAG, "initBluetooth failed during reconnect (redacted)")
             }
         }
 
@@ -642,7 +617,7 @@ object RokidSdkManager {
             isBluetoothConnectedState = false
             Log.d(TAG, "Disconnected from glasses")
         } catch (e: Exception) {
-            Log.e(TAG, "Error disconnecting", e)
+            Log.e(TAG, "Error disconnecting (redacted)")
         }
     }
 
@@ -740,7 +715,7 @@ object RokidSdkManager {
             Log.i(TAG, "Applied glasses brightness: $brightness")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to apply glasses brightness", e)
+            Log.e(TAG, "Failed to apply glasses brightness (redacted)")
             false
         }
     }
@@ -799,7 +774,7 @@ object RokidSdkManager {
             Log.i(TAG, "Wake glasses screen: brightness=$brightness, timeout reset to 30s")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to wake glasses screen", e)
+            Log.e(TAG, "Failed to wake glasses screen (redacted)")
             false
         }
     }
@@ -842,7 +817,7 @@ object RokidSdkManager {
             isBluetoothConnectedState = false
             Log.d(TAG, "Rokid SDK cleaned up")
         } catch (e: Exception) {
-            Log.e(TAG, "Error cleaning up Rokid SDK", e)
+            Log.e(TAG, "Error cleaning up Rokid SDK (redacted)")
         }
     }
 }

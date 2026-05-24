@@ -61,7 +61,7 @@ Main JSOS changes include:
 - OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
 - OpenAI Realtime voice input path with Android SpeechRecognizer fallback.
 - Core Agent Wake mode for phone-side continuous OpenAI Realtime transcription, leading-agent-name session routing, follow-up messages in the active session, and alias handling for configured visible JSOS sessions.
-- Updated the existing ElevenLabs TTS, Rokid CXR transport, and HUD camera request flows for the JSOS codebase, current dependencies, JSOS UI, and public-safe logging.
+- Updated the existing ElevenLabs TTS, Rokid CXR transport, and HUD camera request flows for the JSOS codebase, current dependencies, JSOS UI, and public-safe runtime logging.
 - Integrated a Hi Rokid / CXR-L HUD deployment flow in JSOS Core so the phone app can select a JSOS HUD APK and hand installation to Hi Rokid when Hi Rokid is installed and already connected to the glasses.
 - Added a JSOS-built `client-l:1.0.1` compatibility artifact derived from Rokid's public Maven artifact, stripped only of duplicate classes/native libraries already supplied by `client-m:1.2.1`.
 - Hardened the Hi Rokid / CXR-L deployment flow with link reset, Bluetooth/CXR readiness timeouts, stable-link delay before upload, and retry-friendly failure messages.
@@ -599,6 +599,7 @@ Additional notes:
 - Do not distribute APKs built with real Rokid, OpenAI, ElevenLabs, OpenClaw, or signing credentials.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage. Non-secret UI preferences and some Rokid pairing metadata remain local app data.
 - JSOS suppresses verbose Rokid CXR SDK runtime logging before Bluetooth connection, but local device logs should still be treated as private diagnostic data.
+- JSOS uses generic public-safe UI/log messages for gateway, Codex bridge, voice, Live Talk, Rokid, and Bluetooth failures. Device names, plain serial numbers, raw SDK errors, and raw server exception text should not be published from local logs or screenshots.
 - Avoid publishing logs, screenshots, or APKs that contain transcripts, session keys, API keys, device identifiers, or account data.
 
 ## Attribution And License
