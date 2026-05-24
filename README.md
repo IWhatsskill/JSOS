@@ -17,7 +17,11 @@ JSOS started as a fork of the upstream Clawsses project and has been substantial
 
 ## Showcase
 
-Download a 90-second JSOS HUD showcase video:
+A short JSOS showcase video is included for a quick visual overview:
+
+- **JSOS HUD** running on Rokid glasses with the green monochrome interface.
+- **JSOS Core** controlling gateway, sessions, voice, HUD deployment, and Codex bridge input.
+- **Admin Codex bridge** output rendered directly inside the glasses HUD.
 
 [Download the JSOS showcase video](docs/videos/JSOS-showcase.mp4)
 
@@ -287,7 +291,7 @@ JSOS HUD is responsible for:
 - Reading-first behavior where the bottom menu stays hidden while content is being read and appears only when needed.
 - Staged voice input.
 - `Send Ask` and `Send Auto` modes.
-- Camera request flow and photo thumbnail staging.
+- Camera request flow with a single staged photo preview and remove action.
 - Rokid AR Picture and AR Record scene triggers from the HUD AR TOOLS submenu.
 - Wake acknowledgments and TTS toggle messages back to the phone.
 - Experimental Admin Codex terminal view for private Admin Codex bridge setups.
@@ -321,7 +325,7 @@ Current limitation: Core Agent Wake uses the phone-side voice path. The glasses 
 | Tap | Confirm the selected HUD action, send staged input, or scroll to the latest content depending on focus. |
 | Double tap | Move focus to menu/input areas, cancel overlays, or show the exit confirmation depending on context. |
 | Long press | Start voice input. |
-| Photo | Request a glasses photo capture through JSOS Core. Up to four staged photos can be attached. |
+| Photo | Request a glasses photo capture through JSOS Core. One staged photo can be previewed, removed, and attached to the next send. |
 | Codex | Open the experimental Admin Codex HUD terminal view. |
 | Sess | Open the session picker and session state display. |
 | Mic | Toggle the HUD voice send mode. |
@@ -350,7 +354,7 @@ The bottom HUD menu uses two compact pages:
 
 ### Camera
 
-The HUD can request a camera capture through JSOS Core. Captured photos are staged as thumbnails on the glasses and attached to the next input sent to OpenClaw. JSOS limits staged photos to four.
+The HUD can request a camera capture through JSOS Core. Captured photos are staged as a thumbnail on the glasses and attached to the next input sent to OpenClaw. JSOS keeps one staged photo at a time; a new capture replaces the previous staged photo.
 
 JSOS HUD can also trigger Rokid's own AR picture and mixed-recording scene commands from the `AR TOOLS` submenu:
 

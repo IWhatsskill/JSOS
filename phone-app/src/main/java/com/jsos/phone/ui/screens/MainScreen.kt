@@ -537,9 +537,10 @@ fun MainScreen() {
                 android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
                 if (photoBytes != null && photoBytes.isNotEmpty()) {
                     val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
-                    pendingPhotos = pendingPhotos + base64
-                    android.util.Log.d("MainScreen", "Photo added (total: ${pendingPhotos.size})")
-                    android.widget.Toast.makeText(context, "Photo ${pendingPhotos.size} captured!", android.widget.Toast.LENGTH_SHORT).show()
+                    pendingPhotos = listOf(base64)
+                    glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                    android.util.Log.d("MainScreen", "Photo staged")
+                    android.widget.Toast.makeText(context, "Photo captured!", android.widget.Toast.LENGTH_SHORT).show()
                     val thumbnail = createThumbnailBase64(photoBytes, 80, 60)
                     val resultMsg = org.json.JSONObject().apply {
                         put("type", "photo_result")
@@ -951,7 +952,8 @@ fun MainScreen() {
                                 android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
                                 if (photoBytes != null && photoBytes.isNotEmpty()) {
                                     val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
-                                    pendingPhotos = pendingPhotos + base64
+                                    pendingPhotos = listOf(base64)
+                                    glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
                                     val thumbnail = createThumbnailBase64(photoBytes, 80, 60)
                                     val resultMsg = org.json.JSONObject().apply {
                                         put("type", "photo_result")
@@ -1031,60 +1033,15 @@ fun MainScreen() {
             Column {
                 // Thumbnail strip for queued photos
                 if (selectedTab == CoreTab.Chat && pendingPhotos.isNotEmpty()) {
-                    Row(
+                    PendingPhotoPreviewStrip(
+                        photos = pendingPhotos,
+                        onRemovePhoto = {
+                            pendingPhotos = emptyList()
+                            glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        pendingPhotos.forEachIndexed { index, base64 ->
-                            val thumbnail = remember(base64) {
-                                try {
-                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
-                                    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
-                                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-                                        ?.asImageBitmap()
-                                } catch (_: Exception) { null }
-                            }
-                            if (thumbnail != null) {
-                                Box {
-                                    Image(
-                                        bitmap = thumbnail,
-                                        contentDescription = "Queued photo ${index + 1}",
-                                        modifier = Modifier
-                                            .height(56.dp)
-                                            .clip(RoundedCornerShape(6.dp)),
-                                        contentScale = ContentScale.Fit
-                                    )
-                                    // Remove button
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Remove photo",
-                                        modifier = Modifier
-                                            .size(18.dp)
-                                            .align(Alignment.TopEnd)
-                                            .background(
-                                                Color.Black.copy(alpha = 0.6f),
-                                                RoundedCornerShape(9.dp)
-                                            )
-                                            .clickable {
-                                                pendingPhotos = pendingPhotos
-                                                    .toMutableList()
-                                                    .apply { removeAt(index) }
-                                                glassesManager.sendRawMessage(
-                                                    """{"type":"remove_photo","index":$index}"""
-                                                )
-                                            }
-                                            .padding(2.dp),
-                                        tint = Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    )
                 }
             if (selectedTab == CoreTab.Chat) {
             BottomAppBar(
@@ -1126,7 +1083,7 @@ fun MainScreen() {
                     textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)
                 )
 
-                // Camera button - always takes a new photo, adds to pending list
+                // Camera button - stages one pending photo, replacing any previous one.
                 IconButton(
                     onClick = {
                         android.util.Log.d("MainScreen", "Taking photo from glasses camera")
@@ -1136,9 +1093,10 @@ fun MainScreen() {
                                 android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
                                 if (photoBytes != null && photoBytes.isNotEmpty()) {
                                     val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
-                                    pendingPhotos = pendingPhotos + base64
-                                    android.util.Log.d("MainScreen", "Photo added (total: ${pendingPhotos.size})")
-                                    android.widget.Toast.makeText(context, "Photo ${pendingPhotos.size} captured!", android.widget.Toast.LENGTH_SHORT).show()
+                                    pendingPhotos = listOf(base64)
+                                    glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                                    android.util.Log.d("MainScreen", "Photo staged")
+                                    android.widget.Toast.makeText(context, "Photo captured!", android.widget.Toast.LENGTH_SHORT).show()
                                     val thumbnail = createThumbnailBase64(photoBytes, 80, 60)
                                     val resultMsg = org.json.JSONObject().apply {
                                         put("type", "photo_result")
@@ -1343,6 +1301,11 @@ fun MainScreen() {
                         listState = codexCliListState,
                         hasPendingPhoto = pendingPhotos.isNotEmpty(),
                         pendingPhotoCount = pendingPhotos.size,
+                        pendingPhotos = pendingPhotos,
+                        onRemovePendingPhoto = {
+                            pendingPhotos = emptyList()
+                            glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+                        },
                         onConnect = {
                             codexCliLines = (codexCliLines + "[link] $codexCliUrl").takeLast(220)
                             codexCliBridgeClient.connect(codexCliUrl)
@@ -2456,6 +2419,88 @@ private fun ConnectionDeck(
 }
 
 @Composable
+private fun PendingPhotoPreviewStrip(
+    photos: List<String>,
+    onRemovePhoto: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val base64 = photos.firstOrNull() ?: return
+    val thumbnail = remember(base64) {
+        try {
+            val bytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                ?.asImageBitmap()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    Surface(
+        modifier = modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+        color = JsosPalette.Card,
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.55f)),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "PHOTO READY",
+                color = JsosPalette.Green,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Box {
+                if (thumbnail != null) {
+                    Image(
+                        bitmap = thumbnail,
+                        contentDescription = "Queued photo",
+                        modifier = Modifier
+                            .size(width = 70.dp, height = 52.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.size(width = 70.dp, height = 52.dp),
+                        color = Color.Black.copy(alpha = 0.60f),
+                        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.42f)),
+                        shape = RoundedCornerShape(6.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "IMAGE",
+                                color = JsosPalette.Cyan,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
+                }
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove photo",
+                    modifier = Modifier
+                        .size(22.dp)
+                        .align(Alignment.TopEnd)
+                        .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(11.dp))
+                        .clickable(onClick = onRemovePhoto)
+                        .padding(3.dp),
+                    tint = Color.White,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CodexCliDeck(
     status: CodexCliBridgeClient.State,
     detail: String?,
@@ -2465,6 +2510,8 @@ private fun CodexCliDeck(
     listState: androidx.compose.foundation.lazy.LazyListState,
     hasPendingPhoto: Boolean,
     pendingPhotoCount: Int,
+    pendingPhotos: List<String>,
+    onRemovePendingPhoto: () -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onSend: () -> Unit,
@@ -2574,6 +2621,11 @@ private fun CodexCliDeck(
                 }
             }
         }
+
+        PendingPhotoPreviewStrip(
+            photos = pendingPhotos,
+            onRemovePhoto = onRemovePendingPhoto,
+        )
 
         OutlinedTextField(
             value = inputText,
