@@ -64,11 +64,19 @@ System Link, HUD Link, HUD Deployment, Voice Matrix, and Response Voice are kept
 JSOS HUD is the glasses-side interface: green monochrome, touchpad-first, safe-zone aware, and designed to stay readable over the real world.
 
 <p align="center">
-  <img src="docs/images/jsos-hud-glasses-01.jpeg" alt="JSOS HUD options overlay captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-02.jpeg" alt="JSOS HUD slash commands option captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-03.jpeg" alt="JSOS HUD font option captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-04.jpeg" alt="JSOS HUD exit overlay captured through Rokid glasses" width="19%">
-  <img src="docs/images/jsos-hud-glasses-05.jpeg" alt="JSOS HUD sessions overlay captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-options-live.jpeg" alt="JSOS HUD options panel captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-ar-tools.jpeg" alt="JSOS HUD AR tools panel captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-codex-hud-home.jpeg" alt="JSOS Admin Codex HUD captured through Rokid glasses" width="19%">
+</p>
+
+<p align="center">
+  <img src="docs/images/jsos-hud-commands-live.jpeg" alt="JSOS HUD commands panel captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-commands-models.jpeg" alt="JSOS HUD command model selection captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-models.jpeg" alt="JSOS HUD models panel captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-think.jpeg" alt="JSOS HUD think-mode panel captured through Rokid glasses" width="19%">
+  <img src="docs/images/jsos-hud-launcher.jpeg" alt="JSOS HUD launcher overlay captured through Rokid glasses" width="19%">
 </p>
 
 ## Current Status
