@@ -490,6 +490,26 @@ class HudActivity : ComponentActivity() {
         }
     }
 
+    private fun handleRingRemoteGesture(gesture: Gesture) {
+        if (gesture != Gesture.DOUBLE_TAP) {
+            handleGesture(gesture)
+            return
+        }
+
+        val current = hudState.value
+        if (current.showCliTerminal || current.showExitConfirm || current.showSlashParamMenu ||
+            current.showSlashMenu || current.showMoreSubMenu || current.showMoreMenu || current.showSessionPicker) {
+            handleGesture(Gesture.DOUBLE_TAP)
+            return
+        }
+
+        when (current.focusedArea) {
+            ChatFocusArea.CONTENT -> startVoice()
+            ChatFocusArea.INPUT -> handleGesture(Gesture.DOUBLE_TAP)
+            ChatFocusArea.MENU -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+        }
+    }
+
     // CONTENT area gestures
     private fun handleContentGesture(gesture: Gesture) {
         when (gesture) {
@@ -2058,6 +2078,23 @@ class HudActivity : ComponentActivity() {
                     )
 
                     Log.d(GlassesApp.TAG, "Sessions: ${sessions.size}, currentSessionKeyLength=${currentSessionKey.length}")
+                }
+
+                "remote_gesture" -> {
+                    val gesture = when (msg.optString("gesture", "")) {
+                        "forward" -> Gesture.SWIPE_FORWARD
+                        "backward" -> Gesture.SWIPE_BACKWARD
+                        "tap" -> Gesture.TAP
+                        "double_tap" -> Gesture.DOUBLE_TAP
+                        else -> null
+                    }
+                    if (gesture != null) {
+                        if (msg.optString("source", "") == "ring") {
+                            handleRingRemoteGesture(gesture)
+                        } else {
+                            handleGesture(gesture)
+                        }
+                    }
                 }
 
                 "voice_state" -> {

@@ -111,6 +111,29 @@ class WakeSignalManager(
     }
 
     /**
+     * Wake the glasses for a local controller input without forwarding that input.
+     * Returns true when the caller should consume the input as wake-only.
+     */
+    fun wakeOnlyIfNeeded(reason: String = "local_input"): Boolean {
+        if (!_enabled.value) return false
+
+        return when (_wakeState.value) {
+            is WakeState.Awake -> false
+            is WakeState.WakingUp -> true
+            is WakeState.Unknown -> {
+                val now = System.currentTimeMillis()
+                val hwWakeResult = wakeHardwareDisplay()
+                lastHardwareWakeTime = now
+                lastWakeSignalTime = now
+                _wakeState.value = WakeState.Awake
+                resetStandbyTimer()
+                Log.i(TAG, "Wake-only input consumed: reason=$reason, hardware=$hwWakeResult")
+                true
+            }
+        }
+    }
+
+    /**
      * Send a message to glasses, handling wake signal if needed.
      *
      * @param json The JSON message to send

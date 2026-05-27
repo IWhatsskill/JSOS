@@ -552,6 +552,14 @@ class GlassesConnectionManager(private val context: Context) {
     }
 
     /**
+     * Wake glasses from a ring input without forwarding the first gesture.
+     * Returns true if the caller should consume this ring event.
+     */
+    fun wakeFromRingOnly(): Boolean {
+        return wakeSignalManager.wakeOnlyIfNeeded("ring")
+    }
+
+    /**
      * Send a JSON message to glasses with wake signal coordination.
      * Uses WakeSignalManager to buffer messages if glasses may be in standby.
      *
