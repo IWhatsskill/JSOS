@@ -13,16 +13,11 @@ JSOS currently uses the Rokid CXR split-app model:
 
 Both apps currently use `minSdk = 28`.
 
-## Local Credentials
+## Runtime Credentials
 
-The phone app reads Rokid CXR credentials from the local, ignored `local.properties` file:
+JSOS Core does not compile Rokid CXR credentials into the APK. The phone app asks for the Rokid access key and client secret at runtime in the HUD/Rokid settings area, stores them in encrypted app storage, and uses them for Rokid CXR pairing, SN verification, and HUD deployment.
 
-```properties
-rokid.clientSecret=your-client-secret
-rokid.accessKey=your-access-key
-```
-
-These values are injected into the phone app as `BuildConfig` fields for local builds. Do not commit or publish real Rokid credentials, signing files, or APKs built with private credentials.
+Do not commit or publish real Rokid credentials, signing files, private config files, or APKs that include private user data.
 
 ## How JSOS Uses Rokid
 
@@ -34,7 +29,7 @@ JSOS Core initializes and manages the phone-side Rokid CXR-M connection through:
 Current responsibilities include:
 
 - BLE discovery and connection to Rokid glasses.
-- Rokid account / SN verification flow using local credentials.
+- Rokid account / SN verification flow using locally stored runtime credentials.
 - CXR message transport from phone to glasses.
 - Receiving AI key / scene events from the glasses.
 - Triggering glasses photo capture through the phone-side SDK path.
@@ -78,7 +73,7 @@ Public docs, screenshots, and logs should avoid exposing:
 - Socket UUIDs.
 - API keys, tokens, signing files, or local build properties.
 
-Runtime pairing and gateway values are currently stored in local app storage. A future hardening pass can move sensitive runtime values to encrypted storage.
+Runtime pairing, gateway, and Rokid credential values are stored locally by JSOS Core; sensitive values use Android Keystore-backed encrypted app storage.
 
 ## Useful External Resources
 

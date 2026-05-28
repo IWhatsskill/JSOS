@@ -3,7 +3,6 @@ package com.jsos.phone.glasses
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
-import com.jsos.phone.BuildConfig
 import com.rokid.cxr.Caps
 import com.rokid.cxr.client.extend.CxrApi
 import com.rokid.cxr.client.extend.callbacks.BluetoothStatusCallback
@@ -88,6 +87,32 @@ object RokidSdkManager {
     // Photo capture callback
     var onPhotoResult: ((status: ValueUtil.CxrStatus?, photoBytes: ByteArray?) -> Unit)? = null
 
+    private fun credentialStore(): RokidCredentialStore? =
+        appContext?.let { RokidCredentialStore(it) }
+
+    private fun configuredAccessKey(): String =
+        credentialStore()?.getAccessKey().orEmpty().trim()
+
+    private fun configuredClientSecret(): String =
+        credentialStore()?.getClientSecret().orEmpty().trim()
+
+    fun hasRuntimeCredentials(): Boolean =
+        credentialStore()?.isConfigured() == true
+
+    fun refreshRokidCredentials() {
+        registerAccessKeyIfConfigured()
+    }
+
+    private fun registerAccessKeyIfConfigured() {
+        val accessKey = configuredAccessKey()
+        if (accessKey.isNotEmpty()) {
+            cxrApi?.updateRokidAccount(accessKey)
+            Log.d(TAG, "Rokid account registered")
+        } else {
+            Log.w(TAG, "Rokid account configuration missing - SN verification may fail")
+        }
+    }
+
     private val bluetoothCallback = object : BluetoothStatusCallback {
         override fun onConnectionInfo(socketUuid: String?, macAddress: String?, rokidAccount: String?, deviceType: Int) {
             Log.i(TAG, "Connection info received from Rokid SDK (deviceType=$deviceType)")
@@ -140,8 +165,13 @@ object RokidSdkManager {
                 Log.i(TAG, "SN_CHECK_FAILED - attempting auto-recovery...")
                 val glassesSn = readGlassesSnFromSdk()
                 if (glassesSn != null && glassesSn.isNotEmpty()) {
-                    val clientSecret = BuildConfig.ROKID_CLIENT_SECRET.replace("-", "")
-                    val encrypted = generateSnEncryptContent(glassesSn, clientSecret)
+                    val clientSecret = configuredClientSecret().replace("-", "")
+                    val encrypted = if (clientSecret.isNotBlank()) {
+                        generateSnEncryptContent(glassesSn, clientSecret)
+                    } else {
+                        Log.e(TAG, "SN auto-recovery skipped - Rokid credentials missing")
+                        null
+                    }
                     if (encrypted != null) {
                         Log.i(TAG, "Generated SN verification payload (${encrypted.size} bytes)")
                         generatedSnEncryptContent = encrypted
@@ -202,14 +232,8 @@ object RokidSdkManager {
             cxrApi = CxrApi.getInstance()
             suppressRokidSdkVerboseLogs()
 
-            // Register access key for SN verification (required for connectBluetooth)
-            val accessKey = BuildConfig.ROKID_ACCESS_KEY
-            if (accessKey.isNotEmpty()) {
-                cxrApi?.updateRokidAccount(accessKey)
-                Log.d(TAG, "Rokid account registered")
-            } else {
-                Log.w(TAG, "Rokid account configuration missing - SN verification may fail")
-            }
+            // Register access key for SN verification (required for connectBluetooth).
+            registerAccessKeyIfConfigured()
 
             // Set up custom command listener to receive messages from glasses
             // The glasses sends via bridge.sendMessage(msgType, caps) where caps contains the actual data.
@@ -279,6 +303,13 @@ object RokidSdkManager {
             return
         }
 
+        if (!hasRuntimeCredentials()) {
+            Log.w(TAG, "Rokid credentials missing - Bluetooth init skipped")
+            pendingConnect = false
+            onBluetoothFailed?.invoke("Rokid credentials missing")
+            return
+        }
+
         try {
             Log.i(TAG, "Starting Bluetooth init for selected device")
             pendingConnect = true
@@ -311,7 +342,13 @@ object RokidSdkManager {
         }
 
         try {
-            val clientSecret = BuildConfig.ROKID_CLIENT_SECRET
+            registerAccessKeyIfConfigured()
+            val clientSecret = configuredClientSecret()
+            if (clientSecret.isBlank()) {
+                Log.w(TAG, "Rokid credential configuration missing - SN verification may fail")
+                onBluetoothFailed?.invoke("Rokid credentials missing")
+                return
+            }
 
             Log.i(TAG, "Connecting via Bluetooth (autoRetry=$snAutoRetryInProgress, cachedSn=${generatedSnEncryptContent != null})")
 

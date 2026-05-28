@@ -95,7 +95,7 @@ Development-preview boundaries:
 - Rokid device behavior depends on the proprietary Rokid CXR SDK and device firmware.
 - OpenClaw Live Talk support is present in the JSOS codebase, but should be treated as experimental unless tested against the target OpenClaw Gateway version and audio route.
 - The Admin Codex HUD/Core path is experimental. It expects a user-managed private WebSocket bridge to a separate Codex CLI environment and does not include a hosted service, Codex credentials, or server setup.
-- Release signing is intentionally local-only and requires private signing properties that must not be published.
+- Official preview APKs may be published through GitHub Releases. Release signing keys remain private and are never stored in the repository.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage.
 
 ## Project Lineage And JSOS Changes
@@ -133,28 +133,16 @@ Main JSOS changes include:
 
 ## Quick Start
 
-1. Install Android Studio or use a working Android Gradle environment with JDK 17.
-2. Add local Rokid CXR credentials to `local.properties`.
-3. Build both debug APKs from the project root:
-
-```bash
-./gradlew :phone-app:assembleDebug :glasses-app:assembleDebug
-```
-
-On Windows PowerShell:
-
-```powershell
-.\gradlew.bat :phone-app:assembleDebug :glasses-app:assembleDebug
-```
-
-4. Install JSOS Core on the phone:
-
-```bash
-adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
-```
-
-5. Use JSOS Core to configure OpenClaw, approve the phone device on the gateway if required, and pair the Rokid glasses.
-6. Install the separate JSOS HUD APK on the glasses either from JSOS Core's HUD Deployment section, which uses Hi Rokid / CXR-L, or manually through Hi Rokid / APK Manager.
+1. Download the latest JSOS Core and JSOS HUD APKs from [GitHub Releases](https://github.com/IWhatsskill/JSOS/releases).
+2. Allow Android to install APKs from the app you use to open the downloaded files.
+3. Install JSOS Core on the phone.
+4. Open JSOS Core and configure:
+   - OpenClaw Gateway host/port/token.
+   - Rokid CXR access key and client secret in the HUD/Rokid settings area.
+   - Optional OpenAI, ElevenLabs, and private Admin Codex bridge settings.
+5. Approve the phone device on the OpenClaw Gateway if pairing is required.
+6. Pair the Rokid glasses in Hi Rokid and JSOS Core.
+7. Install the separate JSOS HUD APK on the glasses either from JSOS Core's HUD Deployment section, which uses Hi Rokid / CXR-L, or manually through Hi Rokid / APK Manager.
 
 ## Architecture
 
@@ -190,16 +178,17 @@ adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 
 ## Local Configuration
 
-Create `local.properties` in the project root for local Rokid CXR credentials:
+JSOS Core stores runtime settings locally on the phone. Rokid CXR credentials are configured inside the app and are not compiled into the APK.
 
-```properties
-rokid.clientSecret=your-client-secret
-rokid.accessKey=your-access-key
-```
+Configure these values in JSOS Core:
 
-These values are injected into the phone app at build time as `BuildConfig` fields and are needed for Rokid CXR pairing and verification. Runtime OpenClaw, OpenAI, and ElevenLabs values are configured inside JSOS Core.
+- OpenClaw Gateway host, port, and token.
+- Rokid CXR access key and client secret.
+- Optional OpenAI API key for Realtime speech-to-text.
+- Optional ElevenLabs API key and voice for TTS.
+- Optional private Admin Codex bridge host.
 
-Do not commit or publish `local.properties`.
+Use `local.properties` only for Android SDK paths or local signing fallback values. Do not commit or publish `local.properties`.
 
 ## OpenClaw Gateway Setup
 
@@ -229,17 +218,27 @@ openclaw devices approve <requestId>
 
 The first connection attempt may fail with a pairing or approval error until the gateway device request is approved. After approval, reconnect from JSOS Core.
 
-## Build And Install
+## Install From GitHub Releases
 
-The public repository contains source code and documentation only. It does not
-ship official APK releases, private signing keys, or device/API credentials.
+GitHub Releases are the normal installation path for preview users.
+
+Each release should provide:
+
+- `JSOS-Core-v<version>.apk` for the Android phone.
+- `JSOS-HUD-v<version>.apk` for the Rokid glasses.
+
+The APKs are signed preview builds. If a device already has a debug/self-built JSOS app installed with the same package name but a different signing key, Android may require uninstalling the old app first.
+
+JSOS never ships private OpenClaw tokens, Rokid credentials, OpenAI keys, ElevenLabs keys, signing keys, or Admin Codex bridge credentials. These values are entered locally inside JSOS Core.
+
+## Build From Source
+
+The repository also supports local development builds for users who want to inspect or modify the source.
 
 JSOS Core and JSOS HUD are built and installed as separate Android apps:
 
 - JSOS Core is installed on the phone.
 - JSOS HUD is installed on the glasses through Hi Rokid. JSOS Core can drive this from its HUD Deployment section when Hi Rokid is installed and the glasses are already connected there; manual Hi Rokid / APK Manager installation remains a fallback.
-
-### Debug Builds
 
 Debug builds are the normal local development path.
 
@@ -270,7 +269,7 @@ adb install phone-app/build/outputs/apk/debug/phone-app-debug.apk
 
 Install JSOS HUD as a separate APK on the glasses from JSOS Core's HUD Deployment section, or manually through Hi Rokid / APK Manager. The JSOS Core deployment flow still depends on Hi Rokid being installed on the phone and already connected to the glasses.
 
-Do not publish private debug APKs built with real local credentials.
+Do not publish private debug APKs built with local test data.
 
 ## Release Builds And Signing
 
@@ -559,7 +558,7 @@ After approval, reconnect from JSOS Core. The device token is stored locally by 
 
 ### App Crashes On Startup
 
-- Confirm that `local.properties` exists for local builds that need Rokid CXR credentials.
+- Confirm Rokid credentials were saved in JSOS Core if Rokid pairing or HUD deployment fails.
 - Confirm the project is opened as the root Gradle project, not as a single subdirectory.
 - Use a clean debug build if local build artifacts look stale.
 - Do not add release signing files unless you are intentionally preparing a local release build.

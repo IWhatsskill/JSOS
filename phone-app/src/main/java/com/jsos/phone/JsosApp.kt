@@ -21,7 +21,7 @@ class JsosApp : Application() {
         if (RokidSdkManager.initialize(this)) {
             Log.d(TAG, "Rokid SDK initialized successfully")
         } else {
-            Log.w(TAG, "Rokid SDK initialization failed - check rokid.accessKey in local.properties")
+            Log.w(TAG, "Rokid SDK initialization failed - configure Rokid credentials in JSOS Core")
         }
     }
 

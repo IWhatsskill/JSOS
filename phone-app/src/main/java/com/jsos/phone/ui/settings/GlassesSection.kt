@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Circle
@@ -25,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -42,10 +44,15 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.jsos.phone.glasses.GlassesConnectionManager
+import com.jsos.phone.glasses.RokidCredentialStore
 import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.ui.theme.JsosPalette
 import kotlin.math.roundToInt
@@ -71,6 +78,12 @@ fun GlassesSection(
     onGlassBrightnessChange: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val credentialStore = remember(context) { RokidCredentialStore(context) }
+    var credentialsConfigured by remember(credentialStore) {
+        mutableStateOf(credentialStore.isConfigured())
+    }
+
     Column(
         modifier = modifier
             .padding(horizontal = 16.dp)
@@ -79,6 +92,24 @@ fun GlassesSection(
         if (debugModeEnabled) {
             DebugModeContent(state)
         } else {
+            RokidCredentialsPanel(
+                configured = credentialsConfigured,
+                accessKeySeed = credentialStore.getAccessKey(),
+                clientSecretSeed = credentialStore.getClientSecret(),
+                onSave = { accessKey, clientSecret ->
+                    credentialStore.save(accessKey, clientSecret)
+                    RokidSdkManager.refreshRokidCredentials()
+                    credentialsConfigured = credentialStore.isConfigured()
+                },
+                onClear = {
+                    credentialStore.clear()
+                    RokidSdkManager.refreshRokidCredentials()
+                    credentialsConfigured = false
+                },
+            )
+
+            Spacer(Modifier.height(16.dp))
+
             when (state) {
                 is GlassesConnectionManager.ConnectionState.Disconnected ->
                     DisconnectedContent(onStartScanning)
@@ -116,6 +147,137 @@ fun GlassesSection(
                         message = state.message,
                         onRetry = onStartScanning,
                     )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RokidCredentialsPanel(
+    configured: Boolean,
+    accessKeySeed: String,
+    clientSecretSeed: String,
+    onSave: (accessKey: String, clientSecret: String) -> Unit,
+    onClear: () -> Unit,
+) {
+    var expanded by remember(configured) { mutableStateOf(!configured) }
+    var accessKey by remember(accessKeySeed, configured) { mutableStateOf(accessKeySeed) }
+    var clientSecret by remember(clientSecretSeed, configured) { mutableStateOf(clientSecretSeed) }
+    var showSecrets by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = JsosPalette.CardDark.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.34f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Rokid Credentials",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = JsosPalette.Text,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Stored locally for Bluetooth and HUD deployment.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = JsosPalette.Muted,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        if (configured) "CONFIGURED" else "MISSING",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (configured) JsosPalette.Green else JsosPalette.Yellow,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    TextButton(
+                        onClick = { expanded = !expanded },
+                        colors = jsosTextButtonColors(),
+                    ) {
+                        Text(if (expanded) "Hide" else "Edit")
+                    }
+                }
+            }
+
+            if (expanded) {
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = accessKey,
+                    onValueChange = { accessKey = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Access key") },
+                    singleLine = true,
+                    visualTransformation = if (showSecrets) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    colors = jsosTextFieldColors(),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = clientSecret,
+                    onValueChange = { clientSecret = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Client secret") },
+                    singleLine = true,
+                    visualTransformation = if (showSecrets) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    colors = jsosTextFieldColors(),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = { showSecrets = !showSecrets },
+                        colors = jsosTextButtonColors(),
+                    ) {
+                        Text(if (showSecrets) "Mask" else "Show")
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (configured) {
+                            TextButton(
+                                onClick = {
+                                    onClear()
+                                    accessKey = ""
+                                    clientSecret = ""
+                                    expanded = true
+                                },
+                                colors = jsosTextButtonColors(contentColor = JsosPalette.Red),
+                            ) {
+                                Text("Clear")
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                onSave(accessKey, clientSecret)
+                                expanded = false
+                            },
+                            enabled = accessKey.isNotBlank() && clientSecret.isNotBlank(),
+                            colors = jsosPrimaryButtonColors(),
+                        ) {
+                            Text("Save")
+                        }
+                    }
+                }
             }
         }
     }

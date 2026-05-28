@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Load Rokid credentials from local.properties (needed for SN verification)
+// Load local build properties for release signing fallback.
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
@@ -45,11 +45,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Rokid credentials for SN verification during Bluetooth connection
-        // clientSecret = AES key used to decrypt snEncryptContent (from .lc file)
-        // accessKey = rokidAccount identifier
-        buildConfigField("String", "ROKID_CLIENT_SECRET", "\"${localProperties.getProperty("rokid.clientSecret", "")}\"")
-        buildConfigField("String", "ROKID_ACCESS_KEY", "\"${localProperties.getProperty("rokid.accessKey", "")}\"")
     }
 
     signingConfigs {
