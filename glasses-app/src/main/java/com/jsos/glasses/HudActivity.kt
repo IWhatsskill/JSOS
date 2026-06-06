@@ -1,12 +1,20 @@
 package com.jsos.glasses
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.provider.Settings
+import android.text.TextUtils
 import android.util.Base64
 import android.util.Log
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
@@ -21,6 +29,9 @@ import androidx.lifecycle.lifecycleScope
 import com.jsos.glasses.camera.CameraCapture
 import com.jsos.glasses.camera.PhotoCaptureState
 import com.jsos.glasses.input.GestureHandler
+import com.jsos.glasses.input.JsosRingAccessibilityService
+import com.jsos.glasses.input.R08BleController
+import com.jsos.glasses.input.RingMediaKeyHandler
 import com.jsos.glasses.input.GestureHandler.Gesture
 import com.jsos.glasses.rokid.RokidArCommands
 import com.jsos.glasses.service.PhoneConnectionService
@@ -100,9 +111,11 @@ class HudActivity : ComponentActivity() {
 
     private val hudState = MutableStateFlow(ChatHudState())
     private lateinit var gestureHandler: GestureHandler
+    private lateinit var ringMediaKeyHandler: RingMediaKeyHandler
     private lateinit var phoneConnection: PhoneConnectionService
     private lateinit var voiceHandler: GlassesVoiceHandler
     private lateinit var cameraCapture: CameraCapture
+    private var activityR08BleController: R08BleController? = null
     private val cameraPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
@@ -153,6 +166,9 @@ class HudActivity : ComponentActivity() {
 
         gestureHandler = GestureHandler { gesture ->
             handleGesture(gesture)
+        }
+        ringMediaKeyHandler = RingMediaKeyHandler { gesture ->
+            handleRingRemoteGesture(gesture)
         }
 
         phoneConnection = PhoneConnectionService(
@@ -311,6 +327,17 @@ class HudActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshRingSetupStatus()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (!isCapturingKeyboardInput && ringMediaKeyHandler.handle(event)) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         event?.let { gestureHandler.onTouchEvent(it) }
         return super.onTouchEvent(event)
@@ -979,6 +1006,15 @@ class HudActivity : ComponentActivity() {
                     moreSubMenuType = MoreSubMenuType.DISPLAY
                 )
             }
+            MoreMenuItem.RING_TOOLS -> {
+                refreshRingSetupStatus()
+                hudState.value = hudState.value.copy(
+                    showMoreMenu = false,
+                    showMoreSubMenu = true,
+                    selectedMoreSubIndex = 0,
+                    moreSubMenuType = MoreSubMenuType.RING
+                )
+            }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
                 val newEnabled = !current.ttsEnabled
@@ -991,6 +1027,125 @@ class HudActivity : ComponentActivity() {
                 Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
             }
             else -> {}
+        }
+    }
+
+    private fun executeRingToolAction(action: String) {
+        when (action) {
+            "pair_reconnect" -> pairOrReconnectRing()
+            "forget" -> forgetRing()
+            "access_settings" -> openRingAccessibilitySettings()
+            "bt_settings" -> openBluetoothSettings()
+            "refresh" -> refreshRingSetupStatus("Status refreshed")
+        }
+        if (action != "access_settings" && action != "bt_settings") {
+            hudState.value = hudState.value.copy(
+                showMoreSubMenu = true,
+                selectedMoreSubIndex = hudState.value.selectedMoreSubIndex,
+                moreSubMenuType = MoreSubMenuType.RING
+            )
+        }
+    }
+
+    private fun pairOrReconnectRing() {
+        refreshRingSetupStatus("Pair/reconnect started")
+        if (isRingAccessibilityEnabled()) {
+            sendRingServiceCommand(JsosRingAccessibilityService.COMMAND_RECONNECT)
+        } else {
+            val controller = activityR08BleController ?: R08BleController(this).also {
+                activityR08BleController = it
+                it.start()
+            }
+            controller.restart()
+        }
+        lifecycleScope.launch {
+            delay(1200)
+            refreshRingSetupStatus("Pair/reconnect running")
+        }
+    }
+
+    private fun forgetRing() {
+        if (isRingAccessibilityEnabled()) {
+            sendRingServiceCommand(JsosRingAccessibilityService.COMMAND_FORGET)
+            refreshRingSetupStatus("Forget requested")
+        } else {
+            val submitted = R08BleController(this).forgetBondedR08()
+            refreshRingSetupStatus(if (submitted) "Forget requested" else "No R08 bond found")
+        }
+        lifecycleScope.launch {
+            delay(1200)
+            refreshRingSetupStatus("Status refreshed")
+        }
+    }
+
+    private fun sendRingServiceCommand(command: String) {
+        val intent = Intent(JsosRingAccessibilityService.ACTION_COMMAND).apply {
+            setPackage(packageName)
+            putExtra(JsosRingAccessibilityService.EXTRA_COMMAND, command)
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun refreshRingSetupStatus(message: String? = null) {
+        val current = hudState.value
+        hudState.value = current.copy(
+            ringServiceEnabled = isRingAccessibilityEnabled(),
+            ringInputConnected = isR08InputDevicePresent(),
+            ringBonded = isR08Bonded(),
+            ringSetupMessage = message ?: current.ringSetupMessage
+        )
+    }
+
+    private fun isRingAccessibilityEnabled(): Boolean {
+        val component = ComponentName(this, JsosRingAccessibilityService::class.java)
+        val flat = component.flattenToString()
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )
+        if (enabled.isNullOrBlank()) return false
+        val splitter = TextUtils.SimpleStringSplitter(':')
+        splitter.setString(enabled)
+        while (splitter.hasNext()) {
+            if (flat.equals(splitter.next(), ignoreCase = true)) return true
+        }
+        return false
+    }
+
+    private fun isR08InputDevicePresent(): Boolean {
+        return InputDevice.getDeviceIds().any { id ->
+            InputDevice.getDevice(id)?.name?.uppercase(Locale.US)?.contains("R08") == true
+        }
+    }
+
+    private fun isR08Bonded(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        val manager = getSystemService(BluetoothManager::class.java) ?: return false
+        val adapter: BluetoothAdapter = manager.adapter ?: return false
+        return adapter.bondedDevices?.any { device ->
+            device.name?.uppercase(Locale.US)?.startsWith("R08") == true
+        } == true
+    }
+
+    private fun openBluetoothSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            Log.d(GlassesApp.TAG, "Opening bluetooth settings for ring setup")
+        } catch (error: ActivityNotFoundException) {
+            Log.w(GlassesApp.TAG, "Bluetooth settings unavailable")
+        }
+    }
+
+    private fun openRingAccessibilitySettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            Log.d(GlassesApp.TAG, "Opening accessibility settings for ring setup")
+        } catch (error: ActivityNotFoundException) {
+            Log.w(GlassesApp.TAG, "Accessibility settings unavailable")
         }
     }
 
@@ -1326,6 +1481,11 @@ class HudActivity : ComponentActivity() {
 
     private fun executeMoreSubMenuOption(option: MoreSubMenuOption) {
         val current = hudState.value
+
+        option.ringAction?.let { action ->
+            executeRingToolAction(action)
+            return
+        }
 
         option.displaySize?.let { displaySize ->
             hudState.value = current.copy(
@@ -2337,10 +2497,13 @@ class HudActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         saveHudPreferences()
+        ringMediaKeyHandler.cleanup()
         cameraCapture.cleanup()
         voiceHandler.cleanup()
         phoneConnection.stop()
         clearWakeNotificationJob?.cancel()
+        activityR08BleController?.stop()
+        activityR08BleController = null
         // Kill the process so the next launch starts completely fresh.
         // The CXR native layer may hold global state from the previous
         // CXRServiceBridge that prevents a second bridge in the same process

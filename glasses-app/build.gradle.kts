@@ -30,8 +30,8 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 200
-        versionName = "2.0"
+        versionCode = 217
+        versionName = "2.0.17-r08-volume-brightness-clean"
     }
 
     signingConfigs {

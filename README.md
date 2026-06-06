@@ -8,8 +8,8 @@ JSOS is split into two Android apps and one optional private bridge path:
 
 | Part | Runs on | Purpose |
 | --- | --- | --- |
-| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, Bluetooth media-ring input, and the experimental private Admin Codex bridge client. |
-| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and remote ring gestures, stages voice input, displays sessions, requests photo capture, triggers Rokid AR picture/recording scenes, and includes an experimental Admin Codex terminal view. |
+| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, legacy phone-side media-ring input, and the experimental private Admin Codex bridge client. |
+| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and direct R08 ring gestures, stages voice input, displays sessions, requests photo capture, triggers Rokid AR picture/recording scenes, and includes an experimental Admin Codex terminal view. |
 | **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex CLI-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
 
 JSOS started as a fork of the upstream Clawsses project and has been substantially reworked into a separate development-preview project. It is being prepared as a public fork base and is not presented as a finished consumer product.
@@ -25,7 +25,7 @@ The repository includes a short JSOS showcase video for a quick visual overview:
 - **JSOS HUD** running on Rokid glasses with the green monochrome interface.
 - **JSOS Core** controlling gateway, sessions, voice, HUD deployment, and Codex bridge input.
 - **Admin Codex bridge** output rendered directly inside the glasses HUD.
-- **Bluetooth ring control** for quick HUD navigation without touching the glasses.
+- **Direct R08 ring control** on the glasses for quick HUD, launcher, media, camera, and system-panel navigation.
 
 <p align="center">
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Download / view the JSOS showcase video</strong></a>
@@ -37,7 +37,7 @@ These public-safe visuals show the current JSOS interface direction. They are do
 
 ### JSOS Core
 
-JSOS Core is the phone-side control deck for gateway connection, session routing, voice, HUD deployment, brightness, Bluetooth ring input, and the private Admin Codex bridge client.
+JSOS Core is the phone-side control deck for gateway connection, session routing, voice, HUD deployment, brightness, legacy phone-side media-ring input, and the private Admin Codex bridge client.
 
 #### Home, Chat, Voice, Diagnostics
 
@@ -87,7 +87,7 @@ Included in this development preview:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, Bluetooth media-ring HUD navigation, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Admin Codex bridge client are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, direct R08 ring control on the glasses, legacy phone-side media-ring HUD navigation, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Admin Codex bridge client are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview boundaries:
@@ -116,7 +116,8 @@ Main JSOS changes include:
 - Suppression of unwanted Rokid AI auto-message overlays while JSOS HUD handles the interaction.
 - Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines, compact readable bottom-menu buttons, direct bottom-bar Codex/slash access, and grouped `AR TOOLS` / `DISPLAY` submenus.
 - Staged voice input on the glasses with `Send Ask` and `Send Auto` modes.
-- Experimental Bluetooth media-ring control path: JSOS Core can capture phone-side media button events, translate tap/double-tap/previous/next into HUD gestures, and wake the glasses before forwarding the first ring action.
+- Direct R08 ring control on the glasses: JSOS HUD includes `MORE -> RING` setup, BLE pair/forget/reconnect support, a JSOS Accessibility Service for global R08 HID/media-key events, and mappings for tap, double tap, swipe, launcher/system navigation, music control, and camera capture.
+- Legacy phone-side Bluetooth media-ring path: JSOS Core can still capture phone-side media button events and forward them as HUD gestures, but this is not the current R08 primary path.
 - Session picker presentation updates, current-session markers, unread indicators, and session/chat forwarding behavior.
 - OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
 - OpenAI Realtime voice input path with Android SpeechRecognizer fallback.
@@ -150,7 +151,7 @@ Main JSOS changes include:
 | --- | --- | --- |
 | OpenClaw Gateway | WebSocket to JSOS Core | AI sessions, chat streaming, tool execution |
 | JSOS Core / Phone App | WebSocket to OpenClaw; Bluetooth CXR to JSOS HUD | Bridge + voice, TTS playback, wake management |
-| JSOS HUD / Glasses App | Bluetooth CXR messages from JSOS Core; local Rokid scene commands | HUD + gestures, camera capture, AR picture/record triggers, session picker |
+| JSOS HUD / Glasses App | Bluetooth CXR messages from JSOS Core; local R08 BLE/HID/accessibility; local Rokid scene commands | HUD + gestures, direct R08 control, camera capture, AR picture/record triggers, session picker |
 | Optional private Admin Codex bridge | WebSocket from JSOS Core to a user-managed private bridge | Experimental Codex CLI output in JSOS HUD/Core, separate from OpenClaw agents |
 
 ## Repository Layout
@@ -158,7 +159,7 @@ Main JSOS changes include:
 | Path | Purpose |
 | --- | --- |
 | `phone-app/` | JSOS Core Android phone app. Bridges OpenClaw, Rokid CXR, voice, TTS, sessions, camera handoff, and HUD deployment. |
-| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, sessions, staged input, voice state, camera requests, Rokid AR picture/record triggers, and the experimental Codex CLI view. |
+| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, direct R08 ring control, sessions, staged input, voice state, camera requests, Rokid AR picture/record triggers, and the experimental Codex CLI view. |
 | `shared/` | Shared JSON protocol models used between phone, glasses, and OpenClaw-facing code. |
 | `docs/` | Public notes and neutral visual assets. Keep screenshots redacted before publication. |
 | `gradle/` | Gradle wrapper files. |
@@ -174,7 +175,7 @@ Main JSOS changes include:
 - A running OpenClaw Gateway reachable from the phone.
 - Optional: OpenAI API key for OpenAI Realtime speech-to-text.
 - Optional: ElevenLabs API key and voice ID/name for TTS.
-- Optional: Tailscale or another VPN for private remote access to the gateway.
+- Optional: a trusted private network path for remote access to the gateway.
 
 ## Local Configuration
 
@@ -207,7 +208,7 @@ openclaw config set gateway.host 0.0.0.0
 openclaw gateway restart
 ```
 
-For remote access, use a private VPN such as Tailscale instead of exposing the gateway directly to the public internet. `ws://` is cleartext at the app layer and should only be used over localhost, trusted LAN, or VPN/Tailnet links.
+For remote access, use a trusted private network instead of exposing the gateway directly to the public internet. `ws://` is cleartext at the app layer and should only be used over localhost or trusted private-network links.
 
 On first connection, OpenClaw may require device approval:
 
@@ -390,7 +391,7 @@ Current limitation: Core Agent Wake uses the phone-side voice path. The glasses 
 
 The HUD has separate focus areas for content, staged input/photos, and the bottom menu. This keeps reading, staging, and command actions usable on the limited glasses touchpad surface.
 
-JSOS can also use a Bluetooth media ring as a lightweight remote for the HUD. The phone captures media-button events, maps them to HUD gestures, and forwards them to the glasses. The current path is intentionally simple: tap confirms the focused action, double tap goes back/cancels, previous/next moves through HUD focus, and the first ring action can wake the glasses before the next action controls the interface.
+JSOS HUD can use a directly paired R08 ring as a lightweight glasses remote. `MORE -> RING` exposes pair, forget, accessibility setup, Bluetooth settings, and status refresh actions. The ring is configured over BLE/GATT, then JSOS handles global HID/media-key events through its Accessibility Service. Tap confirms or controls media, double tap goes back, previous/next become swipe navigation, launcher/system panels are driven by Accessibility gestures, and camera capture uses Rokid's scene command path.
 
 The bottom HUD menu uses two compact pages:
 
@@ -423,16 +424,16 @@ This path does not merge media inside JSOS. It delegates capture/processing to R
 
 ### Experimental Admin Codex Bridge
 
-JSOS includes an experimental private Admin Codex bridge path for local/VPN setups. This path is separate from OpenClaw: it is intended for a user-managed Codex CLI environment such as a private VPS admin workspace, not for an OpenClaw agent, Discord bot, or OpenClaw session.
+JSOS includes an experimental private Admin Codex bridge path for local or trusted private-network setups. This path is separate from OpenClaw: it is intended for a user-managed Codex CLI workspace, not for an OpenClaw agent, Discord bot, or OpenClaw session.
 
 - JSOS Core provides a `Codex` tab with camera/image staging, link, send, stop, and clear controls.
 - JSOS HUD opens `CODEX` from the bottom menu with a JSOS-style terminal view, staged input/photos, a `JSOS` return action, local link/send/stop/clear controls, and the same HUD message/input rendering used by the normal glasses chat.
-- JSOS Core connects to a user-managed WebSocket bridge using port `18890` and path `/codex-cli`. The default host is derived from the configured OpenClaw host only as a convenience for private LAN/VPN/Tailnet setups.
+- JSOS Core connects to a user-managed WebSocket bridge using port `18890` and path `/codex-cli`. The default host is derived from the configured OpenClaw host only as a convenience for trusted private-network setups.
 - Core and HUD input can be sent to that bridge, and returned output is displayed in the local Codex terminal view. The HUD output auto-scrolls to new responses but remains manually scrollable for review.
 - Staged photos can be attached to Admin Codex input when the private bridge supports image payloads. JSOS Core sends JPEG/PNG Base64 image payloads and transcodes other decodable staged image formats to JPEG before sending. Image sends are explicit one-shot requests: JSOS sends the currently staged photos with that input and does not automatically reattach older images to later follow-up turns.
 - `CLEAR` clears the local terminal view only; it does not reset the remote Codex session or workspace. A private bridge can additionally support `/new` as a text command to start a fresh remote Codex thread while keeping the bridge service running.
 
-The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private VPS configuration, OpenClaw server configuration, or any credentials. Keep this bridge private, for example on a trusted LAN or Tailnet, and do not expose it directly to the public internet.
+The public repository includes only the Android client-side path. It does not include a hosted bridge service, Codex authentication, private server configuration, OpenClaw server configuration, or any credentials. Keep this bridge on a trusted private network and do not expose it directly to the public internet.
 
 ### Text-To-Speech
 
@@ -542,8 +543,8 @@ Large phone-to-glasses JSON payloads are split into `chunk_part` messages and re
 - Verify that the OpenClaw Gateway is running.
 - Check the gateway host, port, and token in JSOS Core.
 - Make sure the gateway is reachable from the phone. For LAN testing, the gateway usually needs to bind to a LAN-reachable address, not only `127.0.0.1`.
-- Keep remote access private. Use a VPN such as Tailscale instead of exposing the gateway directly to the public internet.
-- If you use a full gateway URL, use `ws://` only for local/private cleartext setups such as localhost, trusted LAN, or VPN/Tailnet; use `wss://` when your gateway supports TLS.
+- Keep remote access private. Use a trusted private network instead of exposing the gateway directly to the public internet.
+- If you use a full gateway URL, use `ws://` only for local/private cleartext setups such as localhost or a trusted private network; use `wss://` when your gateway supports TLS.
 
 ### Pairing Required Or First Connection Fails
 
@@ -619,9 +620,9 @@ Do not publish:
 
 Additional notes:
 
-- `ws://` / cleartext traffic is intended for local or private OpenClaw setups. Bare host entries intentionally remain `ws://host:port` for compatibility with local gateways. Prefer trusted LAN/VPN/Tailnet access and use an explicit `wss://` URL when your gateway supports TLS.
+- `ws://` / cleartext traffic is intended for local or private OpenClaw setups. Bare host entries intentionally remain `ws://host:port` for compatibility with local gateways. Prefer trusted private-network access and use an explicit `wss://` URL when your gateway supports TLS.
 - Do not expose an OpenClaw Gateway directly to the public internet just to use JSOS.
-- Do not expose an experimental Admin Codex bridge directly to the public internet. Keep it on a trusted LAN/VPN/Tailnet and manage Codex authentication outside the public repository.
+- Do not expose an experimental Admin Codex bridge directly to the public internet. Keep it on a trusted private network and manage Codex authentication outside the public repository.
 - Do not distribute APKs built with real Rokid, OpenAI, ElevenLabs, OpenClaw, or signing credentials.
 - Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in Android Keystore-backed encrypted app storage. Non-secret UI preferences and some Rokid pairing metadata remain local app data.
 - JSOS suppresses verbose Rokid CXR SDK runtime logging before Bluetooth connection, but local device logs should still be treated as private diagnostic data.

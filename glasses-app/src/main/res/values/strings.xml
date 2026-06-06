@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">JSOS</string>
+    <string name="jsos_ring_accessibility_service_name">JSOS Ring Bridge</string>
+    <string name="jsos_ring_accessibility_service_description">Connects the R08 ring and routes media-key input into JSOS.</string>
 </resources>

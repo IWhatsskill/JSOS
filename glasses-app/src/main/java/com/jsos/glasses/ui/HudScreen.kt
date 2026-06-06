@@ -131,6 +131,7 @@ enum class MoreMenuItem(val icon: String, val label: String) {
     VOICE_SEND("SEND", "Send Mode"),
     AR_TOOLS("AR", "AR Tools"),
     DISPLAY("DISP", "Display"),
+    RING_TOOLS("RING", "Ring Tools"),
     VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
 }
 
@@ -279,7 +280,12 @@ data class ChatHudState(
     val cliScrollCommand: Int = 0,
     val cliScrollDirection: Int = 0,
     val cliIsScrolledToEnd: Boolean = false,
-    val cliActionIndex: Int = CliActionItem.SEND.ordinal
+    val cliActionIndex: Int = CliActionItem.SEND.ordinal,
+    // R08 ring tools status
+    val ringServiceEnabled: Boolean = false,
+    val ringInputConnected: Boolean = false,
+    val ringBonded: Boolean = false,
+    val ringSetupMessage: String = ""
 ) {
     /** Total number of messages */
     val totalMessages: Int get() = messages.size
@@ -304,14 +310,16 @@ data class SlashParamOption(
 
 enum class MoreSubMenuType(val title: String) {
     AR("AR TOOLS"),
-    DISPLAY("DISPLAY")
+    DISPLAY("DISPLAY"),
+    RING("RING TOOLS")
 }
 
 data class MoreSubMenuOption(
     val label: String,
     val description: String,
     val displaySize: HudDisplaySize? = null,
-    val arAction: String? = null
+    val arAction: String? = null,
+    val ringAction: String? = null
 )
 
 /**
@@ -376,9 +384,18 @@ val DISPLAY_OPTIONS = listOf(
     MoreSubMenuOption("LARGE", "Largest text", displaySize = HudDisplaySize.LARGE)
 )
 
+val RING_TOOL_OPTIONS = listOf(
+    MoreSubMenuOption("PAIR", "Scan or reconnect R08", ringAction = "pair_reconnect"),
+    MoreSubMenuOption("FORGET", "Remove saved R08 bond", ringAction = "forget"),
+    MoreSubMenuOption("ACCESS", "Open service setup", ringAction = "access_settings"),
+    MoreSubMenuOption("BT SET", "Open Bluetooth fallback", ringAction = "bt_settings"),
+    MoreSubMenuOption("REFRESH", "Update status", ringAction = "refresh")
+)
+
 fun moreSubMenuOptions(type: MoreSubMenuType): List<MoreSubMenuOption> = when (type) {
     MoreSubMenuType.AR -> AR_TOOL_OPTIONS
     MoreSubMenuType.DISPLAY -> DISPLAY_OPTIONS
+    MoreSubMenuType.RING -> RING_TOOL_OPTIONS
 }
 
 // ============================================================================
@@ -659,6 +676,10 @@ fun HudScreen(
                 menuType = state.moreSubMenuType,
                 selectedIndex = state.selectedMoreSubIndex,
                 currentDisplaySize = state.displaySize,
+                ringServiceEnabled = state.ringServiceEnabled,
+                ringInputConnected = state.ringInputConnected,
+                ringBonded = state.ringBonded,
+                ringSetupMessage = state.ringSetupMessage,
                 fontFamily = monoFontFamily
             )
         }
@@ -1970,6 +1991,7 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.VOICE_SEND -> if (voiceSendMode == VoiceSendMode.AUTO) "SEND AUTO" else "SEND ASK"
                         MoreMenuItem.AR_TOOLS -> "AR TOOLS"
                         MoreMenuItem.DISPLAY -> "DISPLAY"
+                        MoreMenuItem.RING_TOOLS -> "RING TOOLS"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
                     }
                     val activeMark = if (isActive) "*" else " "
@@ -2031,6 +2053,10 @@ private fun MoreSubMenuOverlay(
     menuType: MoreSubMenuType?,
     selectedIndex: Int,
     currentDisplaySize: HudDisplaySize,
+    ringServiceEnabled: Boolean,
+    ringInputConnected: Boolean,
+    ringBonded: Boolean,
+    ringSetupMessage: String,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
@@ -2050,6 +2076,16 @@ private fun MoreSubMenuOverlay(
         modifier = modifier,
         footerText = "SWIPE SELECT  TAP OK  2XTAP BACK"
     ) {
+        if (type == MoreSubMenuType.RING) {
+            RingToolsStatus(
+                serviceEnabled = ringServiceEnabled,
+                inputConnected = ringInputConnected,
+                bonded = ringBonded,
+                message = ringSetupMessage,
+                fontFamily = fontFamily
+            )
+        }
+
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -2115,6 +2151,66 @@ private fun MoreSubMenuOverlay(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RingToolsStatus(
+    serviceEnabled: Boolean,
+    inputConnected: Boolean,
+    bonded: Boolean,
+    message: String,
+    fontFamily: FontFamily
+) {
+    val ringText = when {
+        inputConnected -> "RING CONNECTED"
+        bonded -> "RING PAIRED"
+        else -> "RING NOT PAIRED"
+    }
+    val serviceText = if (serviceEnabled) "SERVICE ON" else "SERVICE OFF"
+    val ringColor = if (inputConnected || bonded) HudColors.green else HudColors.primaryText
+    val serviceColor = if (serviceEnabled) HudColors.green else HudColors.primaryText
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = ringText,
+                color = ringColor,
+                fontSize = 10.sp,
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = serviceText,
+                color = serviceColor,
+                fontSize = 10.sp,
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
+        if (message.isNotBlank()) {
+            Text(
+                text = message,
+                color = HudColors.primaryText.copy(alpha = 0.86f),
+                fontSize = 9.sp,
+                fontFamily = fontFamily,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

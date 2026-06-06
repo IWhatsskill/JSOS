@@ -22,6 +22,7 @@ DEVELOPER_BRIEFING.md
 # Android Studio
 .idea/
 .gradle/
+.kotlin/
 build/
 *.iml
 captures/
