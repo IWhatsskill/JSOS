@@ -89,8 +89,6 @@ import com.jsos.phone.R
 import com.jsos.phone.audio.LiveTalkAudioRouteManager
 import com.jsos.phone.codex.CodexCliBridgeClient
 import com.jsos.phone.glasses.GlassesConnectionManager
-import com.jsos.phone.ring.RingInputAction
-import com.jsos.phone.ring.RingInputBus
 import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.glasses.WakeSignalManager
 import com.jsos.phone.openclaw.DeviceIdentity
@@ -309,26 +307,6 @@ fun MainScreen() {
 
         // Try to auto-reconnect to previously paired glasses on startup
         glassesManager.tryAutoReconnectOnStartup()
-    }
-
-    LaunchedEffect(Unit) {
-        RingInputBus.events.collect { action ->
-            if (glassesManager.wakeFromRingOnly()) {
-                return@collect
-            }
-            val gesture = when (action) {
-                RingInputAction.Tap -> "tap"
-                RingInputAction.DoubleTap -> "double_tap"
-                RingInputAction.Forward -> "forward"
-                RingInputAction.Backward -> "backward"
-            }
-            val msg = org.json.JSONObject().apply {
-                put("type", "remote_gesture")
-                put("source", "ring")
-                put("gesture", gesture)
-            }
-            glassesManager.sendRawMessage(msg.toString())
-        }
     }
 
     // Fetch session list when OpenClaw connects

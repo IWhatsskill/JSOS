@@ -32,6 +32,7 @@ import com.jsos.glasses.input.GestureHandler
 import com.jsos.glasses.input.JsosRingAccessibilityService
 import com.jsos.glasses.input.R08BleController
 import com.jsos.glasses.input.RingMediaKeyHandler
+import com.jsos.glasses.input.RingMediaKeyHandler.RingGesture
 import com.jsos.glasses.input.GestureHandler.Gesture
 import com.jsos.glasses.rokid.RokidArCommands
 import com.jsos.glasses.service.PhoneConnectionService
@@ -167,8 +168,8 @@ class HudActivity : ComponentActivity() {
         gestureHandler = GestureHandler { gesture ->
             handleGesture(gesture)
         }
-        ringMediaKeyHandler = RingMediaKeyHandler { gesture ->
-            handleRingRemoteGesture(gesture)
+        ringMediaKeyHandler = RingMediaKeyHandler { ringGesture ->
+            handleRingRemoteGesture(ringGesture)
         }
 
         phoneConnection = PhoneConnectionService(
@@ -534,6 +535,25 @@ class HudActivity : ComponentActivity() {
             ChatFocusArea.CONTENT -> startVoice()
             ChatFocusArea.INPUT -> handleGesture(Gesture.DOUBLE_TAP)
             ChatFocusArea.MENU -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
+        }
+    }
+
+    private fun handleRingRemoteGesture(gesture: RingGesture) {
+        when (gesture) {
+            RingGesture.SWIPE_FORWARD -> handleRingRemoteGesture(Gesture.SWIPE_FORWARD)
+            RingGesture.SWIPE_BACKWARD -> handleRingRemoteGesture(Gesture.SWIPE_BACKWARD)
+            RingGesture.TAP -> handleRingRemoteGesture(Gesture.TAP)
+            RingGesture.DOUBLE_TAP -> handleRingRemoteGesture(Gesture.DOUBLE_TAP)
+            RingGesture.TRIPLE_TAP -> {
+                if (!RokidArCommands.openAiAssist(this)) {
+                    Log.w(GlassesApp.TAG, "Ring triple tap could not open Rokid AI")
+                }
+            }
+            RingGesture.QUADRUPLE_TAP -> {
+                if (!RokidArCommands.takePhoto(this)) {
+                    Log.w(GlassesApp.TAG, "Ring quadruple tap could not request Rokid photo")
+                }
+            }
         }
     }
 

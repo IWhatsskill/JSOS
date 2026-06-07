@@ -11,7 +11,7 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
-import com.jsos.glasses.input.GestureHandler.Gesture
+import com.jsos.glasses.input.RingMediaKeyHandler.RingGesture
 import java.util.Locale
 
 class JsosRingAccessibilityService : AccessibilityService() {
@@ -44,8 +44,8 @@ class JsosRingAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         navigator = R08AccessibilityNavigator(this)
-        keyHandler = RingMediaKeyHandler(TAG) { gesture ->
-            handleGlobalGesture(gesture)
+        keyHandler = RingMediaKeyHandler(TAG) { ringGesture ->
+            handleGlobalRingGesture(ringGesture)
         }
 
         val info = serviceInfo ?: AccessibilityServiceInfo()
@@ -105,16 +105,6 @@ class JsosRingAccessibilityService : AccessibilityService() {
             }
             return false
         }
-        if (event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE &&
-            navigator.isRokidLauncherActive() &&
-            !navigator.isRokidLauncherAppCarouselActive()
-        ) {
-            keyHandler.cleanup()
-            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                Log.d(TAG, "launcher media passthrough key=${KeyEvent.keyCodeToString(event.keyCode)}")
-            }
-            return false
-        }
         return keyHandler.handle(event)
     }
 
@@ -151,15 +141,16 @@ class JsosRingAccessibilityService : AccessibilityService() {
         commandReceiverRegistered = false
     }
 
-    private fun handleGlobalGesture(gesture: Gesture) {
+    private fun handleGlobalRingGesture(gesture: RingGesture) {
         if (!::navigator.isInitialized) return
         Log.d(TAG, "global gesture=$gesture launcher=${navigator.isRokidLauncherActive()}")
         when (gesture) {
-            Gesture.SWIPE_FORWARD -> navigator.moveForward()
-            Gesture.SWIPE_BACKWARD -> navigator.moveBackward()
-            Gesture.TAP -> navigator.activate()
-            Gesture.DOUBLE_TAP -> navigator.back()
-            Gesture.LONG_PRESS -> navigator.longPress()
+            RingGesture.SWIPE_FORWARD -> navigator.moveForward()
+            RingGesture.SWIPE_BACKWARD -> navigator.moveBackward()
+            RingGesture.TAP -> navigator.activate()
+            RingGesture.DOUBLE_TAP -> navigator.back()
+            RingGesture.TRIPLE_TAP -> navigator.openRokidAiAssist()
+            RingGesture.QUADRUPLE_TAP -> navigator.takeRokidPhoto()
         }
     }
 

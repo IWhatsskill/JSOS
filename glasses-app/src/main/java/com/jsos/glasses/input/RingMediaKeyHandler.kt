@@ -5,15 +5,31 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
-import com.jsos.glasses.input.GestureHandler.Gesture
 
 class RingMediaKeyHandler(
     private val tag: String = TAG,
-    private val onGesture: (Gesture) -> Unit
+    private val onGesture: (RingGesture) -> Unit
 ) {
+    enum class RingGesture {
+        SWIPE_FORWARD,
+        SWIPE_BACKWARD,
+        TAP,
+        DOUBLE_TAP,
+        TRIPLE_TAP,
+        QUADRUPLE_TAP
+    }
+
     private val handler = Handler(Looper.getMainLooper())
-    private var pendingTap: Runnable? = null
-    private var lastTapAt = 0L
+    private var lastTapKeyCode = KeyEvent.KEYCODE_UNKNOWN
+    private var lastTapScanCode = 0
+    private val tapRecognizer = R08TapSequenceRecognizer(
+        handler = handler,
+        duplicateIgnoreMs = TAP_BOUNCE_IGNORE_MS,
+        interTapTimeoutMs = TAP_SEQUENCE_TIMEOUT_MS,
+        maxTapCount = MAX_TAP_SEQUENCE
+    ) { tapCount ->
+        emitTapCount(tapCount)
+    }
 
     fun handle(event: KeyEvent?): Boolean {
         event ?: return false
@@ -23,11 +39,11 @@ class RingMediaKeyHandler(
 
         return when (event.keyCode) {
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                emit(Gesture.SWIPE_FORWARD, event)
+                emit(RingGesture.SWIPE_FORWARD, event)
                 true
             }
             KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                emit(Gesture.SWIPE_BACKWARD, event)
+                emit(RingGesture.SWIPE_BACKWARD, event)
                 true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY,
@@ -42,43 +58,36 @@ class RingMediaKeyHandler(
     }
 
     fun cleanup() {
-        pendingTap?.let(handler::removeCallbacks)
-        pendingTap = null
-        lastTapAt = 0L
+        tapRecognizer.cancel()
+        lastTapKeyCode = KeyEvent.KEYCODE_UNKNOWN
+        lastTapScanCode = 0
     }
 
     private fun handleTap(event: KeyEvent) {
-        val now = SystemClock.uptimeMillis()
-        val pending = pendingTap
-        if (pending != null) {
-            val delta = now - lastTapAt
-            if (delta < TAP_BOUNCE_IGNORE_MS) return
-            if (delta <= TAP_SEQUENCE_TIMEOUT_MS) {
-                handler.removeCallbacks(pending)
-                pendingTap = null
-                lastTapAt = 0L
-                emit(Gesture.DOUBLE_TAP, event)
-                return
-            }
-            cleanup()
-        }
-
-        lastTapAt = now
-        val singleTap = Runnable {
-            if (lastTapAt == now) {
-                pendingTap = null
-                lastTapAt = 0L
-                emit(Gesture.TAP, event)
-            }
-        }
-        pendingTap = singleTap
-        handler.postDelayed(singleTap, TAP_SEQUENCE_TIMEOUT_MS)
+        lastTapKeyCode = event.keyCode
+        lastTapScanCode = event.scanCode
+        tapRecognizer.onTap(SystemClock.uptimeMillis())
     }
 
-    private fun emit(gesture: Gesture, event: KeyEvent) {
+    private fun emit(gesture: RingGesture, event: KeyEvent) {
         Log.d(
             tag,
             "Ring key=${KeyEvent.keyCodeToString(event.keyCode)} code=${event.keyCode} scan=${event.scanCode} -> $gesture"
+        )
+        onGesture(gesture)
+    }
+
+    private fun emitTapCount(tapCount: Int) {
+        val gesture = when (tapCount) {
+            1 -> RingGesture.TAP
+            2 -> RingGesture.DOUBLE_TAP
+            3 -> RingGesture.TRIPLE_TAP
+            else -> RingGesture.QUADRUPLE_TAP
+        }
+        Log.d(
+            tag,
+            "Ring tapCount=$tapCount key=${KeyEvent.keyCodeToString(lastTapKeyCode)} " +
+                "code=$lastTapKeyCode scan=$lastTapScanCode -> $gesture"
         )
         onGesture(gesture)
     }
@@ -96,5 +105,6 @@ class RingMediaKeyHandler(
         private const val TAG = "JSOSRingKeys"
         private const val TAP_BOUNCE_IGNORE_MS = 75L
         private const val TAP_SEQUENCE_TIMEOUT_MS = 650L
+        private const val MAX_TAP_SEQUENCE = 4
     }
 }

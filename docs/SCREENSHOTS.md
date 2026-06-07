@@ -1,4 +1,4 @@
-﻿# Screenshots
+# Screenshots
 
 The README currently references a curated set of JSOS screenshots and visual assets.
 

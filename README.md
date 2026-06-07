@@ -8,8 +8,8 @@ JSOS is split into two Android apps and one optional private bridge path:
 
 | Part | Runs on | Purpose |
 | --- | --- | --- |
-| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, legacy phone-side media-ring input, and the experimental private Admin Codex bridge client. |
-| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and direct R08 ring gestures, stages voice input, displays sessions, requests photo capture, triggers Rokid AR picture/recording scenes, and includes an experimental Admin Codex terminal view. |
+| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the experimental private Admin Codex bridge client. |
+| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and direct R08 ring gestures, stages voice input, displays sessions, requests photo capture, triggers Rokid AI/photo/AR picture/recording scenes, and includes an experimental Admin Codex terminal view. |
 | **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex CLI-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
 
 JSOS started as a fork of the upstream Clawsses project and has been substantially reworked into a separate development-preview project. It is being prepared as a public fork base and is not presented as a finished consumer product.
@@ -37,7 +37,7 @@ These public-safe visuals show the current JSOS interface direction. They are do
 
 ### JSOS Core
 
-JSOS Core is the phone-side control deck for gateway connection, session routing, voice, HUD deployment, brightness, legacy phone-side media-ring input, and the private Admin Codex bridge client.
+JSOS Core is the phone-side control deck for gateway connection, session routing, voice, HUD deployment, brightness, and the private Admin Codex bridge client.
 
 #### Home, Chat, Voice, Diagnostics
 
@@ -87,7 +87,7 @@ Included in this development preview:
 - Android multi-module project with `phone-app`, `glasses-app`, and `shared` modules.
 - JSOS Core and JSOS HUD app labels, package namespaces, and launcher branding use JSOS naming.
 - Debug builds are the supported local development path.
-- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, direct R08 ring control on the glasses, legacy phone-side media-ring HUD navigation, Hi Rokid / CXR-L HUD deployment, Rokid AR picture/recording triggers, and an experimental private Admin Codex bridge client are present in this source tree.
+- OpenClaw Gateway integration, Rokid CXR transport, sessions, streaming chat, voice input, Core/Glasses Live Talk routing, optional ElevenLabs TTS, wake signaling, glasses brightness control, direct R08 ring control on the glasses, Hi Rokid / CXR-L HUD deployment, Rokid AI/photo/AR picture/recording triggers, and an experimental private Admin Codex bridge client are present in this source tree.
 - Selected screenshots and visual assets are referenced for public documentation. They should remain neutral and redacted before publication.
 
 Development-preview boundaries:
@@ -116,8 +116,8 @@ Main JSOS changes include:
 - Suppression of unwanted Rokid AI auto-message overlays while JSOS HUD handles the interaction.
 - Restyled existing OPTIONS, COMMANDS, and SESSIONS HUD panels into the JSOS green monochrome HUD design, with low-brightness-friendly outlines, compact readable bottom-menu buttons, direct bottom-bar Codex/slash access, and grouped `AR TOOLS` / `DISPLAY` submenus.
 - Staged voice input on the glasses with `Send Ask` and `Send Auto` modes.
-- Direct R08 ring control on the glasses: JSOS HUD includes `MORE -> RING` setup, BLE pair/forget/reconnect support, a JSOS Accessibility Service for global R08 HID/media-key events, and mappings for tap, double tap, swipe, launcher/system navigation, music control, and camera capture.
-- Legacy phone-side Bluetooth media-ring path: JSOS Core can still capture phone-side media button events and forward them as HUD gestures, but this is not the current R08 primary path.
+- Direct R08 ring control on the glasses: JSOS HUD includes `MORE -> RING` setup, BLE pair/forget/reconnect support, a JSOS Accessibility Service for global R08 HID/media-key events, and mappings for tap, double tap, triple tap, quadruple tap, swipe, launcher/system navigation, music control, Rokid AI, and camera capture.
+- Legacy phone-side Bluetooth media-ring forwarding has been removed from JSOS Core. The current R08 path runs directly on the glasses.
 - Session picker presentation updates, current-session markers, unread indicators, and session/chat forwarding behavior.
 - OpenClaw Gateway protocol negotiation used by JSOS, currently advertising a v4-v5 client range and showing the negotiated gateway protocol in JSOS Core.
 - OpenAI Realtime voice input path with Android SpeechRecognizer fallback.
@@ -391,7 +391,7 @@ Current limitation: Core Agent Wake uses the phone-side voice path. The glasses 
 
 The HUD has separate focus areas for content, staged input/photos, and the bottom menu. This keeps reading, staging, and command actions usable on the limited glasses touchpad surface.
 
-JSOS HUD can use a directly paired R08 ring as a lightweight glasses remote. `MORE -> RING` exposes pair, forget, accessibility setup, Bluetooth settings, and status refresh actions. The ring is configured over BLE/GATT, then JSOS handles global HID/media-key events through its Accessibility Service. Tap confirms or controls media, double tap goes back, previous/next become swipe navigation, launcher/system panels are driven by Accessibility gestures, and camera capture uses Rokid's scene command path.
+JSOS HUD can use a directly paired R08 ring as a lightweight glasses remote. `MORE -> RING` exposes pair, forget, accessibility setup, Bluetooth settings, and status refresh actions. The ring is configured over BLE/GATT, then JSOS handles global HID/media-key events through its Accessibility Service. Tap confirms or controls media, double tap starts JSOS voice in the HUD and acts as back in global/system contexts, triple tap opens Rokid AI through the `ai_assist` scene command, quadruple tap requests a Rokid photo through the `take_picture` scene command, previous/next become swipe navigation, and launcher/system panels are driven by Accessibility gestures.
 
 The bottom HUD menu uses two compact pages:
 

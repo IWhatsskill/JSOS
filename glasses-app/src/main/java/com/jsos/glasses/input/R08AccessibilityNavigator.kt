@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.jsos.glasses.rokid.RokidArCommands
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -65,6 +66,9 @@ internal class R08AccessibilityNavigator(
             return
         }
         if (isRokidLauncherMusicPageActive() && dispatchMusicPagePlayPause()) {
+            return
+        }
+        if (isRokidLauncherActive() && !isRokidLauncherAppCarouselActive() && dispatchBluetoothPlayPause()) {
             return
         }
         if (launcherNavigator.isActive() && launcherNavigator.activateCenter()) {
@@ -124,6 +128,20 @@ internal class R08AccessibilityNavigator(
             val metrics = service.resources.displayMetrics
             gestures.longPress(metrics.widthPixels / 2f, metrics.heightPixels / 2f)
         }
+    }
+
+    fun openRokidAiAssist() {
+        if (RokidArCommands.openAiAssist(service)) {
+            return
+        }
+        longPress()
+    }
+
+    fun takeRokidPhoto() {
+        if (RokidArCommands.takePhoto(service)) {
+            return
+        }
+        Log.w(TAG, "Rokid photo scene request failed")
     }
 
     fun isRokidLauncherActive(): Boolean {
@@ -241,6 +259,21 @@ internal class R08AccessibilityNavigator(
         audioManager.dispatchMediaKeyEvent(KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0))
         audioManager.dispatchMediaKeyEvent(KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0))
         Log.d(TAG, "music page media fallback key=${KeyEvent.keyCodeToString(keyCode)} start=${stateName(startState)}")
+        return true
+    }
+
+    private fun dispatchBluetoothPlayPause(): Boolean {
+        ensureBluetoothMediaController()
+        val currentState = currentBluetoothPlaybackState()
+        val controls = bluetoothMediaController?.transportControls
+            ?: return dispatchMusicPagePlayPauseFallback(currentState)
+        if (isPlaying(currentState)) {
+            controls.pause()
+            Log.d(TAG, "bluetooth media toggle command=pause current=${stateName(currentState)}")
+        } else {
+            controls.play()
+            Log.d(TAG, "bluetooth media toggle command=play current=${stateName(currentState)}")
+        }
         return true
     }
 
