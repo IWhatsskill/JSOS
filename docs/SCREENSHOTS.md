@@ -47,9 +47,3 @@ Before adding new screenshots, check that they do not expose private hosts, API 
 <p align="center">
   <img src="images/jsos-hud-launcher.jpeg" alt="JSOS HUD launcher overlay captured through Rokid glasses" width="23%">
 </p>
-
-## Legacy Or Alternate Preview Assets
-
-<p align="center">
-  <img src="images/Top-Picture.png" alt="Alternate JSOS preview image" width="100%">
-</p>
