@@ -563,7 +563,7 @@ class HudActivity : ComponentActivity() {
             Gesture.SWIPE_FORWARD -> scrollUp()
             Gesture.SWIPE_BACKWARD -> {
                 val current = hudState.value
-                val maxScroll = maxOf(0, current.messages.size - 1)
+                val maxScroll = maxHudScrollPosition(current.messages)
                 if (current.scrollPosition >= maxScroll && current.isScrolledToEnd) {
                     // Push through: CONTENT -> INPUT (if staging or photos) -> MENU
                     if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
@@ -909,7 +909,7 @@ class HudActivity : ComponentActivity() {
             inputText = "",
             photoThumbnails = emptyList(),
             focusedArea = ChatFocusArea.CONTENT,
-            scrollPosition = messages.size - 1,
+            scrollPosition = maxHudScrollPosition(messages),
             scrollTrigger = current.scrollTrigger + 1,
             showInputStaging = false,
             stagingText = "",
@@ -1233,9 +1233,10 @@ class HudActivity : ComponentActivity() {
         }
 
         fun scrollCliUp(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
+            val newPosition = maxOf(0, state.cliScrollPosition - 1)
             hudState.value = state.copy(
-                cliScrollCommand = state.cliScrollCommand + 1,
-                cliScrollDirection = -1
+                cliScrollPosition = newPosition,
+                cliScrollTrigger = state.cliScrollTrigger + 1
             )
         }
 
@@ -1248,16 +1249,20 @@ class HudActivity : ComponentActivity() {
         }
 
         fun scrollCliDownOrMenu(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
-            if (state.cliIsScrolledToEnd) {
+            val maxScroll = maxOf(0, cliVisibleBlockCount(state.cliLines) - 1)
+            if (state.cliScrollPosition >= maxScroll && state.cliIsScrolledToEnd) {
                 if (hasCliInput(state)) {
                     focusCliInput(state)
                 } else {
                     focusCliMenu(state, CliActionItem.CAM.ordinal)
                 }
+            } else if (state.cliScrollPosition >= maxScroll) {
+                scrollCliToBottom(state)
             } else {
+                val newPosition = minOf(maxScroll, state.cliScrollPosition + 1)
                 hudState.value = state.copy(
-                    cliScrollCommand = state.cliScrollCommand + 1,
-                    cliScrollDirection = 1
+                    cliScrollPosition = newPosition,
+                    cliScrollTrigger = state.cliScrollTrigger + 1
                 )
             }
         }
@@ -1650,9 +1655,24 @@ class HudActivity : ComponentActivity() {
 
     // ============== Scroll Helpers ==============
 
+    private fun visibleHudMessageIndices(messages: List<DisplayMessage>): List<Int> =
+        messages.withIndex()
+            .filter { it.value.role != "user" }
+            .map { it.index }
+
+    private fun maxHudScrollPosition(messages: List<DisplayMessage>): Int =
+        visibleHudMessageIndices(messages).lastOrNull() ?: maxOf(0, messages.size - 1)
+
+    private fun currentHudVisibleSlot(messages: List<DisplayMessage>, scrollPosition: Int): Int {
+        val visibleIndices = visibleHudMessageIndices(messages)
+        if (visibleIndices.isEmpty()) return 0
+        val slot = visibleIndices.indexOfLast { it <= scrollPosition }
+        return if (slot >= 0) slot else 0
+    }
+
     private fun scrollToBottom() {
         val current = hudState.value
-        val lastIndex = maxOf(0, current.messages.size - 1)
+        val lastIndex = maxHudScrollPosition(current.messages)
         hudState.value = current.copy(
             scrollPosition = lastIndex,
             scrollTrigger = current.scrollTrigger + 1
@@ -1661,11 +1681,24 @@ class HudActivity : ComponentActivity() {
 
     private fun scrollUp() {
         val current = hudState.value
-        val newPosition = maxOf(0, current.scrollPosition - 5) // scroll by 5 messages
-        hudState.value = current.copy(scrollPosition = newPosition)
+        val visibleIndices = visibleHudMessageIndices(current.messages)
+        val targetSlot: Int
+        val newPosition: Int
+        if (visibleIndices.isEmpty()) {
+            newPosition = maxOf(0, current.scrollPosition - 1)
+            targetSlot = 0
+        } else {
+            val currentSlot = currentHudVisibleSlot(current.messages, current.scrollPosition)
+            targetSlot = maxOf(0, currentSlot - 1)
+            newPosition = visibleIndices[targetSlot]
+        }
+        hudState.value = current.copy(
+            scrollPosition = newPosition,
+            scrollTrigger = current.scrollTrigger + 1
+        )
 
-        // If we've scrolled to the top and there might be more history, request it
-        if (newPosition == 0 && current.hasMoreHistory && !current.isLoadingMoreHistory && current.messages.isNotEmpty()) {
+        // If we reached the first visible HUD message, request older history.
+        if (targetSlot == 0 && current.hasMoreHistory && !current.isLoadingMoreHistory && current.messages.isNotEmpty()) {
             requestMoreHistory()
         }
     }
@@ -1686,9 +1719,19 @@ class HudActivity : ComponentActivity() {
 
     private fun scrollDown() {
         val current = hudState.value
-        val maxScroll = maxOf(0, current.messages.size - 1)
-        val newPosition = minOf(maxScroll, current.scrollPosition + 5)
-        hudState.value = current.copy(scrollPosition = newPosition)
+        val visibleIndices = visibleHudMessageIndices(current.messages)
+        val newPosition = if (visibleIndices.isEmpty()) {
+            val maxScroll = maxOf(0, current.messages.size - 1)
+            minOf(maxScroll, current.scrollPosition + 1)
+        } else {
+            val currentSlot = currentHudVisibleSlot(current.messages, current.scrollPosition)
+            val targetSlot = minOf(visibleIndices.lastIndex, currentSlot + 1)
+            visibleIndices[targetSlot]
+        }
+        hudState.value = current.copy(
+            scrollPosition = newPosition,
+            scrollTrigger = current.scrollTrigger + 1
+        )
     }
 
     // ============== Voice Recognition ==============
@@ -1967,7 +2010,7 @@ class HudActivity : ComponentActivity() {
                             messages = messages,
                             agentState = AgentState.IDLE,
                             photoThumbnails = emptyList(),
-                            scrollPosition = messages.size - 1,
+                            scrollPosition = maxHudScrollPosition(messages),
                             scrollTrigger = current.scrollTrigger + 1
                         )
                         Log.d(GlassesApp.TAG, "User message received from phone (${content.length} chars, photos=${thumbnails.size})")
@@ -1990,7 +2033,7 @@ class HudActivity : ComponentActivity() {
                         hudState.value = current.copy(
                             messages = messages,
                             agentState = AgentState.IDLE,
-                            scrollPosition = messages.size - 1,
+                            scrollPosition = maxHudScrollPosition(messages),
                             scrollTrigger = current.scrollTrigger + 1
                         )
                         Log.d(GlassesApp.TAG, "Assistant message received (${content.length} chars)")
@@ -2057,7 +2100,7 @@ class HudActivity : ComponentActivity() {
                         hudState.value = current.copy(
                             messages = messages,
                             agentState = AgentState.IDLE,
-                            scrollPosition = maxOf(0, messages.size - 1),
+                            scrollPosition = maxHudScrollPosition(messages),
                             scrollTrigger = current.scrollTrigger + 1,
                             isLoadingMoreHistory = false,
                             hasMoreHistory = true  // Reset - new session may have more
@@ -2100,14 +2143,16 @@ class HudActivity : ComponentActivity() {
                         ))
                     }
 
-                    // Auto-scroll to bottom during streaming (unless user scrolled up)
+                    // Auto-scroll to bottom during streaming unless the user scrolled up.
+                    val previousMaxScroll = maxHudScrollPosition(current.messages)
+                    val nextMaxScroll = maxHudScrollPosition(messages)
                     val shouldAutoScroll = current.focusedArea != ChatFocusArea.CONTENT ||
-                        current.scrollPosition >= current.messages.size - 2
+                        current.scrollPosition >= previousMaxScroll - 1
 
                     hudState.value = current.copy(
                         messages = messages,
                         agentState = AgentState.STREAMING,
-                        scrollPosition = if (shouldAutoScroll) messages.size - 1 else current.scrollPosition,
+                        scrollPosition = if (shouldAutoScroll) nextMaxScroll else current.scrollPosition,
                         scrollTrigger = if (shouldAutoScroll) current.scrollTrigger + 1 else current.scrollTrigger
                     )
                 }

@@ -453,19 +453,7 @@ fun HudScreen(
         if (totalItems > 0 && targetIndex != null && targetIndex < totalItems) {
             val currentIndex = listState.firstVisibleItemIndex
             if (targetIndex < currentIndex) {
-                // Scrolling up: use pixel-based animation for smoothness
-                // (animateScrollToItem can jump when target items aren't composed yet)
-                val viewportHeight = listState.layoutInfo.viewportSize.height
-                val itemsToScroll = currentIndex - targetIndex
-                // Estimate scroll distance from average visible item height
-                val visibleItems = listState.layoutInfo.visibleItemsInfo
-                val avgItemHeight = if (visibleItems.isNotEmpty()) {
-                    visibleItems.sumOf { it.size } / visibleItems.size.toFloat()
-                } else {
-                    viewportHeight / 5f
-                }
-                val scrollDistance = -(itemsToScroll * avgItemHeight)
-                listState.animateScrollBy(scrollDistance)
+                listState.animateScrollToItem(targetIndex)
             } else if (targetIndex == totalItems - 1) {
                 // Scrolling to last item: use a large offset so the bottom of the
                 // item aligns with the viewport bottom (Compose clamps internally).
@@ -2554,15 +2542,7 @@ private fun CliTerminalOverlay(
             val targetIndex = scrollPosition.coerceIn(0, totalItems - 1)
             val currentIndex = listState.firstVisibleItemIndex
             if (targetIndex < currentIndex) {
-                val viewportHeight = listState.layoutInfo.viewportSize.height
-                val itemsToScroll = currentIndex - targetIndex
-                val visibleItems = listState.layoutInfo.visibleItemsInfo
-                val avgItemHeight = if (visibleItems.isNotEmpty()) {
-                    visibleItems.sumOf { it.size } / visibleItems.size.toFloat()
-                } else {
-                    viewportHeight / 5f
-                }
-                listState.animateScrollBy(-(itemsToScroll * avgItemHeight))
+                listState.animateScrollToItem(targetIndex)
             } else if (targetIndex == totalItems - 1) {
                 // Codex responses can grow with small streamed deltas. Use instant
                 // bottom alignment like the normal JSOS HUD streaming path, so
