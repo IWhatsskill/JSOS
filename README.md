@@ -124,7 +124,12 @@ Release signing is local-only. Keep `jsos-release.properties`, keystores such as
 
 | Document | What it covers |
 | --- | --- |
-| [docs/PROJECT-DETAILS.md](docs/PROJECT-DETAILS.md) | Long-form project notes preserved from the previous detailed README: current status, setup, protocols, usage, troubleshooting, security notes, and attribution. |
+| [docs/INSTALL.md](docs/INSTALL.md) | Requirements, local configuration, OpenClaw setup, build commands, release signing, and connect flow. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Phone app, glasses app, shared protocol, OpenClaw gateway protocol, phone-glasses messages, and emulator testing. |
+| [docs/HUD.md](docs/HUD.md) | HUD display model, controls, voice modes, camera/AR tools, direct R08 ring mappings, wake, and TTS behavior. |
+| [docs/CODEX-BRIDGE.md](docs/CODEX-BRIDGE.md) | Public-safe notes for the optional private Admin Codex bridge client. |
+| [docs/SECURITY.md](docs/SECURITY.md) | Credentials, signing files, network exposure, logs, screenshots, and release artifact safety. |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Connection, pairing, install, voice, TTS, wake, and emulator debug troubleshooting. |
 | [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | Public-safe screenshot list and visual asset notes. |
 | [docs/ROKID.md](docs/ROKID.md) | Rokid integration notes. |
 | [docs/ROKID_APK_INSTALLATION.md](docs/ROKID_APK_INSTALLATION.md) | Hi Rokid / APK installation notes. |
