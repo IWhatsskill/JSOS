@@ -30,8 +30,8 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 218
-        versionName = "2.0.17-r08-volume-brightness-clean"
+        versionCode = 219
+        versionName = "2.0.18-hud-scroll"
     }
 
     signingConfigs {
