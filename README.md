@@ -11,6 +11,8 @@ JSOS started as an AGPL-3.0 fork of the upstream Clawsses project and has been s
   &nbsp;|&nbsp;
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch showcase video</strong></a>
   &nbsp;|&nbsp;
+  <a href="docs/SCREENSHOTS.md"><strong>Screenshots</strong></a>
+  &nbsp;|&nbsp;
   <a href="#quick-start"><strong>Quick start</strong></a>
   &nbsp;|&nbsp;
   <a href="#docs-map"><strong>Docs map</strong></a>
