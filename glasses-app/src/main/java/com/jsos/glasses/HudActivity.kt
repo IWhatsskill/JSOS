@@ -139,6 +139,7 @@ class HudActivity : ComponentActivity() {
 
     // Wake signal handling
     private var clearWakeNotificationJob: Job? = null
+    private var clearCliAgentStateJob: Job? = null
     private var lastRokidArCommandAtMs = 0L
 
     private data class PendingChunkedMessage(
@@ -891,6 +892,7 @@ class HudActivity : ComponentActivity() {
                 voiceState = VoiceInputState.Idle,
                 voiceText = "",
                 cliLines = updatedLines,
+                cliAgentState = AgentState.THINKING,
                 cliScrollPosition = maxOf(0, cliVisibleBlockCount(updatedLines) - 1)
             )
             return
@@ -1324,7 +1326,8 @@ class HudActivity : ComponentActivity() {
                         phoneConnection.sendToPhone("""{"type":"cli_disconnect"}""")
                         hudState.value = latest.copy(
                             cliStatus = "OFFLINE",
-                            cliDetail = "Disconnected"
+                            cliDetail = "Disconnected",
+                            cliAgentState = AgentState.IDLE
                         )
                     } else {
                         hudState.value = latest.copy(cliStatus = "CONNECTING", cliDetail = "")
@@ -1341,6 +1344,7 @@ class HudActivity : ComponentActivity() {
                     }
                 }
                 CliActionItem.STOP -> {
+                    resetCliAgentState()
                     phoneConnection.sendToPhone("""{"type":"cli_stop"}""")
                 }
                 CliActionItem.MODE -> {
@@ -1915,6 +1919,11 @@ class HudActivity : ComponentActivity() {
     }
 
     private fun appendCliOutput(text: String, replace: Boolean = false) {
+        val nextCliAgentState = if (text.trimStart().startsWith("[error]", ignoreCase = true)) {
+            AgentState.IDLE
+        } else {
+            AgentState.STREAMING
+        }
         hudState.update { current ->
             val previousMaxScroll = maxOf(0, cliVisibleBlockCount(current.cliLines) - 1)
             val merged = mergeCliOutputLines(
@@ -1939,9 +1948,31 @@ class HudActivity : ComponentActivity() {
                 } else {
                     current.cliScrollTrigger
                 },
-                showCliTerminal = current.showCliTerminal
+                showCliTerminal = current.showCliTerminal,
+                cliAgentState = nextCliAgentState
             )
         }
+        scheduleCliAgentIdle()
+    }
+
+    private fun scheduleCliAgentIdle() {
+        clearCliAgentStateJob?.cancel()
+        clearCliAgentStateJob = lifecycleScope.launch {
+            delay(1200L)
+            hudState.update { current ->
+                if (current.cliAgentState == AgentState.STREAMING) {
+                    current.copy(cliAgentState = AgentState.IDLE)
+                } else {
+                    current
+                }
+            }
+        }
+    }
+
+    private fun resetCliAgentState() {
+        clearCliAgentStateJob?.cancel()
+        clearCliAgentStateJob = null
+        hudState.update { current -> current.copy(cliAgentState = AgentState.IDLE) }
     }
 
     private fun mergeCliOutputLines(
@@ -2212,6 +2243,7 @@ class HudActivity : ComponentActivity() {
                         current.copy(
                             cliStatus = state,
                             cliDetail = detail,
+                            cliAgentState = if (state == "ERROR" || state == "DISCONNECTED" || state == "OFFLINE") AgentState.IDLE else current.cliAgentState,
                             cliScrollPosition = maxOf(0, cliVisibleBlockCount(current.cliLines) - 1)
                         )
                     }
@@ -2226,7 +2258,7 @@ class HudActivity : ComponentActivity() {
                 "cli_error" -> {
                     val detail = msg.optString("message", "Codex CLI bridge error")
                     hudState.update { current ->
-                        current.copy(cliStatus = "ERROR", cliDetail = detail)
+                        current.copy(cliStatus = "ERROR", cliDetail = detail, cliAgentState = AgentState.IDLE)
                     }
                     appendCliOutput("[error] $detail")
                 }

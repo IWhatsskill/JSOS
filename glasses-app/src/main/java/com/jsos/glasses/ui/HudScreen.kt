@@ -272,6 +272,7 @@ data class ChatHudState(
     val ttsEnabled: Boolean = false,
     // Experimental Codex CLI terminal overlay
     val showCliTerminal: Boolean = false,
+    val cliAgentState: AgentState = AgentState.IDLE,
     val cliStatus: String = "OFFLINE",
     val cliDetail: String = "",
     val cliLines: List<String> = emptyList(),
@@ -715,6 +716,11 @@ fun HudScreen(
                 lines = state.cliLines,
                 status = state.cliStatus,
                 detail = state.cliDetail,
+                isConnected = state.isConnected,
+                agentState = state.cliAgentState,
+                batteryLevel = state.batteryLevel,
+                batteryCharging = state.batteryCharging,
+                currentTime = state.currentTime,
                 scrollPosition = state.cliScrollPosition,
                 scrollTrigger = state.cliScrollTrigger,
                 scrollCommand = state.cliScrollCommand,
@@ -728,6 +734,7 @@ fun HudScreen(
                 photos = state.photoThumbnails,
                 voiceState = state.voiceState,
                 voiceSendMode = state.voiceSendMode,
+                ttsEnabled = state.ttsEnabled,
                 fontSize = fontSize,
                 fontFamily = monoFontFamily,
                 hudPosition = state.hudPosition,
@@ -2495,6 +2502,11 @@ private fun CliTerminalOverlay(
     lines: List<String>,
     status: String,
     detail: String,
+    isConnected: Boolean,
+    agentState: AgentState,
+    batteryLevel: Int?,
+    batteryCharging: Boolean,
+    currentTime: String,
     scrollPosition: Int,
     scrollTrigger: Int,
     scrollCommand: Int,
@@ -2508,6 +2520,7 @@ private fun CliTerminalOverlay(
     photos: List<Bitmap>,
     voiceState: VoiceInputState,
     voiceSendMode: VoiceSendMode,
+    ttsEnabled: Boolean,
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily,
     hudPosition: HudPosition,
@@ -2518,22 +2531,9 @@ private fun CliTerminalOverlay(
     val visibleBlocks = remember(lines) { buildCliLineBlocks(lines) }
     val lastResponseIndex = visibleBlocks.indexOfLast { it.kind == CliBlockKind.RESPONSE }
     val bodyFontSize = fontSize
-    val smallFontSize = (fontSize.value - 4).coerceAtLeast(7f).sp
     val hasStagedInput = showInputStaging || photos.isNotEmpty()
     val inputAlpha = focusBrightness(focusedArea == ChatFocusArea.INPUT || hasStagedInput)
     val selectedAction = selectedActionIndex.coerceIn(CliActionItem.entries.indices)
-    val statusColor = when (status.uppercase()) {
-        "CONNECTED" -> HudColors.green
-        "CONNECTING" -> HudColors.yellow
-        "ERROR" -> HudColors.error
-        else -> HudColors.primaryText
-    }
-    val statusLabel = when (status.uppercase()) {
-        "CONNECTED" -> "READY"
-        "CONNECTING" -> "LINK"
-        "ERROR" -> "ERROR"
-        else -> status.ifBlank { "OFFLINE" }
-    }
     val hudHeight = when (hudPosition) {
         HudPosition.FULL -> 1f
         HudPosition.BOTTOM_HALF -> 0.5f
@@ -2597,42 +2597,23 @@ private fun CliTerminalOverlay(
                 .background(Color.Black.copy(alpha = 0.96f), RoundedCornerShape(4.dp))
                 .padding(horizontal = 2.dp, vertical = 6.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 22.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = statusLabel,
-                    color = statusColor,
-                    fontSize = smallFontSize,
-                    fontFamily = fontFamily,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "CODEX CLI",
-                    color = HudColors.green,
-                    fontSize = smallFontSize,
-                    fontFamily = fontFamily,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = detail.takeIf { it.isNotBlank() }?.take(24) ?: "Admin",
-                    color = HudColors.primaryText.copy(alpha = 0.86f),
-                    fontSize = smallFontSize,
-                    fontFamily = fontFamily,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.End
-                )
-            }
+            VoiceStatusStrip(
+                isConnected = isConnected,
+                agentState = agentState,
+                focusedArea = focusedArea,
+                voiceState = voiceState,
+                sessionTitle = "CODEX",
+                isLoadingMoreHistory = false,
+                showWakeNotification = false,
+                wakeReason = null,
+                batteryLevel = batteryLevel,
+                batteryCharging = batteryCharging,
+                currentTime = currentTime,
+                ttsEnabled = ttsEnabled,
+                fontFamily = fontFamily,
+                fontSize = fontSize,
+                alpha = 1f
+            )
             HudDivider(alpha = 0.18f)
 
             Spacer(modifier = Modifier.height(6.dp))
