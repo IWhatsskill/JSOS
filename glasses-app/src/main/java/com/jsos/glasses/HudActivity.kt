@@ -32,6 +32,7 @@ import com.jsos.glasses.input.GestureHandler
 import com.jsos.glasses.input.JsosRingAccessibilityService
 import com.jsos.glasses.input.R08BleController
 import com.jsos.glasses.input.R08RingActionSettings
+import com.jsos.glasses.input.R08RingTapAction
 import com.jsos.glasses.input.RingMediaKeyHandler
 import com.jsos.glasses.input.RingMediaKeyHandler.RingGesture
 import com.jsos.glasses.input.GestureHandler.Gesture
@@ -532,11 +533,7 @@ class HudActivity : ComponentActivity() {
             return
         }
 
-        when (current.focusedArea) {
-            ChatFocusArea.CONTENT -> startVoice()
-            ChatFocusArea.INPUT -> handleGesture(Gesture.DOUBLE_TAP)
-            ChatFocusArea.MENU -> hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
-        }
+        startVoice()
     }
 
     private fun handleRingRemoteGesture(gesture: RingGesture) {
@@ -552,6 +549,11 @@ class HudActivity : ComponentActivity() {
 
     private fun executeMappedRingTapAction(tapCount: Int) {
         val action = R08RingActionSettings.actionForTapCount(this, tapCount)
+        if (action == R08RingTapAction.EXIT) {
+            hudState.value = hudState.value.copy(showExitConfirm = true)
+            refreshRingSetupStatus("Tap $tapCount: ${action.label}")
+            return
+        }
         val sent = R08RingActionSettings.execute(this, action)
         if (!sent) {
             Log.w(GlassesApp.TAG, "Ring tap action failed tapCount=$tapCount action=${action.id}")

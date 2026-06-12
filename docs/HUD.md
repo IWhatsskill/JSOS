@@ -86,7 +86,8 @@ Current mappings:
 - Double tap starts JSOS voice in the HUD and acts as back in global/system contexts.
 - Triple tap defaults to Rokid AI through the `ai_assist` scene command, but can be cycled in `MORE -> RING`.
 - Quadruple tap defaults to Rokid photo through the `take_picture` scene command, but can be cycled in `MORE -> RING`.
-- `TAP 3` and `TAP 4` can cycle through `AI`, `PHOTO`, `AR PIC`, `AR REC`, and `NONE`; `AR REC` toggles mixed recording on/off.
+- `TAP 3` and `TAP 4` can cycle through `AI`, `PHOTO`, `AR PIC`, `AR REC`, `EXIT`, and `NONE`; `AR REC` toggles mixed recording on/off.
+- `EXIT` is a HUD-only action: inside JSOS HUD it opens the existing exit confirmation, while the global Accessibility Service ignores it.
 - Previous/next become swipe navigation.
 - Launcher/system panels are driven by Accessibility gestures where the target Rokid app accepts them.
 

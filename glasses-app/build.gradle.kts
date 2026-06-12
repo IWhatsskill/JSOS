@@ -30,8 +30,8 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 220
-        versionName = "2.0.19-r08-actions"
+        versionCode = 221
+        versionName = "2.0.20-r08-exit"
     }
 
     signingConfigs {

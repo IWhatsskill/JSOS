@@ -156,7 +156,7 @@ class JsosRingAccessibilityService : AccessibilityService() {
 
     private fun executeMappedTapAction(tapCount: Int) {
         val action = R08RingActionSettings.actionForTapCount(this, tapCount)
-        val sent = R08RingActionSettings.execute(this, action)
+        val sent = R08RingActionSettings.executeGlobal(this, action)
         if (!sent) {
             Log.w(TAG, "mapped tap action failed tapCount=$tapCount action=${action.id}")
         }

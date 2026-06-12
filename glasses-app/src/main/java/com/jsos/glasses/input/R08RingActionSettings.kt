@@ -6,12 +6,14 @@ import com.jsos.glasses.rokid.RokidArCommands
 internal enum class R08RingTapAction(
     val id: String,
     val label: String,
-    val description: String
+    val description: String,
+    val globalAllowed: Boolean = true
 ) {
     ROKID_AI("rokid_ai", "AI", "Open Rokid AI"),
     PHOTO("photo", "PHOTO", "Take normal photo"),
     AR_PIC("ar_pic", "AR PIC", "Take AR picture"),
     AR_REC_TOGGLE("ar_rec", "AR REC", "Toggle AR recording"),
+    EXIT("exit", "EXIT", "Show exit confirmation", globalAllowed = false),
     NONE("none", "NONE", "No action");
 
     companion object {
@@ -34,6 +36,7 @@ internal object R08RingActionSettings {
         R08RingTapAction.PHOTO,
         R08RingTapAction.AR_PIC,
         R08RingTapAction.AR_REC_TOGGLE,
+        R08RingTapAction.EXIT,
         R08RingTapAction.NONE
     )
 
@@ -63,8 +66,16 @@ internal object R08RingActionSettings {
             R08RingTapAction.PHOTO -> RokidArCommands.takePhoto(context)
             R08RingTapAction.AR_PIC -> RokidArCommands.startArScreenshot(context)
             R08RingTapAction.AR_REC_TOGGLE -> toggleArRecording(context)
+            R08RingTapAction.EXIT -> false
             R08RingTapAction.NONE -> true
         }
+    }
+
+    fun executeGlobal(context: Context, action: R08RingTapAction): Boolean {
+        if (!action.globalAllowed) {
+            return true
+        }
+        return execute(context, action)
     }
 
     fun isArRecordingRequested(context: Context): Boolean {
