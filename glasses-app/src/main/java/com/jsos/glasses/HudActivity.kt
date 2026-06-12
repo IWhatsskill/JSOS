@@ -528,7 +528,11 @@ class HudActivity : ComponentActivity() {
 
         val current = hudState.value
         if (current.showCliTerminal) {
-            startVoice()
+            if (current.focusedArea == ChatFocusArea.MENU) {
+                handleGesture(Gesture.DOUBLE_TAP)
+            } else {
+                startVoice()
+            }
             return
         }
 
