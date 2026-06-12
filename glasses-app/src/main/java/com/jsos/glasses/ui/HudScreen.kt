@@ -897,7 +897,7 @@ private fun ChatMessageItem(
 ) {
     val isUser = message.role == "user"
     val isStreaming = message.isStreaming
-    val speaker = if (isUser) "YOU>" else "${speakerLabel}>"
+    val speaker = if (isUser) "YOU" else speakerLabel
     val speakerColor = if (isUser) HudColors.cyan else HudColors.green
 
     // Blinking cursor for streaming
@@ -2987,7 +2987,7 @@ private fun CliTerminalBlockItem(
                 verticalAlignment = Alignment.Top
             ) {
                 Text(
-                    text = "ERR>",
+                    text = "ERR",
                     color = HudColors.error,
                     fontSize = fontSize,
                     fontFamily = fontFamily,

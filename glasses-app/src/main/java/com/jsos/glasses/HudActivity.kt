@@ -527,7 +527,12 @@ class HudActivity : ComponentActivity() {
         }
 
         val current = hudState.value
-        if (current.showCliTerminal || current.showExitConfirm || current.showSlashParamMenu ||
+        if (current.showCliTerminal) {
+            startVoice()
+            return
+        }
+
+        if (current.showExitConfirm || current.showSlashParamMenu ||
             current.showSlashMenu || current.showMoreSubMenu || current.showMoreMenu || current.showSessionPicker) {
             handleGesture(Gesture.DOUBLE_TAP)
             return

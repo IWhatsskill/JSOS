@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -6,12 +7,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+var releaseSigningBaseDir: File? = null
 val releaseSigningProperties = Properties().apply {
     val signingFile = System.getenv("JSOS_SIGNING_PROPERTIES")
         ?.takeIf { it.isNotBlank() }
         ?.let { file(it) }
         ?: rootProject.file("jsos-release.properties")
     if (signingFile.exists()) {
+        releaseSigningBaseDir = signingFile.parentFile
         load(signingFile.inputStream())
     }
 }
@@ -22,6 +25,14 @@ fun releaseSigningProperty(name: String): String? =
 val hasReleaseSigning = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
     .all { releaseSigningProperty(it) != null }
 
+fun releaseSigningStoreFile(path: String): File {
+    val candidate = File(path)
+    if (candidate.isAbsolute) return candidate
+    releaseSigningBaseDir?.resolve(project.name)?.resolve(path)?.takeIf { it.exists() }?.let { return it }
+    releaseSigningBaseDir?.resolve(path)?.takeIf { it.exists() }?.let { return it }
+    return file(path)
+}
+
 android {
     namespace = "com.jsos.glasses"
     compileSdk = 34
@@ -30,14 +41,14 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 221
-        versionName = "2.0.20-r08-exit"
+        versionCode = 222
+        versionName = "2.0.21-r08-codex-voice"
     }
 
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(releaseSigningProperty("storeFile")!!)
+                storeFile = releaseSigningStoreFile(releaseSigningProperty("storeFile")!!)
                 storePassword = releaseSigningProperty("storePassword")
                 keyAlias = releaseSigningProperty("keyAlias")
                 keyPassword = releaseSigningProperty("keyPassword")

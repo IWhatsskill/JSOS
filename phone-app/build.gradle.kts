@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -14,12 +15,14 @@ val localProperties = Properties().apply {
     }
 }
 
+var releaseSigningBaseDir: File? = null
 val releaseSigningProperties = Properties().apply {
     val signingFile = System.getenv("JSOS_SIGNING_PROPERTIES")
         ?.takeIf { it.isNotBlank() }
         ?.let { file(it) }
         ?: rootProject.file("jsos-release.properties")
     if (signingFile.exists()) {
+        releaseSigningBaseDir = signingFile.parentFile
         load(signingFile.inputStream())
     }
 }
@@ -32,6 +35,14 @@ fun releaseSigningProperty(name: String): String? =
 val hasReleaseSigning = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
     .all { releaseSigningProperty(it) != null }
 
+fun releaseSigningStoreFile(path: String): File {
+    val candidate = File(path)
+    if (candidate.isAbsolute) return candidate
+    releaseSigningBaseDir?.resolve(project.name)?.resolve(path)?.takeIf { it.exists() }?.let { return it }
+    releaseSigningBaseDir?.resolve(path)?.takeIf { it.exists() }?.let { return it }
+    return file(path)
+}
+
 android {
     namespace = "com.jsos.phone"
     compileSdk = 34
@@ -40,8 +51,8 @@ android {
         applicationId = "com.jsos.phone"
         minSdk = 28  // Required by CXR-M SDK
         targetSdk = 34
-        versionCode = 200
-        versionName = "2.0"
+        versionCode = 201
+        versionName = "2.0.1-chat-labels"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -50,7 +61,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(releaseSigningProperty("storeFile")!!)
+                storeFile = releaseSigningStoreFile(releaseSigningProperty("storeFile")!!)
                 storePassword = releaseSigningProperty("storePassword")
                 keyAlias = releaseSigningProperty("keyAlias")
                 keyPassword = releaseSigningProperty("keyPassword")

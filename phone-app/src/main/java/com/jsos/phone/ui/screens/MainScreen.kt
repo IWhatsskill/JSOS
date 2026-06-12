@@ -2748,7 +2748,7 @@ private fun codexCliLineBlocks(lines: List<String>): List<CodexCliLineBlock> {
         when {
             line.startsWith(">") -> {
                 flushResponse()
-                blocks += CodexCliLineBlock(CodexCliLineType.PROMPT, line)
+                blocks += CodexCliLineBlock(CodexCliLineType.PROMPT, line.removePrefix(">").trim())
             }
             line.startsWith("[error]", ignoreCase = true) -> {
                 flushResponse()
@@ -3248,9 +3248,9 @@ fun ChatMessageRow(msg: ChatMessage, speakerLabel: String = "JSOS") {
         else -> JsosPalette.Cyan
     }
     val label = when {
-        isSystemOnly -> "SYSTEM>"
-        isUser -> "YOU>"
-        else -> "${speakerLabel}>"
+        isSystemOnly -> "SYSTEM"
+        isUser -> "YOU"
+        else -> speakerLabel
     }
     Surface(
         modifier = Modifier
