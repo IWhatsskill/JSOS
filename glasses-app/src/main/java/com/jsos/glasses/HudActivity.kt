@@ -31,6 +31,7 @@ import com.jsos.glasses.camera.PhotoCaptureState
 import com.jsos.glasses.input.GestureHandler
 import com.jsos.glasses.input.JsosRingAccessibilityService
 import com.jsos.glasses.input.R08BleController
+import com.jsos.glasses.input.R08RingActionSettings
 import com.jsos.glasses.input.RingMediaKeyHandler
 import com.jsos.glasses.input.RingMediaKeyHandler.RingGesture
 import com.jsos.glasses.input.GestureHandler.Gesture
@@ -544,17 +545,18 @@ class HudActivity : ComponentActivity() {
             RingGesture.SWIPE_BACKWARD -> handleRingRemoteGesture(Gesture.SWIPE_BACKWARD)
             RingGesture.TAP -> handleRingRemoteGesture(Gesture.TAP)
             RingGesture.DOUBLE_TAP -> handleRingRemoteGesture(Gesture.DOUBLE_TAP)
-            RingGesture.TRIPLE_TAP -> {
-                if (!RokidArCommands.openAiAssist(this)) {
-                    Log.w(GlassesApp.TAG, "Ring triple tap could not open Rokid AI")
-                }
-            }
-            RingGesture.QUADRUPLE_TAP -> {
-                if (!RokidArCommands.takePhoto(this)) {
-                    Log.w(GlassesApp.TAG, "Ring quadruple tap could not request Rokid photo")
-                }
-            }
+            RingGesture.TRIPLE_TAP -> executeMappedRingTapAction(3)
+            RingGesture.QUADRUPLE_TAP -> executeMappedRingTapAction(4)
         }
+    }
+
+    private fun executeMappedRingTapAction(tapCount: Int) {
+        val action = R08RingActionSettings.actionForTapCount(this, tapCount)
+        val sent = R08RingActionSettings.execute(this, action)
+        if (!sent) {
+            Log.w(GlassesApp.TAG, "Ring tap action failed tapCount=$tapCount action=${action.id}")
+        }
+        refreshRingSetupStatus("Tap $tapCount: ${action.label}")
     }
 
     // CONTENT area gestures
@@ -1053,6 +1055,14 @@ class HudActivity : ComponentActivity() {
     private fun executeRingToolAction(action: String) {
         when (action) {
             "pair_reconnect" -> pairOrReconnectRing()
+            "tap3_next" -> {
+                val next = R08RingActionSettings.cycleTripleTap(this)
+                refreshRingSetupStatus("Tap 3: ${next.label}")
+            }
+            "tap4_next" -> {
+                val next = R08RingActionSettings.cycleQuadrupleTap(this)
+                refreshRingSetupStatus("Tap 4: ${next.label}")
+            }
             "forget" -> forgetRing()
             "access_settings" -> openRingAccessibilitySettings()
             "bt_settings" -> openBluetoothSettings()
@@ -1112,7 +1122,10 @@ class HudActivity : ComponentActivity() {
             ringServiceEnabled = isRingAccessibilityEnabled(),
             ringInputConnected = isR08InputDevicePresent(),
             ringBonded = isR08Bonded(),
-            ringSetupMessage = message ?: current.ringSetupMessage
+            ringSetupMessage = message ?: current.ringSetupMessage,
+            ringTripleTapLabel = R08RingActionSettings.tripleTap(this).label,
+            ringQuadrupleTapLabel = R08RingActionSettings.quadrupleTap(this).label,
+            ringArRecordingActive = R08RingActionSettings.isArRecordingRequested(this)
         )
     }
 

@@ -57,7 +57,7 @@ JSOS HUD is responsible for:
 - Staged voice input with `Send Ask` and `Send Auto` modes.
 - Camera request flow with a single staged photo preview and remove action.
 - Rokid AR Picture and AR Record scene triggers from the HUD AR TOOLS submenu.
-- Direct R08 ring handling on the glasses.
+- Direct R08 ring handling on the glasses, including configurable triple/quad tap actions.
 - Wake acknowledgments and TTS toggle messages back to the phone.
 - Optional Admin Codex terminal view for private bridge setups.
 

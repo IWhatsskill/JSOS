@@ -76,7 +76,7 @@ This path does not merge media inside JSOS. It delegates capture/processing to R
 
 ## Direct R08 Ring Control
 
-JSOS HUD can use a directly paired R08 ring as a lightweight glasses remote. `MORE -> RING` exposes pair, forget, accessibility setup, Bluetooth settings, and status refresh actions.
+JSOS HUD can use a directly paired R08 ring as a lightweight glasses remote. `MORE -> RING` exposes pair, configurable `TAP 3` / `TAP 4` actions, forget, accessibility setup, Bluetooth settings, and status refresh actions.
 
 The ring is configured over BLE/GATT, then JSOS handles global HID/media-key events through its Accessibility Service.
 
@@ -84,8 +84,9 @@ Current mappings:
 
 - Tap confirms in JSOS HUD or controls media in Rokid music contexts.
 - Double tap starts JSOS voice in the HUD and acts as back in global/system contexts.
-- Triple tap opens Rokid AI through the `ai_assist` scene command.
-- Quadruple tap requests a Rokid photo through the `take_picture` scene command.
+- Triple tap defaults to Rokid AI through the `ai_assist` scene command, but can be cycled in `MORE -> RING`.
+- Quadruple tap defaults to Rokid photo through the `take_picture` scene command, but can be cycled in `MORE -> RING`.
+- `TAP 3` and `TAP 4` can cycle through `AI`, `PHOTO`, `AR PIC`, `AR REC`, and `NONE`; `AR REC` toggles mixed recording on/off.
 - Previous/next become swipe navigation.
 - Launcher/system panels are driven by Accessibility gestures where the target Rokid app accepts them.
 

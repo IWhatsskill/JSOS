@@ -27,7 +27,7 @@ JSOS started as an AGPL-3.0 fork of the upstream Clawsses project and has been s
 | Part | Runs on | Purpose |
 | --- | --- | --- |
 | **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the optional Admin Codex bridge client. |
-| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and direct R08 ring gestures, stages voice input, displays sessions, requests photo capture, and triggers Rokid AI/photo/AR picture/recording scenes. |
+| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and configurable direct R08 ring gestures, stages voice input, displays sessions, requests photo capture, and triggers Rokid AI/photo/AR picture/recording scenes. |
 | **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
 
 ## Preview Boundaries

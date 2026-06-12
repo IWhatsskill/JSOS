@@ -285,7 +285,10 @@ data class ChatHudState(
     val ringServiceEnabled: Boolean = false,
     val ringInputConnected: Boolean = false,
     val ringBonded: Boolean = false,
-    val ringSetupMessage: String = ""
+    val ringSetupMessage: String = "",
+    val ringTripleTapLabel: String = "AI",
+    val ringQuadrupleTapLabel: String = "PHOTO",
+    val ringArRecordingActive: Boolean = false
 ) {
     /** Total number of messages */
     val totalMessages: Int get() = messages.size
@@ -386,6 +389,8 @@ val DISPLAY_OPTIONS = listOf(
 
 val RING_TOOL_OPTIONS = listOf(
     MoreSubMenuOption("PAIR", "Scan or reconnect R08", ringAction = "pair_reconnect"),
+    MoreSubMenuOption("TAP 3", "Cycle triple tap action", ringAction = "tap3_next"),
+    MoreSubMenuOption("TAP 4", "Cycle quadruple tap action", ringAction = "tap4_next"),
     MoreSubMenuOption("FORGET", "Remove saved R08 bond", ringAction = "forget"),
     MoreSubMenuOption("ACCESS", "Open service setup", ringAction = "access_settings"),
     MoreSubMenuOption("BT SET", "Open Bluetooth fallback", ringAction = "bt_settings"),
@@ -668,6 +673,9 @@ fun HudScreen(
                 ringInputConnected = state.ringInputConnected,
                 ringBonded = state.ringBonded,
                 ringSetupMessage = state.ringSetupMessage,
+                ringTripleTapLabel = state.ringTripleTapLabel,
+                ringQuadrupleTapLabel = state.ringQuadrupleTapLabel,
+                ringArRecordingActive = state.ringArRecordingActive,
                 fontFamily = monoFontFamily
             )
         }
@@ -2045,6 +2053,9 @@ private fun MoreSubMenuOverlay(
     ringInputConnected: Boolean,
     ringBonded: Boolean,
     ringSetupMessage: String,
+    ringTripleTapLabel: String,
+    ringQuadrupleTapLabel: String,
+    ringArRecordingActive: Boolean,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
@@ -2070,6 +2081,9 @@ private fun MoreSubMenuOverlay(
                 inputConnected = ringInputConnected,
                 bonded = ringBonded,
                 message = ringSetupMessage,
+                tripleTapLabel = ringTripleTapLabel,
+                quadrupleTapLabel = ringQuadrupleTapLabel,
+                arRecordingActive = ringArRecordingActive,
                 fontFamily = fontFamily
             )
         }
@@ -2149,6 +2163,9 @@ private fun RingToolsStatus(
     inputConnected: Boolean,
     bonded: Boolean,
     message: String,
+    tripleTapLabel: String,
+    quadrupleTapLabel: String,
+    arRecordingActive: Boolean,
     fontFamily: FontFamily
 ) {
     val ringText = when {
@@ -2189,6 +2206,16 @@ private fun RingToolsStatus(
                 maxLines = 1
             )
         }
+        Text(
+            text = "TAP3 $tripleTapLabel  TAP4 $quadrupleTapLabel" +
+                if (arRecordingActive) "  AR REC ON" else "",
+            color = HudColors.primaryText.copy(alpha = 0.86f),
+            fontSize = 9.sp,
+            fontFamily = fontFamily,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
+        )
         if (message.isNotBlank()) {
             Text(
                 text = message,

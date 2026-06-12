@@ -149,8 +149,16 @@ class JsosRingAccessibilityService : AccessibilityService() {
             RingGesture.SWIPE_BACKWARD -> navigator.moveBackward()
             RingGesture.TAP -> navigator.activate()
             RingGesture.DOUBLE_TAP -> navigator.back()
-            RingGesture.TRIPLE_TAP -> navigator.openRokidAiAssist()
-            RingGesture.QUADRUPLE_TAP -> navigator.takeRokidPhoto()
+            RingGesture.TRIPLE_TAP -> executeMappedTapAction(3)
+            RingGesture.QUADRUPLE_TAP -> executeMappedTapAction(4)
+        }
+    }
+
+    private fun executeMappedTapAction(tapCount: Int) {
+        val action = R08RingActionSettings.actionForTapCount(this, tapCount)
+        val sent = R08RingActionSettings.execute(this, action)
+        if (!sent) {
+            Log.w(TAG, "mapped tap action failed tapCount=$tapCount action=${action.id}")
         }
     }
 

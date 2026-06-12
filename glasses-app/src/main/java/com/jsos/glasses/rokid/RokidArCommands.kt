@@ -21,16 +21,16 @@ object RokidArCommands {
         return sendScene(context, SCENE_TAKE_PICTURE, open = true)
     }
 
-    fun startArScreenshot(context: Context) {
-        sendScene(context, SCENE_AR_PICTURE, open = true)
+    fun startArScreenshot(context: Context): Boolean {
+        return sendScene(context, SCENE_AR_PICTURE, open = true)
     }
 
-    fun startArRecord(context: Context) {
-        sendScene(context, SCENE_MIX_RECORD, open = true)
+    fun startArRecord(context: Context): Boolean {
+        return sendScene(context, SCENE_MIX_RECORD, open = true)
     }
 
-    fun stopArRecord(context: Context) {
-        sendScene(context, SCENE_MIX_RECORD, open = false)
+    fun stopArRecord(context: Context): Boolean {
+        return sendScene(context, SCENE_MIX_RECORD, open = false)
     }
 
     private fun sendScene(context: Context, scene: String, open: Boolean): Boolean {
