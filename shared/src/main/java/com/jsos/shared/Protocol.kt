@@ -413,7 +413,6 @@ private fun String.toReadableAgentToken(): String {
         "general" -> "General"
         "gpt" -> "GPT"
         "hud" -> "HUD"
-        "jarvis" -> "Main"
         "jsos" -> "JSOS"
         "lab" -> "Lab"
         "qwen" -> "Qwen"

@@ -155,7 +155,7 @@ fun ServerSection(
         if (GatewayUrl.isCleartext(displayUrl)) {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Cleartext gateway link. Use only over localhost, trusted LAN, or VPN/Tailnet.",
+                text = "Cleartext gateway link. Use only over localhost, trusted LAN, or VPN.",
                 style = MaterialTheme.typography.bodySmall,
                 color = JsosPalette.Yellow,
                 modifier = Modifier.padding(horizontal = 4.dp),
