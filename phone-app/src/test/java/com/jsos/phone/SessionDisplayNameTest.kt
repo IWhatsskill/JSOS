@@ -48,6 +48,8 @@ class SessionDisplayNameTest {
 
     @Test
     fun dynamicallyLabelsNewAgentIds() {
+        assertEquals("Custom-Helper", stableSessionDisplayName("agent:custom-helper:main"))
+        assertEquals("My-Custom-Agent", stableSessionDisplayName("agent:my-custom-agent:main"))
         assertEquals("Research-Lab", stableSessionDisplayName("agent:research-lab:main"))
         assertEquals("Research-Lab", stableSessionDisplayName("agent:research-lab:discord:channel:anything"))
         assertEquals("Claude", stableSessionDisplayName("agent:discord-claude:discord:channel:anything"))
@@ -177,14 +179,19 @@ class SessionDisplayNameTest {
     @Test
     fun filtersPickerToMainWhatsappAndSelectedDiscordAgents() {
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:main")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:custom-helper:main")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:my-custom-agent:main")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:codex-lab:main")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:discord-gpt-5:main")))
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:whatsapp:direct:sample-contact")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:custom-helper:whatsapp:direct:sample-contact")))
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:discord-gpt-5:discord:channel:anything")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:custom-helper:discord:channel:anything")))
+        assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:research-lab:discord:channel:anything")))
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "row-general", displayName = "discord:g-123#general", origin = "discord")))
         assertTrue(shouldShowInJsosSessionPicker(SessionInfo(key = "row-coding", displayName = "coding-lab", origin = "discord")))
 
-        assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:main:discord:channel:anything")))
-        assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:codex-lab:main")))
-        assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:discord-gpt-5:main")))
-        assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "agent:research-lab:discord:channel:anything")))
+        assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "row-empty", origin = "discord")))
+        assertFalse(shouldShowInJsosSessionPicker(SessionInfo(key = "row-phone", displayName = "discord:g-123#123456", origin = "discord")))
     }
 }

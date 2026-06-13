@@ -300,8 +300,8 @@ fun shouldShowInJsosSessionPicker(
     deliveryContext: JsonObject? = null
 ): Boolean {
     val keyRoute = parseAgentSessionKey(key)
-    if (keyRoute?.agentId == "main" && keyRoute.origin == "main") return true
-    if (keyRoute?.agentId == "main" && keyRoute.origin == "whatsapp") return true
+    if (keyRoute?.origin == "main" && keyRoute.agentId.isNotBlank()) return true
+    if (keyRoute?.origin == "whatsapp") return true
     if (isWhatsappSession(key, origin, displayName, deliveryContext)) return true
 
     if (!isDiscordSession(key, origin, displayName, deliveryContext)) return false
@@ -315,7 +315,7 @@ fun shouldShowInJsosSessionPicker(
         origin = origin,
         deliveryContext = deliveryContext
     )
-    return visibleDiscordSessionNames.any { it.equals(name, ignoreCase = true) }
+    return name.isPublicSessionPickerLabel() && !name.equals(key, ignoreCase = true)
 }
 
 fun sessionDisplaySortKey(name: String): String {
@@ -359,15 +359,6 @@ private fun String.toJsosAgentLabel(): String = when (this) {
     "discord-qwen-397b" -> "Qwen"
     else -> toReadableAgentLabel()
 }
-
-private val visibleDiscordSessionNames = setOf(
-    "GPT-5",
-    "Codex Lab",
-    "Coding Lab",
-    "Qwen",
-    "CLI Lab",
-    "General"
-)
 
 private fun String?.cleanExplicitSessionLabel(): String? {
     val trimmed = this?.trim()?.takeIf { it.isNotBlank() } ?: return null
@@ -422,6 +413,15 @@ private fun String.toReadableAgentToken(): String {
         "ux" -> "UX"
         else -> replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
+}
+
+private fun String.isPublicSessionPickerLabel(): Boolean {
+    val trimmed = trim()
+    if (trimmed.isBlank()) return false
+    if (trimmed.startsWith("agent:", ignoreCase = true)) return false
+    if (trimmed.startsWith("discord:", ignoreCase = true)) return false
+    if (trimmed.matches(Regex("[+\\d\\s().-]{6,}"))) return false
+    return true
 }
 
 private fun isDiscordSession(
