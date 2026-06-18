@@ -54,16 +54,20 @@ import com.jsos.glasses.ui.MoreSubMenuType
 import com.jsos.glasses.ui.SessionPickerInfo
 import com.jsos.glasses.ui.MAX_PHOTOS
 import com.jsos.glasses.ui.SLASH_COMMANDS
+import com.jsos.glasses.ui.MODEL_PARAM_OPTIONS
+import com.jsos.glasses.ui.SlashParamOption
 import com.jsos.glasses.ui.SlashParamMenuType
 import com.jsos.glasses.ui.VoiceInputState
 import com.jsos.glasses.ui.RecognitionMode
 import com.jsos.glasses.ui.VoiceSendMode
 import com.jsos.glasses.ui.cliVisibleBlockCount
+import com.jsos.glasses.ui.modelParamOptionsFrom
 import com.jsos.glasses.ui.moreSubMenuOptions
 import com.jsos.glasses.ui.menuBarItemsForPage
 import com.jsos.glasses.ui.slashParamOptions
 import com.jsos.glasses.ui.theme.GlassesHudTheme
 import com.jsos.glasses.voice.GlassesVoiceHandler
+import com.jsos.shared.LlmModelOption
 import com.jsos.shared.sessionDisplaySortKey
 import com.jsos.shared.stableSessionDisplayName
 import kotlinx.coroutines.Job
@@ -1632,7 +1636,7 @@ class HudActivity : ComponentActivity() {
     private fun handleSlashParamMenuGesture(gesture: Gesture) {
         val current = hudState.value
         val menuType = current.slashParamMenuType ?: SlashParamMenuType.MODEL
-        val options = slashParamOptions(menuType)
+        val options = slashParamOptions(menuType, current.modelParamOptions)
         if (options.isEmpty()) {
             hudState.value = current.copy(
                 showSlashParamMenu = false,
@@ -2361,6 +2365,18 @@ class HudActivity : ComponentActivity() {
                     Log.d(GlassesApp.TAG, "Sessions: ${sessions.size}, currentSessionKeyLength=${currentSessionKey.length}")
                 }
 
+                "model_options" -> {
+                    val options = parseModelOptionsMessage(msg)
+                    hudState.update { current ->
+                        current.copy(
+                            modelParamOptions = options,
+                            selectedSlashParamIndex = current.selectedSlashParamIndex
+                                .coerceAtMost(options.lastIndex.coerceAtLeast(0))
+                        )
+                    }
+                    Log.d(GlassesApp.TAG, "Model options updated: ${options.size}")
+                }
+
                 "remote_gesture" -> {
                     val gesture = when (msg.optString("gesture", "")) {
                         "forward" -> Gesture.SWIPE_FORWARD
@@ -2557,6 +2573,26 @@ class HudActivity : ComponentActivity() {
                 Log.e(GlassesApp.TAG, "Failed to decode chunked message: type=${pending.originalType}", e)
             }
         }
+    }
+
+    private fun parseModelOptionsMessage(msg: JSONObject): List<SlashParamOption> {
+        val array = msg.optJSONArray("options") ?: return MODEL_PARAM_OPTIONS
+        val models = mutableListOf<LlmModelOption>()
+
+        for (i in 0 until array.length()) {
+            val option = array.optJSONObject(i) ?: continue
+            val label = option.optString("label", "").trim()
+            val command = option.optString("command", "").trim()
+            val description = option.optString("description", "").trim()
+            if (label.isBlank() || command.isBlank()) continue
+            models += LlmModelOption(
+                label = label,
+                command = command,
+                description = description.ifBlank { command }
+            )
+        }
+
+        return if (models.isEmpty()) MODEL_PARAM_OPTIONS else modelParamOptionsFrom(models)
     }
 
     private fun pruneExpiredChunks(now: Long) {

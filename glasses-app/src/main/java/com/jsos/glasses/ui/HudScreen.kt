@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import com.jsos.shared.LLM_MODEL_OPTIONS
+import com.jsos.shared.LlmModelOption
 import kotlinx.coroutines.delay
 
 /**
@@ -248,6 +250,7 @@ data class ChatHudState(
     val showSlashParamMenu: Boolean = false,
     val selectedSlashParamIndex: Int = 0,
     val slashParamMenuType: SlashParamMenuType? = null,
+    val modelParamOptions: List<SlashParamOption> = MODEL_PARAM_OPTIONS,
     // Input staging area (voice text accumulation)
     val stagingText: String = "",
     val showInputStaging: Boolean = false,
@@ -349,14 +352,11 @@ val SLASH_COMMANDS = listOf(
     SlashCommandItem("/subagents", "Sub-agents"),
 )
 
-val MODEL_PARAM_OPTIONS = listOf(
-    SlashParamOption("ALL", "/models", "List all models"),
-    SlashParamOption("OPENAI", "/models openai", "List OpenAI models"),
-    SlashParamOption("OLLAMA", "/models ollama", "List Ollama models"),
-    SlashParamOption("CURRENT", "/model", "Show current model"),
-    SlashParamOption("GPT-5.5", "/model openai/gpt-5.5", "Switch to OpenAI GPT-5.5"),
-    SlashParamOption("QWEN397B", "/model ollama/qwen3.5:397b-cloud", "Switch to Qwen 397B")
-)
+fun modelParamOptionsFrom(modelOptions: List<LlmModelOption>): List<SlashParamOption> = modelOptions.map { option ->
+    SlashParamOption(option.label, option.command, option.description)
+}
+
+val MODEL_PARAM_OPTIONS = modelParamOptionsFrom(LLM_MODEL_OPTIONS)
 
 val THINK_PARAM_OPTIONS = listOf(
     SlashParamOption("OFF", "/think off", "Disable thinking"),
@@ -370,8 +370,11 @@ val THINK_PARAM_OPTIONS = listOf(
     SlashParamOption("ON", "/think on", "Provider default")
 )
 
-fun slashParamOptions(type: SlashParamMenuType): List<SlashParamOption> = when (type) {
-    SlashParamMenuType.MODEL -> MODEL_PARAM_OPTIONS
+fun slashParamOptions(
+    type: SlashParamMenuType,
+    modelOptions: List<SlashParamOption> = MODEL_PARAM_OPTIONS
+): List<SlashParamOption> = when (type) {
+    SlashParamMenuType.MODEL -> modelOptions
     SlashParamMenuType.THINK -> THINK_PARAM_OPTIONS
 }
 
@@ -702,6 +705,7 @@ fun HudScreen(
             SlashParamOverlay(
                 menuType = state.slashParamMenuType,
                 selectedIndex = state.selectedSlashParamIndex,
+                modelOptions = state.modelParamOptions,
                 fontFamily = monoFontFamily
             )
         }
@@ -2334,11 +2338,12 @@ private fun SlashCommandOverlay(
 private fun SlashParamOverlay(
     menuType: SlashParamMenuType?,
     selectedIndex: Int,
+    modelOptions: List<SlashParamOption>,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
     val type = menuType ?: SlashParamMenuType.MODEL
-    val options = slashParamOptions(type)
+    val options = slashParamOptions(type, modelOptions)
     val listState = rememberLazyListState()
 
     LaunchedEffect(type, selectedIndex) {
@@ -2362,11 +2367,13 @@ private fun SlashParamOverlay(
         ) {
             itemsIndexed(options) { index, item ->
                 val isSelected = index == selectedIndex
+                val displayLabel = item.hudDisplayLabel()
+                val displayDescription = item.hudDisplayDescription(displayLabel)
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(24.dp)
+                        .height(38.dp)
                         .border(
                             width = if (isSelected) 1.dp else 0.dp,
                             color = if (isSelected) HudColors.green else Color.Transparent,
@@ -2382,32 +2389,26 @@ private fun SlashParamOverlay(
                         fontFamily = fontFamily
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = " ",
-                        color = HudColors.green,
-                        fontSize = 12.sp,
-                        fontFamily = fontFamily
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = displayLabel,
+                            color = if (isSelected) HudColors.green else HudColors.primaryText,
+                            fontSize = 11.sp,
+                            fontFamily = fontFamily,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = displayDescription,
+                            color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.86f),
+                            fontSize = 9.sp,
+                            fontFamily = fontFamily,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = item.label,
-                        color = if (isSelected) HudColors.green else HudColors.primaryText,
-                        fontSize = 12.sp,
-                        fontFamily = fontFamily,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.width(92.dp)
-                    )
-                    Text(
-                        text = item.description,
-                        color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.86f),
-                        fontSize = 10.sp,
-                        fontFamily = fontFamily,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
                     Text(
                         text = if (isSelected) "<" else " ",
                         color = if (isSelected) HudColors.green else Color.Transparent,
@@ -2418,6 +2419,33 @@ private fun SlashParamOverlay(
             }
         }
     }
+}
+
+private fun SlashParamOption.hudDisplayLabel(): String {
+    val modelRef = command.removePrefix("/model").trim()
+    if (!command.startsWith("/model") || modelRef.isBlank()) return label
+    return modelRef.substringAfter('/', modelRef)
+}
+
+private fun SlashParamOption.hudDisplayDescription(displayLabel: String): String {
+    val modelRef = command.removePrefix("/model").trim()
+    if (command.startsWith("/model") && modelRef.isNotBlank()) {
+        val provider = modelRef.substringBefore('/', missingDelimiterValue = "").trim()
+        val modelId = modelRef.substringAfter('/', modelRef)
+        val source = when {
+            modelId.endsWith(":cloud", ignoreCase = true) -> "cloud"
+            modelId.endsWith("-cloud", ignoreCase = true) -> "cloud"
+            else -> ""
+        }
+        return listOf(provider, source)
+            .filter { it.isNotBlank() }
+            .joinToString(" / ")
+            .ifBlank { modelRef }
+    }
+
+    return description
+        .takeIf { it.isNotBlank() && !it.equals(displayLabel, ignoreCase = true) }
+        ?: command.removePrefix("/model").trim()
 }
 
 // ============================================================================

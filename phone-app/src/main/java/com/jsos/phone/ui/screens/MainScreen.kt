@@ -108,6 +108,9 @@ import com.jsos.phone.voice.AgentWakeRouter
 import com.jsos.phone.voice.VoiceRecognitionManager
 import com.jsos.shared.ChatMessage
 import com.jsos.shared.ConnectionUpdate
+import com.jsos.shared.LLM_MODEL_OPTIONS
+import com.jsos.shared.LlmModelOption
+import com.jsos.shared.ModelOptionsUpdate
 import com.jsos.shared.SessionInfo
 import com.jsos.shared.TtsState
 import com.jsos.shared.stableSessionDisplayName
@@ -181,6 +184,7 @@ fun MainScreen() {
     val voiceMode by voiceRecognitionManager.activeMode.collectAsState()
     val selectedVoiceLanguage by voiceLanguageManager.selectedLanguage.collectAsState()
     val sessionList by openClawClient.sessionList.collectAsState()
+    val modelOptions by openClawClient.modelOptions.collectAsState()
     val currentSessionKey by openClawClient.currentSessionKey.collectAsState()
     val unreadSessions by openClawClient.unreadSessions.collectAsState()
     val wakeOnStreamEnabled by glassesManager.wakeSignalManager.enabled.collectAsState()
@@ -231,6 +235,10 @@ fun MainScreen() {
     var settingsTarget by remember { mutableStateOf(SettingsTarget.SystemLink) }
     var selectedTab by remember { mutableStateOf(CoreTab.Home) }
     var showSessionPicker by remember { mutableStateOf(false) }
+    var showModelPicker by remember { mutableStateOf(false) }
+    var selectedModelLabel by remember {
+        mutableStateOf(prefs.getString("selected_llm_model_label", LLM_MODEL_OPTIONS.first().label) ?: LLM_MODEL_OPTIONS.first().label)
+    }
     var pendingPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
     var ignoreAiExitUntilMs by remember { mutableLongStateOf(0L) }
     var liveTalkSource by remember { mutableStateOf<LiveTalkSource?>(null) }
@@ -381,6 +389,10 @@ fun MainScreen() {
                     voiceName = ttsSettingsManager.selectedVoiceName.value
                 )
                 glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                glassesManager.sendRawMessage(ModelOptionsUpdate(options = modelOptions).toJson())
+                mainHandler.postDelayed({
+                    glassesManager.sendRawMessage(ModelOptionsUpdate(options = openClawClient.modelOptions.value).toJson())
+                }, 700L)
             }
             is GlassesConnectionManager.ConnectionState.Disconnected -> {
                 // Only stop the service if we're truly disconnected (no saved pairing to reconnect to).
@@ -462,6 +474,9 @@ fun MainScreen() {
             }
         }
         openClawClient.onSessionList = { msg ->
+            glassesManager.sendRawMessage(msg.toJson())
+        }
+        openClawClient.onModelOptions = { msg ->
             glassesManager.sendRawMessage(msg.toJson())
         }
         openClawClient.onConnectionUpdate = { msg ->
@@ -933,6 +948,7 @@ fun MainScreen() {
                             voiceName = ttsSettingsManager.selectedVoiceName.value
                         )
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                        glassesManager.sendRawMessage(ModelOptionsUpdate(options = openClawClient.modelOptions.value).toJson())
                     }
                     "tts_toggle" -> {
                         val enabled = json.optBoolean("enabled", false)
@@ -1251,6 +1267,24 @@ fun MainScreen() {
                             openClawClient.switchSession(session.key)
                         },
                         onDismissSessionPicker = { showSessionPicker = false },
+                        modelOptions = modelOptions,
+                        selectedModelLabel = selectedModelLabel,
+                        showModelPicker = showModelPicker,
+                        modelPickerEnabled = agentActivity == OpenClawClient.AgentActivityState.Ready,
+                        onToggleModelPicker = {
+                            if (!showModelPicker) {
+                                showSessionPicker = false
+                                openClawClient.requestModels()
+                            }
+                            showModelPicker = !showModelPicker
+                        },
+                        onSelectModel = { option ->
+                            showModelPicker = false
+                            selectedModelLabel = option.label
+                            prefs.edit().putString("selected_llm_model_label", option.label).apply()
+                            openClawClient.sendSlashCommand(option.command)
+                        },
+                        onDismissModelPicker = { showModelPicker = false },
                         openClawState = openClawState,
                         agentActivity = agentActivity,
                         chatMessages = chatMessages,
@@ -1822,6 +1856,13 @@ private fun ChatDeck(
     onToggleSessionPicker: () -> Unit,
     onSelectSession: (SessionInfo) -> Unit,
     onDismissSessionPicker: () -> Unit,
+    modelOptions: List<LlmModelOption>,
+    selectedModelLabel: String,
+    showModelPicker: Boolean,
+    modelPickerEnabled: Boolean,
+    onToggleModelPicker: () -> Unit,
+    onSelectModel: (LlmModelOption) -> Unit,
+    onDismissModelPicker: () -> Unit,
     openClawState: OpenClawClient.ConnectionState,
     agentActivity: OpenClawClient.AgentActivityState,
     chatMessages: List<ChatMessage>,
@@ -1842,6 +1883,15 @@ private fun ChatDeck(
                 onSelect = onSelectSession,
                 onDismiss = onDismissSessionPicker,
                 agentActivity = agentActivity,
+            )
+            ModelSelector(
+                options = modelOptions,
+                selectedLabel = selectedModelLabel,
+                expanded = showModelPicker,
+                enabled = modelPickerEnabled,
+                onToggle = onToggleModelPicker,
+                onSelect = onSelectModel,
+                onDismiss = onDismissModelPicker,
             )
         }
 
@@ -3699,6 +3749,125 @@ fun SessionSelector(
 }
 
 @Composable
+private fun ModelSelector(
+    options: List<LlmModelOption>,
+    selectedLabel: String,
+    expanded: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    onSelect: (LlmModelOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val borderColor = if (enabled) JsosPalette.Cyan.copy(alpha = 0.32f) else JsosPalette.Disabled.copy(alpha = 0.28f)
+    val iconColor = if (enabled) JsosPalette.Cyan else JsosPalette.Disabled
+    val textColor = if (enabled) JsosPalette.Text else JsosPalette.Disabled
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 2.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onToggle),
+            color = JsosPalette.Card,
+            border = BorderStroke(1.dp, borderColor),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Model",
+                    modifier = Modifier.size(18.dp),
+                    tint = iconColor,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "MODEL",
+                    color = JsosPalette.Muted,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = selectedLabel,
+                    color = textColor,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    modifier = Modifier.size(20.dp),
+                    tint = JsosPalette.Muted,
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = onDismiss,
+            modifier = Modifier.fillMaxWidth(0.9f),
+        ) {
+            if (options.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("No models") },
+                    onClick = {},
+                    enabled = false,
+                )
+            } else {
+                options.forEach { option ->
+                    val isCurrent = option.label == selectedLabel
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isCurrent) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = "Current",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = option.label,
+                                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = option.description,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        },
+                        onClick = { onSelect(option) },
+                        enabled = enabled,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AgentActivityBadge(activity: OpenClawClient.AgentActivityState) {
     val active = activity != OpenClawClient.AgentActivityState.Ready
     val transition = rememberInfiniteTransition(label = "agent_activity")
@@ -4003,13 +4172,18 @@ private fun createThumbnailBase64(imageBytes: ByteArray, maxWidth: Int, maxHeigh
 
 private fun codexCliBridgeUrl(openClawHost: String): String {
     val trimmed = openClawHost.trim().ifEmpty { "10.0.2.2" }
-    val hasSecureScheme = trimmed.startsWith("wss://", ignoreCase = true)
-    val withoutScheme = trimmed
-        .removePrefix("ws://")
-        .removePrefix("wss://")
-        .removePrefix("http://")
-        .removePrefix("https://")
-    val hostOnly = withoutScheme.substringBefore('/').substringBefore(':').ifEmpty { "10.0.2.2" }
-    val scheme = if (hasSecureScheme) "wss" else "ws"
-    return "$scheme://$hostOnly:18890/codex-cli"
+    val parsed = runCatching { java.net.URI(trimmed) }.getOrNull()
+    val scheme = parsed?.scheme?.lowercase()
+
+    if (parsed != null && parsed.rawAuthority?.isNotBlank() == true && scheme in setOf("ws", "wss", "http", "https")) {
+        val bridgeScheme = if (scheme == "wss" || scheme == "https") "wss" else "ws"
+        val path = parsed.rawPath
+            ?.takeIf { it.isNotBlank() && it != "/" }
+            ?: "/codex-cli"
+        val query = parsed.rawQuery?.let { "?$it" }.orEmpty()
+        return "$bridgeScheme://${parsed.rawAuthority}$path$query"
+    }
+
+    val hostOnly = trimmed.substringBefore('/').substringBefore(':').ifEmpty { "10.0.2.2" }
+    return "ws://$hostOnly:18890/codex-cli"
 }

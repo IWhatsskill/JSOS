@@ -72,6 +72,7 @@ class OpenClawClient(
     var onChatStream: ((ChatStream) -> Unit)? = null
     var onChatStreamEnd: ((ChatStreamEnd) -> Unit)? = null
     var onSessionList: ((SessionListUpdate) -> Unit)? = null
+    var onModelOptions: ((ModelOptionsUpdate) -> Unit)? = null
     var onConnectionUpdate: ((ConnectionUpdate) -> Unit)? = null
     /** Fired after loadMoreHistory completes. Args: (prependedCount, hasMore) */
     var onMoreHistoryLoaded: ((Int, Boolean) -> Unit)? = null
@@ -120,6 +121,10 @@ class OpenClawClient(
     private val _sessionList = MutableStateFlow<List<SessionInfo>>(emptyList())
     val sessionList: StateFlow<List<SessionInfo>> = _sessionList.asStateFlow()
 
+    // Available LLM models from the gateway. Falls back to the local public list.
+    private val _modelOptions = MutableStateFlow(LLM_MODEL_OPTIONS)
+    val modelOptions: StateFlow<List<LlmModelOption>> = _modelOptions.asStateFlow()
+
     // Challenge nonce for auth handshake
     private var challengeNonce: String? = null
 
@@ -130,6 +135,7 @@ class OpenClawClient(
         this.token = token
         this.shouldReconnect = true
         _gatewayProtocol.value = null
+        publishModelOptions(LLM_MODEL_OPTIONS)
         val generation = connectionGeneration.incrementAndGet()
 
         // Bare hosts stay ws:// for local/private gateway compatibility.
@@ -206,6 +212,7 @@ class OpenClawClient(
         _connectionState.value = ConnectionState.Disconnected
         _agentActivity.value = AgentActivityState.Ready
         _gatewayProtocol.value = null
+        publishModelOptions(LLM_MODEL_OPTIONS)
         notifyConnectionUpdate(false)
         failAllPending("Disconnected")
     }
@@ -625,6 +632,31 @@ class OpenClawClient(
         sendMessage(command)
     }
 
+    fun requestModels(view: String = "default") {
+        scope.launch {
+            try {
+                val response = sendRequest(
+                    OpenClawMethods.MODELS_LIST,
+                    JsonObject().apply { addProperty("view", view) }
+                )
+                if (!response.ok) {
+                    Log.w(TAG, "Model list request failed")
+                    return@launch
+                }
+
+                val options = parseGatewayModelOptions(response.payload)
+                if (options.isEmpty()) {
+                    Log.w(TAG, "Gateway returned no usable models; keeping fallback list")
+                    publishModelOptions(LLM_MODEL_OPTIONS)
+                } else {
+                    publishModelOptions(options)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Unable to load gateway model list")
+            }
+        }
+    }
+
     suspend fun createTalkSession(sessionKey: String?): OpenClawResponse {
         val params = JsonObject().apply {
             if (!sessionKey.isNullOrBlank()) addProperty("sessionKey", sessionKey)
@@ -889,6 +921,7 @@ class OpenClawClient(
 
                     // Load history for the current session on connect
                     loadSessionHistory()
+                    requestModels()
                 } else {
                     val errorMsg = response.error?.get("message")?.asString ?: "Authentication failed"
                     val errorCode = response.error?.get("code")?.asString ?: ""
@@ -1076,6 +1109,12 @@ class OpenClawClient(
         ))
     }
 
+    private fun publishModelOptions(options: List<LlmModelOption>) {
+        val next = options.ifEmpty { LLM_MODEL_OPTIONS }
+        _modelOptions.value = next
+        onModelOptions?.invoke(ModelOptionsUpdate(options = next))
+    }
+
     private fun isCurrentSocket(generation: Long, callbackSocket: WebSocket): Boolean {
         return generation == connectionGeneration.get() && webSocket == callbackSocket
     }
@@ -1114,6 +1153,47 @@ class OpenClawClient(
             "image/webp"
         }
     }
+}
+
+private fun parseGatewayModelOptions(payload: JsonObject?): List<LlmModelOption> {
+    val models = payload?.getAsJsonArray("models") ?: return emptyList()
+    val seen = linkedSetOf<String>()
+    val options = mutableListOf<LlmModelOption>()
+
+    for (element in models) {
+        val model = element.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+        val provider = model.stringOrNull("provider") ?: continue
+        val id = model.stringOrNull("id") ?: continue
+        val available = model.get("available")
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }
+            ?.asBoolean
+            ?: true
+        if (!available) continue
+
+        val ref = "$provider/$id"
+        if (!seen.add(ref)) continue
+
+        val name = model.stringOrNull("name")
+        options += LlmModelOption(
+            label = name ?: id,
+            command = "/model $ref",
+            description = modelSourceLabel(provider, id)
+        )
+    }
+
+    return options
+}
+
+private fun modelSourceLabel(provider: String, id: String): String {
+    val source = when {
+        id.endsWith(":cloud", ignoreCase = true) -> "cloud"
+        id.endsWith("-cloud", ignoreCase = true) -> "cloud"
+        else -> ""
+    }
+    return listOf(provider, source)
+        .filter { it.isNotBlank() }
+        .joinToString(" / ")
+        .ifBlank { provider }
 }
 
 private fun JsonObject.stringOrNull(name: String): String? {

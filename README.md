@@ -70,6 +70,12 @@ The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCRE
 6. Install the separate JSOS HUD APK on the glasses through JSOS Core HUD Deployment, or manually through Hi Rokid / APK Manager.
 7. Launch JSOS HUD on the glasses and connect to the phone-side JSOS Core session flow.
 
+### Upgrade Note
+
+This release was signed with a new public JSOS signing certificate.
+
+If you already have an older JSOS version installed, Android may refuse to install these APKs as an update. In that case, uninstall the old JSOS Core and JSOS HUD apps first, then install the new APKs from this release.
+
 ## Architecture
 
 | Component | Link | Responsibilities |

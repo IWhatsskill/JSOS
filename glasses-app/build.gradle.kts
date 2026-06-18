@@ -41,8 +41,8 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 226
-        versionName = "2.0.25-dynamic-labels"
+        versionCode = 227
+        versionName = "2.0.26-dynamic-models"
     }
 
     signingConfigs {

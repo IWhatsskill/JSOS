@@ -76,6 +76,7 @@ object OpenClawMethods {
     const val SESSION_LIST = "sessions.list"
     const val SESSION_RUN = "session.run"
     const val CHAT_HISTORY = "chat.history"
+    const val MODELS_LIST = "models.list"
     const val CONFIG_GET = "config.get"
     const val SYSTEM_PRESENCE = "system-presence"
 }
@@ -229,6 +230,20 @@ data class SessionInfo(
         origin = origin,
         deliveryContext = deliveryContext
     )
+}
+
+/**
+ * List of available LLM model options for Core and HUD model pickers.
+ */
+data class ModelOptionsUpdate(
+    @SerializedName("type") val type: String = "model_options",
+    @SerializedName("options") val options: List<LlmModelOption>
+) {
+    fun toJson(): String = gson.toJson(this)
+
+    companion object {
+        fun fromJson(json: String): ModelOptionsUpdate = gson.fromJson(json, ModelOptionsUpdate::class.java)
+    }
 }
 
 fun stableSessionDisplayName(
