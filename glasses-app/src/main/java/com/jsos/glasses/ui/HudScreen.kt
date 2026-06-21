@@ -189,6 +189,7 @@ sealed class VoiceInputState {
 data class SessionPickerInfo(
     val key: String,
     val name: String,
+    val subtitle: String? = null,
     val kind: String? = null,
     val hasUnread: Boolean = false,
     val updatedAt: Long? = null
@@ -1895,6 +1896,7 @@ private fun SessionPickerOverlay(
                     val isSelected = index == selectedIndex
                     val isCurrent = session.key == currentSessionKey
                     val isNewSession = session.key == "__new_session__"
+                    val subtitle = session.subtitle?.trim()?.takeIf { it.isNotBlank() }
                     val mark = when {
                         isNewSession -> "+"
                         isCurrent -> "*"
@@ -1905,7 +1907,7 @@ private fun SessionPickerOverlay(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(28.dp)
+                            .height(if (subtitle == null) 28.dp else 40.dp)
                             .border(
                                 width = if (isSelected) 1.dp else 0.dp,
                                 color = if (isSelected) HudColors.green else Color.Transparent,
@@ -1927,16 +1929,27 @@ private fun SessionPickerOverlay(
                             fontSize = 12.sp,
                             fontFamily = fontFamily
                         )
-                        Text(
-                            text = session.name,
-                            color = if (isSelected) HudColors.green else HudColors.primaryText,
-                            fontSize = 12.sp,
-                            fontFamily = fontFamily,
-                            fontWeight = if (isCurrent || isNewSession || isSelected) FontWeight.Bold else FontWeight.Normal,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = session.name,
+                                color = if (isSelected) HudColors.green else HudColors.primaryText,
+                                fontSize = 12.sp,
+                                fontFamily = fontFamily,
+                                fontWeight = if (isCurrent || isNewSession || isSelected) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (subtitle != null) {
+                                Text(
+                                    text = subtitle,
+                                    color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.72f),
+                                    fontSize = 8.sp,
+                                    fontFamily = fontFamily,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                         if (session.updatedAt != null) {
                             Text(
                                 text = formatRelativeTime(session.updatedAt),

@@ -218,7 +218,9 @@ data class SessionInfo(
     @SerializedName("kind") val kind: String? = null,
     @SerializedName("agentId") val agentId: String? = null,
     @SerializedName("origin") val origin: String? = null,
-    @SerializedName("deliveryContext") val deliveryContext: JsonObject? = null
+    @SerializedName("deliveryContext") val deliveryContext: JsonObject? = null,
+    @SerializedName("displayTitle") val displayTitle: String? = null,
+    @SerializedName("displaySubtitle") val displaySubtitle: String? = null
 ) {
     /** Best available display name for this session */
     val name: String get() = stableSessionDisplayName(
@@ -264,6 +266,7 @@ fun stableSessionDisplayName(
 
     if (keyRoute != null) {
         if (keyRoute.origin == "whatsapp") return "WhatsApp"
+        if (keyRoute.origin == "telegram") return "Telegram"
         if (keyRoute.agentId == "main" && keyRoute.origin == "main") return "Main"
 
         val routedLabel = keyAgentLabel ?: explicitDisplayName ?: explicitLabel ?: rawDiscordLabel ?: explicitDerivedTitle
@@ -279,6 +282,7 @@ fun stableSessionDisplayName(
     if (agentLabel != null) {
         return when {
             isWhatsappSession(key, origin, displayName, deliveryContext) -> "WhatsApp"
+            isTelegramSession(key, origin, displayName, deliveryContext) -> "Telegram"
             isDiscordSession(key, origin, displayName, deliveryContext) -> agentLabel
             isWebSession(key, origin, displayName, deliveryContext) -> agentLabel
             else -> agentLabel
@@ -287,6 +291,7 @@ fun stableSessionDisplayName(
 
     return when {
         key.startsWith("agent:main:whatsapp:direct:") -> "WhatsApp"
+        isTelegramSession(key, origin, displayName, deliveryContext) -> "Telegram"
         explicitLabel != null -> explicitLabel
         explicitDisplayName != null -> explicitDisplayName
         rawDiscordLabel != null -> rawDiscordLabel
@@ -463,6 +468,18 @@ private fun isWhatsappSession(
         deliveryContext.hasAny("phoneNumber", "contactId")
 }
 
+private fun isTelegramSession(
+    key: String,
+    origin: String?,
+    displayName: String?,
+    deliveryContext: JsonObject?
+): Boolean {
+    return key.contains(":telegram:") ||
+        origin.equals("telegram", ignoreCase = true) ||
+        displayName?.startsWith("telegram", ignoreCase = true) == true ||
+        deliveryContext.stringValue("channel").equals("telegram", ignoreCase = true)
+}
+
 private fun isWebSession(
     key: String,
     origin: String?,
@@ -480,6 +497,13 @@ private fun isWebSession(
 private fun JsonObject?.hasAny(vararg names: String): Boolean {
     if (this == null) return false
     return names.any { name -> has(name) && !get(name).isJsonNull }
+}
+
+private fun JsonObject?.stringValue(name: String): String? {
+    if (this == null || !has(name)) return null
+    val value = get(name)
+    if (value == null || value.isJsonNull) return null
+    return runCatching { value.asString }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
 }
 
 // ============================================

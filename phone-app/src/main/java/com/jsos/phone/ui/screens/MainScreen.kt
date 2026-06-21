@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -112,6 +113,7 @@ import com.jsos.shared.LLM_MODEL_OPTIONS
 import com.jsos.shared.LlmModelOption
 import com.jsos.shared.ModelOptionsUpdate
 import com.jsos.shared.SessionInfo
+import com.jsos.shared.SessionListUpdate
 import com.jsos.shared.TtsState
 import com.jsos.shared.stableSessionDisplayName
 import java.util.UUID
@@ -153,6 +155,8 @@ private enum class LiveTalkSource {
     Phone,
     Glasses,
 }
+
+private const val PREF_HIDDEN_SESSION_KEYS = "hidden_session_keys"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -235,6 +239,45 @@ fun MainScreen() {
     var settingsTarget by remember { mutableStateOf(SettingsTarget.SystemLink) }
     var selectedTab by remember { mutableStateOf(CoreTab.Home) }
     var showSessionPicker by remember { mutableStateOf(false) }
+    var hiddenSessionKeys by remember { mutableStateOf(loadHiddenSessionKeys(prefs)) }
+    val visibleSessionList = remember(sessionList, hiddenSessionKeys, currentSessionKey) {
+        filterVisibleSessions(sessionList, hiddenSessionKeys, currentSessionKey)
+    }
+    val hiddenSessionList = remember(sessionList, hiddenSessionKeys, currentSessionKey) {
+        sessionList.filter { session -> session.key != currentSessionKey && session.key in hiddenSessionKeys }
+    }
+    val visibleUnreadSessions = remember(unreadSessions, hiddenSessionKeys, currentSessionKey) {
+        filterVisibleUnreadSessionKeys(unreadSessions, hiddenSessionKeys, currentSessionKey).toSet()
+    }
+    val latestHiddenSessionKeys = rememberUpdatedState(hiddenSessionKeys)
+    val latestVisibleSessionList = rememberUpdatedState(visibleSessionList)
+    fun sendVisibleSessionListToGlasses(
+        sessions: List<SessionInfo> = sessionList,
+        sessionKey: String? = currentSessionKey,
+        unreadKeys: Set<String> = unreadSessions,
+        hiddenKeys: Set<String> = hiddenSessionKeys,
+    ) {
+        val update = SessionListUpdate(
+            sessions = filterVisibleSessions(sessions, hiddenKeys, sessionKey)
+                .map { it.withCoreDisplayLabel() },
+            currentSessionKey = sessionKey,
+            unreadSessionKeys = filterVisibleUnreadSessionKeys(unreadKeys, hiddenKeys, sessionKey),
+        )
+        glassesManager.sendRawMessage(update.toJson())
+    }
+    fun updateHiddenSessionKeys(nextKeys: Set<String>) {
+        hiddenSessionKeys = nextKeys
+        saveHiddenSessionKeys(prefs, nextKeys)
+        sendVisibleSessionListToGlasses(hiddenKeys = nextKeys)
+    }
+    val hideSession: (SessionInfo) -> Unit = { session ->
+        if (session.key != currentSessionKey) {
+            updateHiddenSessionKeys(hiddenSessionKeys + session.key)
+        }
+    }
+    val showSession: (SessionInfo) -> Unit = { session ->
+        updateHiddenSessionKeys(hiddenSessionKeys - session.key)
+    }
     var showModelPicker by remember { mutableStateOf(false) }
     var selectedModelLabel by remember {
         mutableStateOf(prefs.getString("selected_llm_model_label", LLM_MODEL_OPTIONS.first().label) ?: LLM_MODEL_OPTIONS.first().label)
@@ -474,7 +517,17 @@ fun MainScreen() {
             }
         }
         openClawClient.onSessionList = { msg ->
-            glassesManager.sendRawMessage(msg.toJson())
+            val hiddenKeys = latestHiddenSessionKeys.value
+            val visibleMsg = msg.copy(
+                sessions = filterVisibleSessions(msg.sessions, hiddenKeys, msg.currentSessionKey)
+                    .map { it.withCoreDisplayLabel() },
+                unreadSessionKeys = filterVisibleUnreadSessionKeys(
+                    unreadKeys = msg.unreadSessionKeys.toSet(),
+                    hiddenKeys = hiddenKeys,
+                    currentSessionKey = msg.currentSessionKey,
+                ),
+            )
+            glassesManager.sendRawMessage(visibleMsg.toJson())
         }
         openClawClient.onModelOptions = { msg ->
             glassesManager.sendRawMessage(msg.toJson())
@@ -930,7 +983,7 @@ fun MainScreen() {
                         val isConnected = openClawState is OpenClawClient.ConnectionState.Connected
                         val currentKey = openClawClient.currentSessionKey.value
                         val currentName = currentKey?.let { key ->
-                            openClawClient.sessionList.value.firstOrNull { it.key == key }?.name
+                            latestVisibleSessionList.value.firstOrNull { it.key == key }?.coreDisplayLabel()?.title
                                 ?: stableSessionDisplayName(key)
                         }
                         val connUpdate = ConnectionUpdate(
@@ -939,6 +992,12 @@ fun MainScreen() {
                             sessionName = currentName
                         )
                         glassesManager.sendRawMessage(connUpdate.toJson())
+                        sendVisibleSessionListToGlasses(
+                            sessions = openClawClient.sessionList.value,
+                            sessionKey = currentKey,
+                            unreadKeys = openClawClient.unreadSessions.value,
+                            hiddenKeys = latestHiddenSessionKeys.value,
+                        )
                         // Send current chat history
                         val currentMessages = openClawClient.chatMessages.value
                         glassesManager.sendRawMessage(buildChatHistoryJson(currentMessages))
@@ -1217,9 +1276,9 @@ fun MainScreen() {
                         openClawState = openClawState,
                         gatewayLinkDuration = gatewayLinkDuration,
                         gatewayProtocolLabel = gatewayProtocolLabel,
-                        sessions = sessionList,
+                        sessions = visibleSessionList,
                         currentSessionKey = currentSessionKey,
-                        unreadSessions = unreadSessions,
+                        unreadSessions = visibleUnreadSessions,
                         showSessionPicker = showSessionPicker,
                         onToggleSessionPicker = {
                             if (!showSessionPicker) {
@@ -1238,10 +1297,10 @@ fun MainScreen() {
                         glassesVoiceButtonMode = glassesVoiceButtonMode,
                         liveTalkState = liveTalkState,
                         onGlassesVoiceButtonModeChange = setGlassesVoiceButtonMode,
-                        currentSessionName = sessionList.firstOrNull { it.key == currentSessionKey }?.name
+                        currentSessionName = visibleSessionList.firstOrNull { it.key == currentSessionKey }?.coreDisplayLabel()?.title
                             ?: currentSessionKey
                             ?: "NONE",
-                        unreadCount = unreadSessions.size,
+                        unreadCount = visibleUnreadSessions.size,
                         pendingPhotoCount = pendingPhotos.size,
                         onConnectGlasses = { glassesManager.startScanning() },
                         onConnectOpenClaw = toggleOpenClawGateway,
@@ -1252,9 +1311,10 @@ fun MainScreen() {
 
                 CoreTab.Chat -> {
                     ChatDeck(
-                        sessions = sessionList,
+                        sessions = visibleSessionList,
+                        hiddenSessions = hiddenSessionList,
                         currentSessionKey = currentSessionKey,
-                        unreadSessions = unreadSessions,
+                        unreadSessions = visibleUnreadSessions,
                         showSessionPicker = showSessionPicker,
                         onToggleSessionPicker = {
                             if (!showSessionPicker) {
@@ -1266,6 +1326,8 @@ fun MainScreen() {
                             showSessionPicker = false
                             openClawClient.switchSession(session.key)
                         },
+                        onHideSession = hideSession,
+                        onShowSession = showSession,
                         onDismissSessionPicker = { showSessionPicker = false },
                         modelOptions = modelOptions,
                         selectedModelLabel = selectedModelLabel,
@@ -1314,7 +1376,7 @@ fun MainScreen() {
                         agentWakeEnabled = agentWakeEnabled,
                         agentWakeStatus = agentWakeStatus,
                         agentWakeSessionName = agentWakeSessionKey?.let { key ->
-                            sessionList.firstOrNull { it.key == key }?.name
+                            sessionList.firstOrNull { it.key == key }?.coreDisplayLabel()?.title
                         },
                         onToggleAgentWake = {
                             if (agentWakeEnabled) stopAgentWakeMode() else startAgentWakeMode()
@@ -1395,10 +1457,10 @@ fun MainScreen() {
                         openClawState = openClawState,
                         glassesState = glassesState,
                         gatewayProtocolLabel = gatewayProtocolLabel,
-                        currentSessionName = sessionList.firstOrNull { it.key == currentSessionKey }?.name
+                        currentSessionName = visibleSessionList.firstOrNull { it.key == currentSessionKey }?.coreDisplayLabel()?.title
                             ?: currentSessionKey
                             ?: "NONE",
-                        unreadCount = unreadSessions.size,
+                        unreadCount = visibleUnreadSessions.size,
                         isListening = isListening,
                         voiceMode = voiceMode,
                         ttsEnabled = ttsEnabled,
@@ -1850,11 +1912,14 @@ private fun CompactStatusTile(
 @Composable
 private fun ChatDeck(
     sessions: List<SessionInfo>,
+    hiddenSessions: List<SessionInfo>,
     currentSessionKey: String?,
     unreadSessions: Set<String>,
     showSessionPicker: Boolean,
     onToggleSessionPicker: () -> Unit,
     onSelectSession: (SessionInfo) -> Unit,
+    onHideSession: (SessionInfo) -> Unit,
+    onShowSession: (SessionInfo) -> Unit,
     onDismissSessionPicker: () -> Unit,
     modelOptions: List<LlmModelOption>,
     selectedModelLabel: String,
@@ -1868,7 +1933,7 @@ private fun ChatDeck(
     chatMessages: List<ChatMessage>,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
-    val speakerLabel = sessions.firstOrNull { it.key == currentSessionKey }?.name
+    val speakerLabel = sessions.firstOrNull { it.key == currentSessionKey }?.coreDisplayLabel()?.title
         ?: currentSessionKey?.let { stableSessionDisplayName(it) }
         ?: "JSOS"
 
@@ -1876,11 +1941,14 @@ private fun ChatDeck(
         if (openClawState is OpenClawClient.ConnectionState.Connected) {
             SessionSelector(
                 sessions = sessions,
+                hiddenSessions = hiddenSessions,
                 currentSessionKey = currentSessionKey,
                 unreadSessionKeys = unreadSessions,
                 expanded = showSessionPicker,
                 onToggle = onToggleSessionPicker,
                 onSelect = onSelectSession,
+                onHideSession = onHideSession,
+                onShowSession = onShowSession,
                 onDismiss = onDismissSessionPicker,
                 agentActivity = agentActivity,
             )
@@ -3619,19 +3687,26 @@ private fun CoreStatusCard(
 @Composable
 fun SessionSelector(
     sessions: List<SessionInfo>,
+    hiddenSessions: List<SessionInfo>,
     currentSessionKey: String?,
     unreadSessionKeys: Set<String> = emptySet(),
     expanded: Boolean,
     onToggle: () -> Unit,
     onSelect: (SessionInfo) -> Unit,
+    onHideSession: (SessionInfo) -> Unit,
+    onShowSession: (SessionInfo) -> Unit,
     onDismiss: () -> Unit,
     agentActivity: OpenClawClient.AgentActivityState = OpenClawClient.AgentActivityState.Ready,
 ) {
     val currentSession = sessions.firstOrNull { it.key == currentSessionKey }
-    val displayName = currentSession?.name
+    val displayName = currentSession?.coreDisplayLabel()?.title
         ?: currentSessionKey?.let { stableSessionDisplayName(it) }
         ?: "No session"
     val hasAnyUnread = unreadSessionKeys.isNotEmpty()
+    var hiddenExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (!expanded) hiddenExpanded = false
+    }
 
     Box(
         modifier = Modifier
@@ -3699,18 +3774,24 @@ fun SessionSelector(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = onDismiss,
-            modifier = Modifier.fillMaxWidth(0.9f)
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .heightIn(max = 430.dp)
         ) {
-            if (sessions.isEmpty()) {
+            if (sessions.isEmpty() && hiddenSessions.isEmpty()) {
                 DropdownMenuItem(
                     text = { Text("Loading sessions...") },
                     onClick = {},
                     enabled = false
                 )
             } else {
+                if (sessions.isNotEmpty()) {
+                    DropdownMenuHeader("VISIBLE")
+                }
                 sessions.forEach { session ->
                     val isCurrent = session.key == currentSessionKey
                     val hasUnread = session.key in unreadSessionKeys
+                    val canHide = !isCurrent
                     DropdownMenuItem(
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3731,20 +3812,338 @@ fun SessionSelector(
                                     )
                                     Spacer(Modifier.width(11.dp))
                                 }
-                                Text(
-                                    text = session.name,
-                                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                            else if (hasUnread) Color(0xFF4CAF50)
-                                            else MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1
+                                SessionDropdownLabel(
+                                    session = session,
+                                    titleColor = if (isCurrent) MaterialTheme.colorScheme.primary
+                                        else if (hasUnread) Color(0xFF4CAF50)
+                                        else MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         },
-                        onClick = { onSelect(session) }
+                        onClick = { onSelect(session) },
+                        trailingIcon = {
+                            if (canHide) {
+                                IconButton(
+                                    onClick = { onHideSession(session) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.VisibilityOff,
+                                        contentDescription = "Hide session",
+                                        modifier = Modifier.size(17.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     )
+                }
+                if (hiddenSessions.isNotEmpty()) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = if (hiddenExpanded) "HIDE HIDDEN" else "SHOW HIDDEN (${hiddenSessions.size})",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        },
+                        onClick = { hiddenExpanded = !hiddenExpanded },
+                        trailingIcon = {
+                            Icon(
+                                if (hiddenExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (hiddenExpanded) "Hide hidden sessions" else "Show hidden sessions",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    )
+                    if (hiddenExpanded) {
+                        DropdownMenuHeader("HIDDEN")
+                        hiddenSessions.forEach { session ->
+                            DropdownMenuItem(
+                                text = {
+                                    SessionDropdownLabel(
+                                        session = session,
+                                        titleColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                                    )
+                                },
+                                onClick = { onShowSession(session) },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { onShowSession(session) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Visibility,
+                                            contentDescription = "Show session",
+                                            modifier = Modifier.size(17.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DropdownMenuHeader(label: String) {
+    Text(
+        text = label,
+        color = JsosPalette.Cyan.copy(alpha = 0.76f),
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 10.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+    )
+}
+
+@Composable
+private fun SessionDropdownLabel(
+    session: SessionInfo,
+    titleColor: Color,
+) {
+    val display = session.coreDisplayLabel()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = display.title,
+            color = titleColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = display.subtitle,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private data class CoreSessionLabel(
+    val title: String,
+    val subtitle: String,
+)
+
+private fun SessionInfo.withCoreDisplayLabel(): SessionInfo {
+    val display = coreDisplayLabel()
+    return copy(
+        displayTitle = display.title,
+        displaySubtitle = display.subtitle,
+    )
+}
+
+private fun SessionInfo.coreDisplayLabel(): CoreSessionLabel {
+    val forwardedTitle = displayTitle?.trim()?.takeIf { it.isNotBlank() }
+    val forwardedSubtitle = displaySubtitle?.trim()?.takeIf { it.isNotBlank() }
+    if (forwardedTitle != null) {
+        return CoreSessionLabel(
+            title = forwardedTitle,
+            subtitle = forwardedSubtitle ?: routeSubtitle(),
+        )
+    }
+
+    val keyRoute = key.toAgentRouteParts()
+    if (keyRoute != null) {
+        val agent = keyRoute.agentId.toCoreAgentLabel()
+        return when (keyRoute.transport) {
+            "discord" -> {
+                val channelId = keyRoute.valueAfter("channel")
+                val threadId = keyRoute.valueAfter("thread")
+                val channelLabel = displayName.discordChannelLabel()
+                    ?: deliveryContext.discordTargetLabel()
+                    ?: channelId?.let { "#${it.compactId()}" }
+                    ?: "Discord"
+                val threadTitle = threadId?.let { " / thread ${it.compactId()}" }.orEmpty()
+                val subtitle = buildString {
+                    append("Discord")
+                    if (channelId != null) append(" - channel ").append(channelId.compactId())
+                    if (threadId != null) append(" - thread ").append(threadId.compactId())
+                }
+                CoreSessionLabel("$agent - $channelLabel$threadTitle", subtitle)
+            }
+            "telegram" -> CoreSessionLabel(
+                "$agent - Telegram",
+                "Telegram - ${keyRoute.routeTailLabel()} - ${key.compactSessionKey()}",
+            )
+            "whatsapp" -> CoreSessionLabel(
+                "$agent - WhatsApp",
+                "WhatsApp - ${keyRoute.routeTailLabel()} - ${key.compactSessionKey()}",
+            )
+            "main" -> CoreSessionLabel(
+                "$agent - Web",
+                "Web - ${key.compactSessionKey()}",
+            )
+            else -> CoreSessionLabel(
+                "$agent - ${keyRoute.transport}",
+                "${keyRoute.transport} - ${key.compactSessionKey()}",
+            )
+        }
+    }
+
+    return CoreSessionLabel(
+        title = name,
+        subtitle = routeSubtitle(),
+    )
+}
+
+private fun SessionInfo.routeSubtitle(): String {
+    val keyRoute = key.toAgentRouteParts()
+    if (keyRoute != null) {
+        val agent = keyRoute.agentId.toCoreAgentLabel()
+        return when (keyRoute.transport) {
+            "discord" -> {
+                val channel = keyRoute.valueAfter("channel")
+                val thread = keyRoute.valueAfter("thread")
+                val channelLabel = displayName.discordChannelLabel()
+                    ?: deliveryContext.discordTargetLabel()
+                    ?: channel?.let { "channel ${it.compactId()}" }
+                    ?: "channel"
+                val threadLabel = thread?.let { " / thread ${it.compactId()}" }.orEmpty()
+                "Discord $channelLabel$threadLabel - $agent - ${key.compactSessionKey()}"
+            }
+            "telegram" -> "Telegram ${keyRoute.routeTailLabel()} - $agent - ${key.compactSessionKey()}"
+            "whatsapp" -> "WhatsApp ${keyRoute.routeTailLabel()} - $agent - ${key.compactSessionKey()}"
+            "main" -> "Web - $agent - ${key.compactSessionKey()}"
+            else -> "${keyRoute.transport} - $agent - ${key.compactSessionKey()}"
+        }
+    }
+
+    val deliveryChannel = sessionDeliveryChannelLabel()
+    val originLabel = origin?.trim()?.takeIf { it.isNotBlank() }
+    return when {
+        deliveryChannel != null && originLabel != null -> "$originLabel - $deliveryChannel - ${key.compactSessionKey()}"
+        deliveryChannel != null -> "$deliveryChannel - ${key.compactSessionKey()}"
+        originLabel != null -> "$originLabel - ${key.compactSessionKey()}"
+        else -> key.compactSessionKey()
+    }
+}
+
+private data class AgentRouteParts(
+    val agentId: String,
+    val transport: String,
+    val parts: List<String>
+) {
+    fun valueAfter(marker: String): String? {
+        val index = parts.indexOf(marker)
+        return parts.getOrNull(index + 1)?.takeIf { it.isNotBlank() }
+    }
+
+    fun routeTailLabel(): String {
+        val tail = parts.drop(3).takeIf { it.isNotEmpty() } ?: return "route"
+        return tail.joinToString(":").take(32)
+    }
+}
+
+private fun String.toAgentRouteParts(): AgentRouteParts? {
+    val parts = split(":").filter { it.isNotBlank() }
+    if (parts.size < 3 || parts[0] != "agent") return null
+    return AgentRouteParts(
+        agentId = parts[1],
+        transport = parts[2],
+        parts = parts
+    )
+}
+
+private fun SessionInfo.sessionDeliveryChannelLabel(): String? {
+    val delivery = deliveryContext ?: return null
+    val channel = delivery.getStringOrNull("channel")
+    val to = delivery.getStringOrNull("to")
+    return when {
+        channel != null && to != null -> "$channel $to"
+        channel != null -> channel
+        to != null -> to
+        else -> null
+    }
+}
+
+private fun com.google.gson.JsonObject?.discordTargetLabel(): String? {
+    val target = this?.getStringOrNull("to") ?: return null
+    if (!target.startsWith("channel:", ignoreCase = true)) return null
+    val id = target.substringAfter("channel:", missingDelimiterValue = "").trim()
+    return id.takeIf { it.isNotBlank() }?.let { "#${it.compactId()}" }
+}
+
+private fun String?.discordChannelLabel(): String? {
+    val raw = this?.trim()?.takeIf { it.startsWith("discord:", ignoreCase = true) } ?: return null
+    val channel = raw.substringAfterLast("#", missingDelimiterValue = "").trim()
+    return channel.takeIf { it.isNotBlank() }?.let { "#$it" }
+}
+
+private fun String.toCoreAgentLabel(): String {
+    val normalized = trim().takeIf { it.isNotBlank() } ?: return this
+    return normalized
+        .split('-', '_')
+        .filter { it.isNotBlank() }
+        .joinToString("-") { token ->
+            when (token.lowercase()) {
+                "ai" -> "AI"
+                "api" -> "API"
+                "cli" -> "CLI"
+                "gpt" -> "GPT"
+                "hud" -> "HUD"
+                "jsos" -> "JSOS"
+                else -> token.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase() else char.toString() }
+            }
+        }
+        .ifBlank { normalized }
+}
+
+private fun com.google.gson.JsonObject.getStringOrNull(name: String): String? {
+    val value = get(name) ?: return null
+    if (value.isJsonNull) return null
+    return runCatching { value.asString }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
+}
+
+private fun String.compactId(): String {
+    if (length <= 12) return this
+    return "${take(6)}...${takeLast(4)}"
+}
+
+private fun String.compactSessionKey(): String {
+    if (length <= 42) return this
+    return "${take(24)}...${takeLast(12)}"
+}
+
+private fun loadHiddenSessionKeys(prefs: android.content.SharedPreferences): Set<String> {
+    return prefs.getStringSet(PREF_HIDDEN_SESSION_KEYS, emptySet())
+        ?.filter { it.isNotBlank() }
+        ?.toSet()
+        ?: emptySet()
+}
+
+private fun saveHiddenSessionKeys(
+    prefs: android.content.SharedPreferences,
+    hiddenKeys: Set<String>,
+) {
+    prefs.edit().putStringSet(PREF_HIDDEN_SESSION_KEYS, HashSet(hiddenKeys)).apply()
+}
+
+private fun filterVisibleSessions(
+    sessions: List<SessionInfo>,
+    hiddenKeys: Set<String>,
+    currentSessionKey: String?,
+): List<SessionInfo> {
+    return sessions.filter { session ->
+        session.key == currentSessionKey || session.key !in hiddenKeys
+    }
+}
+
+private fun filterVisibleUnreadSessionKeys(
+    unreadKeys: Set<String>,
+    hiddenKeys: Set<String>,
+    currentSessionKey: String?,
+): List<String> {
+    return unreadKeys.filter { key ->
+        key == currentSessionKey || key !in hiddenKeys
     }
 }
 

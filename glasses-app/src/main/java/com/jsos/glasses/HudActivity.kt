@@ -2305,6 +2305,8 @@ class HudActivity : ComponentActivity() {
                                 val key = sessionObj.optString("key", "")
                                 val label = sessionObj.optString("label", "")
                                 val displayName = sessionObj.optString("displayName", "")
+                                val displayTitle = sessionObj.optString("displayTitle", "").trim()
+                                val displaySubtitle = sessionObj.optString("displaySubtitle", "").trim()
                                 val derivedTitle = sessionObj.optString("derivedTitle", "")
                                 val agentId = sessionObj.optString("agentId", "")
                                 val origin = sessionObj.optString("origin", "")
@@ -2313,7 +2315,7 @@ class HudActivity : ComponentActivity() {
                                 }
                                 val kind = sessionObj.optString("kind", "")
                                 val updatedAt = if (sessionObj.has("updatedAt")) sessionObj.optLong("updatedAt", 0L).takeIf { it > 0 } else null
-                                val name = stableSessionDisplayName(
+                                val fallbackName = stableSessionDisplayName(
                                     key = key,
                                     label = label,
                                     displayName = displayName,
@@ -2322,9 +2324,11 @@ class HudActivity : ComponentActivity() {
                                     origin = origin,
                                     deliveryContext = deliveryContext
                                 )
+                                val name = displayTitle.ifEmpty { fallbackName }
                                 sessions.add(SessionPickerInfo(
                                     key = key,
                                     name = name,
+                                    subtitle = displaySubtitle.ifEmpty { null },
                                     kind = kind.ifEmpty { null },
                                     hasUnread = key in unreadKeys,
                                     updatedAt = updatedAt

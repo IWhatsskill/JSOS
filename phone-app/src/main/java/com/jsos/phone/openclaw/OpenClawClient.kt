@@ -367,16 +367,16 @@ class OpenClawClient(
         currentSessionKey: String?,
         unreadSessionKeys: Set<String>
     ): List<SessionInfo> {
-        val byName = linkedMapOf<String, SessionInfo>()
+        val byKey = linkedMapOf<String, SessionInfo>()
         sessions
-            .filter { it.key.isNotBlank() && shouldShowInJsosSessionPicker(it) }
+            .filter { it.key.isNotBlank() }
             .forEach { session ->
-                val existing = byName[session.name]
+                val existing = byKey[session.key]
                 if (existing == null || sessionRank(session, currentSessionKey, unreadSessionKeys) > sessionRank(existing, currentSessionKey, unreadSessionKeys)) {
-                    byName[session.name] = session
+                    byKey[session.key] = session
                 }
             }
-        return byName.values.sortedWith(
+        return byKey.values.sortedWith(
             compareBy<SessionInfo> { sessionDisplaySortKey(it.name) }
                 .thenBy { it.name.lowercase() }
                 .thenBy { it.key }
