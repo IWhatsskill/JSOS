@@ -42,6 +42,7 @@ import com.jsos.glasses.ui.AgentState
 import com.jsos.glasses.ui.ChatFocusArea
 import com.jsos.glasses.ui.ChatHudState
 import com.jsos.glasses.ui.CliActionItem
+import com.jsos.glasses.ui.CodexSessionPickerInfo
 import com.jsos.glasses.ui.DisplayMessage
 import com.jsos.glasses.ui.HudDisplaySize
 import com.jsos.glasses.ui.HudPosition
@@ -506,6 +507,10 @@ class HudActivity : ComponentActivity() {
             handleSessionPickerGesture(gesture)
             return
         }
+        if (current.showCliSessionPicker) {
+            handleCliSessionPickerGesture(gesture)
+            return
+        }
         if (current.showCliTerminal) {
             handleCliTerminalGesture(gesture)
             return
@@ -542,7 +547,8 @@ class HudActivity : ComponentActivity() {
         }
 
         if (current.showExitConfirm || current.showSlashParamMenu ||
-            current.showSlashMenu || current.showMoreSubMenu || current.showMoreMenu || current.showSessionPicker) {
+            current.showSlashMenu || current.showMoreSubMenu || current.showMoreMenu ||
+            current.showSessionPicker || current.showCliSessionPicker) {
             handleGesture(Gesture.DOUBLE_TAP)
             return
         }
@@ -1235,6 +1241,43 @@ class HudActivity : ComponentActivity() {
         phoneConnection.sendToPhone("""{"type":"cli_connect"}""")
     }
 
+    private fun handleCliSessionPickerGesture(gesture: Gesture) {
+        val current = hudState.value
+        val totalOptions = current.cliSessions.size
+
+        when (gesture) {
+            Gesture.SWIPE_FORWARD -> {
+                val newIndex = maxOf(0, current.selectedCliSessionIndex - 1)
+                hudState.value = current.copy(selectedCliSessionIndex = newIndex)
+            }
+            Gesture.SWIPE_BACKWARD -> {
+                val newIndex = if (totalOptions > 0) {
+                    minOf(totalOptions - 1, current.selectedCliSessionIndex + 1)
+                } else {
+                    0
+                }
+                hudState.value = current.copy(selectedCliSessionIndex = newIndex)
+            }
+            Gesture.TAP -> {
+                if (totalOptions > 0) {
+                    val selected = current.cliSessions[current.selectedCliSessionIndex.coerceIn(0, totalOptions - 1)]
+                    resumeCodexSession(selected.id)
+                    hudState.value = current.copy(
+                        showCliSessionPicker = false,
+                        cliCurrentSessionId = selected.id,
+                        cliCurrentSessionLabel = selected.label
+                    )
+                } else {
+                    requestCodexSessions()
+                }
+            }
+            Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(showCliSessionPicker = false)
+            }
+            Gesture.LONG_PRESS -> {}
+        }
+    }
+
     private fun handleCliTerminalGesture(gesture: Gesture) {
         val current = hudState.value
         val actionCount = CliActionItem.entries.size
@@ -1318,6 +1361,7 @@ class HudActivity : ComponentActivity() {
                 CliActionItem.BACK -> {
                     hudState.value = latest.copy(
                         showCliTerminal = false,
+                        showCliSessionPicker = false,
                         showInputStaging = false,
                         stagingText = "",
                         inputActionIndex = 0,
@@ -1346,6 +1390,17 @@ class HudActivity : ComponentActivity() {
                         hudState.value = latest.copy(inputText = text)
                         submitInput()
                     }
+                }
+                CliActionItem.RESUME -> {
+                    val currentIndex = latest.cliSessions.indexOfFirst {
+                        it.id == latest.cliCurrentSessionId || it.isCurrent
+                    }.coerceAtLeast(0)
+                    hudState.value = latest.copy(
+                        showCliSessionPicker = true,
+                        selectedCliSessionIndex = currentIndex,
+                        focusedArea = ChatFocusArea.MENU
+                    )
+                    requestCodexSessions()
                 }
                 CliActionItem.STOP -> {
                     resetCliAgentState()
@@ -1927,6 +1982,18 @@ class HudActivity : ComponentActivity() {
         phoneConnection.sendToPhone(json.toString())
     }
 
+    private fun requestCodexSessions() {
+        phoneConnection.sendToPhone("""{"type":"cli_sessions_request"}""")
+    }
+
+    private fun resumeCodexSession(sessionId: String) {
+        val json = JSONObject().apply {
+            put("type", "cli_resume")
+            put("sessionId", sessionId)
+        }
+        phoneConnection.sendToPhone(json.toString())
+    }
+
     private fun appendCliOutput(text: String, replace: Boolean = false) {
         val nextCliAgentState = if (text.trimStart().startsWith("[error]", ignoreCase = true)) {
             AgentState.IDLE
@@ -2262,6 +2329,60 @@ class HudActivity : ComponentActivity() {
                     val text = msg.optString("text", "")
                     val append = msg.optBoolean("append", true)
                     appendCliOutput(text, replace = !append)
+                }
+
+                "cli_sessions" -> {
+                    val sessionsArray = msg.optJSONArray("sessions")
+                    val currentSessionId = msg.optString("currentSessionId", "")
+                    val sessions = mutableListOf<CodexSessionPickerInfo>()
+                    if (sessionsArray != null) {
+                        for (i in 0 until sessionsArray.length()) {
+                            val sessionObj = sessionsArray.optJSONObject(i) ?: continue
+                            val id = sessionObj.optString("id", "")
+                            if (id.isBlank()) continue
+                            sessions.add(
+                                CodexSessionPickerInfo(
+                                    id = id,
+                                    label = sessionObj.optString("label", id.take(8)).ifBlank { id.take(8) },
+                                    subtitle = sessionObj.optString("subtitle", "").ifBlank { null },
+                                    updatedAt = if (sessionObj.has("updatedAt")) sessionObj.optLong("updatedAt", 0L).takeIf { it > 0L } else null,
+                                    isCurrent = sessionObj.optBoolean("isCurrent", id == currentSessionId)
+                                )
+                            )
+                        }
+                    }
+                    val selectedIndex = sessions.indexOfFirst {
+                        it.id == currentSessionId || it.isCurrent
+                    }.coerceAtLeast(0)
+                    val currentLabel = sessions.firstOrNull {
+                        it.id == currentSessionId || it.isCurrent
+                    }?.label
+                    hudState.update { current ->
+                        current.copy(
+                            cliSessions = sessions,
+                            cliCurrentSessionId = currentSessionId.ifEmpty { current.cliCurrentSessionId },
+                            cliCurrentSessionLabel = currentLabel ?: current.cliCurrentSessionLabel,
+                            selectedCliSessionIndex = selectedIndex
+                        )
+                    }
+                }
+
+                "cli_resumed" -> {
+                    val sessionId = msg.optString("sessionId", "")
+                    val label = msg.optString("label", "").ifBlank { sessionId.take(8) }
+                    hudState.update { current ->
+                        current.copy(
+                            showCliSessionPicker = false,
+                            cliCurrentSessionId = sessionId.ifEmpty { current.cliCurrentSessionId },
+                            cliCurrentSessionLabel = label.ifBlank { current.cliCurrentSessionLabel },
+                            cliSessions = current.cliSessions.map {
+                                it.copy(isCurrent = it.id == sessionId)
+                            }
+                        )
+                    }
+                    if (label.isNotBlank()) {
+                        appendCliOutput("[resume] $label")
+                    }
                 }
 
                 "cli_error" -> {

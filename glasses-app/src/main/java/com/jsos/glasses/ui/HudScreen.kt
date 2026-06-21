@@ -147,6 +147,7 @@ enum class CliActionItem(val label: String) {
     BACK("JSOS"),
     MODE("Mic"),
     SEND("Send"),
+    RESUME("Resume"),
     LINK("Link"),
     STOP("Stop"),
     CLEAR("Clear")
@@ -193,6 +194,14 @@ data class SessionPickerInfo(
     val kind: String? = null,
     val hasUnread: Boolean = false,
     val updatedAt: Long? = null
+)
+
+data class CodexSessionPickerInfo(
+    val id: String,
+    val label: String,
+    val subtitle: String? = null,
+    val updatedAt: Long? = null,
+    val isCurrent: Boolean = false
 )
 
 /** Format a millisecond epoch timestamp as a short relative time string. */
@@ -288,6 +297,11 @@ data class ChatHudState(
     val cliScrollDirection: Int = 0,
     val cliIsScrolledToEnd: Boolean = false,
     val cliActionIndex: Int = CliActionItem.SEND.ordinal,
+    val showCliSessionPicker: Boolean = false,
+    val cliSessions: List<CodexSessionPickerInfo> = emptyList(),
+    val cliCurrentSessionId: String? = null,
+    val cliCurrentSessionLabel: String? = null,
+    val selectedCliSessionIndex: Int = 0,
     // R08 ring tools status
     val ringServiceEnabled: Boolean = false,
     val ringInputConnected: Boolean = false,
@@ -746,6 +760,11 @@ fun HudScreen(
                 voiceState = state.voiceState,
                 voiceSendMode = state.voiceSendMode,
                 ttsEnabled = state.ttsEnabled,
+                showSessionPicker = state.showCliSessionPicker,
+                sessions = state.cliSessions,
+                currentSessionId = state.cliCurrentSessionId,
+                currentSessionLabel = state.cliCurrentSessionLabel,
+                selectedSessionIndex = state.selectedCliSessionIndex,
                 fontSize = fontSize,
                 fontFamily = monoFontFamily,
                 hudPosition = state.hudPosition,
@@ -1987,6 +2006,112 @@ private fun SessionPickerOverlay(
     }
 }
 
+@Composable
+private fun CodexSessionPickerOverlay(
+    sessions: List<CodexSessionPickerInfo>,
+    currentSessionId: String?,
+    selectedIndex: Int,
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selectedIndex, sessions.size) {
+        if (sessions.isNotEmpty()) {
+            listState.animateScrollToItem(selectedIndex.coerceIn(sessions.indices))
+        }
+    }
+
+    HudOverlayPanel(
+        title = "CODEX RESUME",
+        fontFamily = fontFamily,
+        modifier = modifier
+    ) {
+        if (sessions.isEmpty()) {
+            Text(
+                text = "NO CODEX SESSIONS",
+                color = HudColors.dimText,
+                fontSize = 13.sp,
+                fontFamily = fontFamily
+            )
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(sessions) { index, session ->
+                    val isSelected = index == selectedIndex
+                    val isCurrent = session.isCurrent || session.id == currentSessionId
+                    val subtitle = session.subtitle?.trim()?.takeIf { it.isNotBlank() } ?: session.id
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp)
+                            .border(
+                                width = if (isSelected) 1.dp else 0.dp,
+                                color = if (isSelected) HudColors.green else Color.Transparent,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 7.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isSelected) ">" else " ",
+                            color = if (isSelected) HudColors.green else Color.Transparent,
+                            fontSize = 12.sp,
+                            fontFamily = fontFamily
+                        )
+                        Text(
+                            text = if (isCurrent) "*" else " ",
+                            color = HudColors.green,
+                            fontSize = 12.sp,
+                            fontFamily = fontFamily
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = session.label,
+                                color = if (isSelected || isCurrent) HudColors.green else HudColors.primaryText,
+                                fontSize = 12.sp,
+                                fontFamily = fontFamily,
+                                fontWeight = if (isSelected || isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = subtitle,
+                                color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.72f),
+                                fontSize = 8.sp,
+                                fontFamily = fontFamily,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (session.updatedAt != null) {
+                            Text(
+                                text = formatRelativeTime(session.updatedAt),
+                                color = if (isSelected) HudColors.primaryText else HudColors.primaryText.copy(alpha = 0.86f),
+                                fontSize = 9.sp,
+                                fontFamily = fontFamily,
+                                maxLines = 1
+                            )
+                        }
+                        Text(
+                            text = if (isSelected) "<" else " ",
+                            color = if (isSelected) HudColors.green else Color.Transparent,
+                            fontSize = 12.sp,
+                            fontFamily = fontFamily
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ============================================================================
 // MORE MENU OVERLAY
 // ============================================================================
@@ -2618,6 +2743,11 @@ private fun CliTerminalOverlay(
     voiceState: VoiceInputState,
     voiceSendMode: VoiceSendMode,
     ttsEnabled: Boolean,
+    showSessionPicker: Boolean,
+    sessions: List<CodexSessionPickerInfo>,
+    currentSessionId: String?,
+    currentSessionLabel: String?,
+    selectedSessionIndex: Int,
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily,
     hudPosition: HudPosition,
@@ -2631,6 +2761,10 @@ private fun CliTerminalOverlay(
     val hasStagedInput = showInputStaging || photos.isNotEmpty()
     val inputAlpha = focusBrightness(focusedArea == ChatFocusArea.INPUT || hasStagedInput)
     val selectedAction = selectedActionIndex.coerceIn(CliActionItem.entries.indices)
+    val sessionTitle = currentSessionLabel
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "CODEX ${it.take(18)}" }
+        ?: "CODEX"
     val hudHeight = when (hudPosition) {
         HudPosition.FULL -> 1f
         HudPosition.BOTTOM_HALF -> 0.5f
@@ -2699,7 +2833,7 @@ private fun CliTerminalOverlay(
                 agentState = agentState,
                 focusedArea = focusedArea,
                 voiceState = voiceState,
-                sessionTitle = "CODEX",
+                sessionTitle = sessionTitle,
                 isLoadingMoreHistory = false,
                 showWakeNotification = false,
                 wakeReason = null,
@@ -2764,6 +2898,19 @@ private fun CliTerminalOverlay(
                 connected = status.uppercase() == "CONNECTED",
                 voiceSendMode = voiceSendMode,
                 fontFamily = fontFamily
+            )
+        }
+        AnimatedVisibility(
+            visible = showSessionPicker,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            CodexSessionPickerOverlay(
+                sessions = sessions,
+                currentSessionId = currentSessionId,
+                selectedIndex = selectedSessionIndex,
+                fontFamily = fontFamily,
+                modifier = Modifier.align(Alignment.Center)
             )
         }
     }
@@ -2867,6 +3014,7 @@ private fun CliBottomMenu(
                 CliActionItem.BACK -> "JSOS"
                 CliActionItem.MODE -> "MIC"
                 CliActionItem.SEND -> "SEND"
+                CliActionItem.RESUME -> "RESUME"
                 CliActionItem.LINK -> if (connected) "DISC" else "LINK"
                 CliActionItem.STOP -> "STOP"
                 CliActionItem.CLEAR -> "CLEAR"
@@ -2917,7 +3065,7 @@ private fun CliBottomMenu(
 fun cliActionItemsForPage(page: Int): List<CliActionItem> = if (page == 0) {
     listOf(CliActionItem.CAM, CliActionItem.BACK, CliActionItem.MODE, CliActionItem.SEND)
 } else {
-    listOf(CliActionItem.LINK, CliActionItem.STOP, CliActionItem.CLEAR)
+    listOf(CliActionItem.RESUME, CliActionItem.LINK, CliActionItem.STOP, CliActionItem.CLEAR)
 }
 
 private fun pageForCliActionItem(item: CliActionItem): Int = if (item in cliActionItemsForPage(0)) 0 else 1
@@ -2983,6 +3131,14 @@ private fun CliMenuIcon(
                 }
                 drawPath(path, color = color, style = stroke)
                 drawLine(color, Offset(w * 0.22f, h * 0.50f), Offset(w * 0.56f, h * 0.50f), strokeWidth = thin.width, cap = StrokeCap.Round)
+            }
+            CliActionItem.RESUME -> {
+                drawLine(color, Offset(w * 0.30f, h * 0.25f), Offset(w * 0.74f, h * 0.25f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.30f, h * 0.50f), Offset(w * 0.66f, h * 0.50f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.30f, h * 0.75f), Offset(w * 0.58f, h * 0.75f), strokeWidth = thin.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.20f, h * 0.34f), Offset(w * 0.20f, h * 0.66f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.20f, h * 0.34f), Offset(w * 0.12f, h * 0.46f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, Offset(w * 0.20f, h * 0.34f), Offset(w * 0.28f, h * 0.46f), strokeWidth = stroke.width, cap = StrokeCap.Round)
             }
             CliActionItem.STOP -> {
                 drawRoundRect(

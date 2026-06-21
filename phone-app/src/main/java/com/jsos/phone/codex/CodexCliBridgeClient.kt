@@ -15,12 +15,20 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
+data class CodexCliSession(
+    val id: String,
+    val label: String,
+    val subtitle: String? = null,
+    val updatedAt: Long? = null,
+    val isCurrent: Boolean = false
+)
+
 /**
- * Phone-side client for a private VPS Codex CLI bridge.
+ * Phone-side client for a user-configured Codex CLI bridge.
  *
  * The bridge is intentionally simple: JSOS Core owns the WebSocket, JSOS HUD
- * remains a terminal-style controller, and the VPS service can decide how it
- * starts /usr/local/bin/codex.
+ * remains a terminal-style controller, and the bridge decides how it connects
+ * to Codex on the user's machine.
  */
 class CodexCliBridgeClient {
     enum class State {
@@ -46,6 +54,8 @@ class CodexCliBridgeClient {
 
     var onStatus: ((State, String?) -> Unit)? = null
     var onOutput: ((String, Boolean) -> Unit)? = null
+    var onSessions: ((List<CodexCliSession>, String?) -> Unit)? = null
+    var onSessionResumed: ((CodexCliSession) -> Unit)? = null
 
     fun connect(url: String) {
         if (currentState == State.CONNECTED || currentState == State.CONNECTING) {
@@ -115,6 +125,19 @@ class CodexCliBridgeClient {
 
     fun stop() {
         webSocket?.send(JSONObject().put("type", "stop").toString())
+    }
+
+    fun requestSessions(): Boolean =
+        sendControl(JSONObject().put("type", "codex_sessions.list"))
+
+    fun resumeSession(sessionId: String): Boolean {
+        val trimmed = sessionId.trim()
+        if (trimmed.isEmpty()) return false
+        return sendControl(
+            JSONObject()
+                .put("type", "codex_session.resume")
+                .put("sessionId", trimmed)
+        )
     }
 
     fun disconnect() {
@@ -196,8 +219,30 @@ class CodexCliBridgeClient {
             }
             "error" -> {
                 currentState = State.ERROR
-                emitStatus("Codex bridge error")
-                onOutput?.invoke("[error] Codex bridge error", true)
+                val message = parsed.optString("message", "Codex bridge error")
+                emitStatus(message)
+                onOutput?.invoke("[error] $message", true)
+            }
+            "codex_sessions" -> {
+                val currentSessionId = parsed.optString("currentSessionId", "").ifBlank { null }
+                val sessions = parseSessions(parsed.optJSONArray("sessions"), currentSessionId)
+                onSessions?.invoke(sessions, currentSessionId)
+            }
+            "codex_resumed", "codex_session_resumed" -> {
+                val currentSessionId = parsed.optString("sessionId", "").ifBlank { null }
+                val session = parsed.optJSONObject("session")?.let { parseSession(it, currentSessionId) }
+                    ?: currentSessionId?.let { id ->
+                        CodexCliSession(
+                            id = id,
+                            label = parsed.optString("label", id.take(8)),
+                            subtitle = parsed.optString("subtitle", "").ifBlank { null },
+                            updatedAt = parsed.optionalLong("updatedAt"),
+                            isCurrent = true
+                        )
+                    }
+                if (session != null) {
+                    onSessionResumed?.invoke(session)
+                }
             }
             else -> {
                 val output = parsed.optString("text", parsed.optString("message", ""))
@@ -211,6 +256,46 @@ class CodexCliBridgeClient {
     private fun emitStatus(detail: String?) {
         onStatus?.invoke(currentState, detail)
     }
+
+    private fun sendControl(payload: JSONObject): Boolean {
+        val socket = webSocket
+        if (socket == null || currentState != State.CONNECTED) {
+            currentState = State.ERROR
+            emitStatus("Bridge offline")
+            return false
+        }
+        val sent = socket.send(payload.toString())
+        if (!sent) {
+            currentState = State.ERROR
+            emitStatus("Send failed")
+        }
+        return sent
+    }
+
+    private fun parseSessions(array: JSONArray?, currentSessionId: String?): List<CodexCliSession> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val session = array.optJSONObject(i)?.let { parseSession(it, currentSessionId) }
+                if (session != null) add(session)
+            }
+        }
+    }
+
+    private fun parseSession(obj: JSONObject, currentSessionId: String?): CodexCliSession? {
+        val id = obj.optString("id", obj.optString("sessionId", "")).trim()
+        if (id.isEmpty()) return null
+        return CodexCliSession(
+            id = id,
+            label = obj.optString("label", id.take(8)).ifBlank { id.take(8) },
+            subtitle = obj.optString("subtitle", "").ifBlank { null },
+            updatedAt = obj.optionalLong("updatedAt"),
+            isCurrent = obj.optBoolean("isCurrent", currentSessionId == id)
+        )
+    }
+
+    private fun JSONObject.optionalLong(name: String): Long? =
+        if (has(name)) optLong(name, 0L).takeIf { it > 0L } else null
 
     private fun prepareBridgeImage(base64: String): BridgeImage? {
         val sourceBytes = runCatching {

@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.sp
 import com.jsos.phone.R
 import com.jsos.phone.audio.LiveTalkAudioRouteManager
 import com.jsos.phone.codex.CodexCliBridgeClient
+import com.jsos.phone.codex.CodexCliSession
 import com.jsos.phone.glasses.GlassesConnectionManager
 import com.jsos.phone.glasses.RokidSdkManager
 import com.jsos.phone.glasses.WakeSignalManager
@@ -298,6 +299,10 @@ fun MainScreen() {
     var codexCliStatus by remember { mutableStateOf(CodexCliBridgeClient.State.DISCONNECTED) }
     var codexCliDetail by remember { mutableStateOf<String?>(null) }
     var codexCliLines by remember { mutableStateOf(listOf("Admin Codex ready.")) }
+    var codexCliSessions by remember { mutableStateOf<List<CodexCliSession>>(emptyList()) }
+    var codexCliCurrentSessionId by remember { mutableStateOf<String?>(null) }
+    var pendingCodexCliSend by remember { mutableStateOf<PendingCodexCliSend?>(null) }
+    var showCodexCliSessionPicker by remember { mutableStateOf(false) }
     val codexCliUrl = remember(openClawHost) { codexCliBridgeUrl(openClawHost) }
     var glassesVoiceButtonMode by remember {
         mutableStateOf(GlassesVoiceButtonMode.fromPref(prefs.getString("glasses_voice_button_mode", "command")))
@@ -333,6 +338,110 @@ fun MainScreen() {
         }
         glassesVoiceButtonMode = mode
         prefs.edit().putString("glasses_voice_button_mode", mode.prefValue).apply()
+    }
+
+    fun sendCodexSessionsToGlasses(
+        sessions: List<CodexCliSession> = codexCliSessions,
+        currentSessionId: String? = codexCliCurrentSessionId,
+    ) {
+        val msg = org.json.JSONObject().apply {
+            put("type", "cli_sessions")
+            put("currentSessionId", currentSessionId ?: "")
+            put("sessions", org.json.JSONArray().apply {
+                sessions.forEach { session ->
+                    put(org.json.JSONObject().apply {
+                        put("id", session.id)
+                        put("label", session.label)
+                        put("subtitle", session.subtitle ?: "")
+                        put("isCurrent", session.isCurrent || session.id == currentSessionId)
+                        session.updatedAt?.let { put("updatedAt", it) }
+                    })
+                }
+            })
+        }
+        glassesManager.sendRawMessage(msg.toString())
+    }
+
+    fun sendCodexCliSnapshotToGlasses(
+        lines: List<String> = codexCliLines,
+        status: CodexCliBridgeClient.State = codexCliStatus,
+        detail: String? = codexCliDetail,
+    ) {
+        val statusMsg = org.json.JSONObject().apply {
+            put("type", "cli_status")
+            put("state", status.name.lowercase())
+            put("detail", detail ?: "")
+            put("url", codexCliBridgeUrl(openClawHost))
+        }
+        glassesManager.sendRawMessage(statusMsg.toString())
+        sendCodexSessionsToGlasses()
+        val text = lines
+            .takeLast(80)
+            .joinToString("\n")
+            .ifBlank { "Admin Codex ready." }
+        val outputMsg = org.json.JSONObject().apply {
+            put("type", "cli_output")
+            put("text", text)
+            put("append", false)
+        }
+        glassesManager.sendRawMessage(outputMsg.toString())
+    }
+
+    fun sendCodexCliOutputToGlasses(text: String, append: Boolean = true) {
+        val outputMsg = org.json.JSONObject().apply {
+            put("type", "cli_output")
+            put("text", text)
+            put("append", append)
+        }
+        glassesManager.sendRawMessage(outputMsg.toString())
+    }
+
+    fun failPendingCodexCliSend(message: String) {
+        val pending = pendingCodexCliSend ?: return
+        pendingCodexCliSend = null
+        pending.restoreInput?.let { codexCliInput = it }
+        val line = "[error] $message"
+        codexCliLines = (codexCliLines + line).takeLast(220)
+        sendCodexCliOutputToGlasses(line)
+    }
+
+    fun dispatchCodexCliSend(request: PendingCodexCliSend) {
+        codexCliLines = (codexCliLines + "> ${request.visiblePrompt}").takeLast(220)
+        val sent = codexCliBridgeClient.sendInput(request.prompt, request.photos)
+        if (sent) {
+            if (request.photos.isNotEmpty()) {
+                pendingPhotos = emptyList()
+                glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
+            }
+        } else {
+            request.restoreInput?.let { codexCliInput = it }
+            val line = "[error] Codex send failed"
+            codexCliLines = (codexCliLines + line).takeLast(220)
+            sendCodexCliOutputToGlasses(line)
+        }
+    }
+
+    fun sendCodexCliWithRefresh(request: PendingCodexCliSend) {
+        if (pendingCodexCliSend != null) {
+            val line = "[error] Codex session refresh already running"
+            codexCliLines = (codexCliLines + line).takeLast(220)
+            sendCodexCliOutputToGlasses(line)
+            return
+        }
+
+        val sessionId = codexCliCurrentSessionId
+        if (codexCliStatus == CodexCliBridgeClient.State.CONNECTED && !sessionId.isNullOrBlank()) {
+            pendingCodexCliSend = request
+            if (!codexCliBridgeClient.resumeSession(sessionId)) {
+                pendingCodexCliSend = null
+                request.restoreInput?.let { codexCliInput = it }
+                val line = "[error] Codex session refresh failed"
+                codexCliLines = (codexCliLines + line).takeLast(220)
+                sendCodexCliOutputToGlasses(line)
+            }
+        } else {
+            dispatchCodexCliSend(request)
+        }
     }
 
     // How many messages we send to glasses (starts at 20, grows on demand)
@@ -381,6 +490,9 @@ fun MainScreen() {
                 codexCliDetail = detail
                 if (state == CodexCliBridgeClient.State.ERROR) {
                     codexCliLines = (codexCliLines + "[status] ${state.name}: ${detail ?: ""}").takeLast(220)
+                    if (pendingCodexCliSend != null) {
+                        failPendingCodexCliSend("Codex session refresh failed")
+                    }
                 }
             }
             val statusMsg = org.json.JSONObject().apply {
@@ -390,6 +502,9 @@ fun MainScreen() {
                 put("url", codexCliBridgeUrl(openClawHost))
             }
             glassesManager.sendRawMessage(statusMsg.toString())
+            if (state == CodexCliBridgeClient.State.CONNECTED) {
+                codexCliBridgeClient.requestSessions()
+            }
         }
         codexCliBridgeClient.onOutput = { output, append ->
             mainHandler.post {
@@ -403,6 +518,38 @@ fun MainScreen() {
                 put("append", append)
             }
             glassesManager.sendRawMessage(outputMsg.toString())
+        }
+        codexCliBridgeClient.onSessions = { sessions, currentSessionId ->
+            mainHandler.post {
+                codexCliSessions = sessions
+                codexCliCurrentSessionId = currentSessionId
+            }
+            sendCodexSessionsToGlasses(sessions, currentSessionId)
+        }
+        codexCliBridgeClient.onSessionResumed = { session ->
+            mainHandler.post {
+                val pendingSend = pendingCodexCliSend
+                pendingCodexCliSend = null
+                val updatedSessions = codexCliSessions.map {
+                    it.copy(isCurrent = it.id == session.id)
+                }.ifEmpty { listOf(session.copy(isCurrent = true)) }
+                codexCliCurrentSessionId = session.id
+                codexCliSessions = updatedSessions
+                showCodexCliSessionPicker = false
+                sendCodexSessionsToGlasses(updatedSessions, session.id)
+                if (pendingSend == null) {
+                    codexCliLines = (codexCliLines + "[resume] ${session.label}").takeLast(220)
+                    val resumedMsg = org.json.JSONObject().apply {
+                        put("type", "cli_resumed")
+                        put("sessionId", session.id)
+                        put("label", session.label)
+                        put("subtitle", session.subtitle ?: "")
+                    }
+                    glassesManager.sendRawMessage(resumedMsg.toString())
+                } else {
+                    dispatchCodexCliSend(pendingSend)
+                }
+            }
         }
     }
     // Sync TTS state to glasses when settings change
@@ -960,6 +1107,26 @@ fun MainScreen() {
                         val bridgeUrl = codexCliBridgeUrl(openClawHost)
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI bridge connect")
                         codexCliBridgeClient.connect(bridgeUrl)
+                        sendCodexCliSnapshotToGlasses()
+                    }
+                    "cli_sessions_request" -> {
+                        android.util.Log.d("MainScreen", "Glasses requested Codex CLI sessions")
+                        val requested = if (codexCliStatus == CodexCliBridgeClient.State.CONNECTED) {
+                            codexCliBridgeClient.requestSessions()
+                        } else {
+                            codexCliBridgeClient.connect(codexCliBridgeUrl(openClawHost))
+                            true
+                        }
+                        if (!requested) {
+                            glassesManager.sendRawMessage("""{"type":"cli_error","message":"Codex sessions unavailable"}""")
+                        }
+                    }
+                    "cli_resume" -> {
+                        val sessionId = json.optString("sessionId", "")
+                        android.util.Log.d("MainScreen", "Glasses requested Codex resume (idLength=${sessionId.length})")
+                        if (sessionId.isNotBlank() && !codexCliBridgeClient.resumeSession(sessionId)) {
+                            glassesManager.sendRawMessage("""{"type":"cli_error","message":"Codex resume failed"}""")
+                        }
                     }
                     "cli_disconnect" -> {
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI bridge disconnect")
@@ -969,15 +1136,13 @@ fun MainScreen() {
                         val text = json.optString("text", "")
                         val photosToSend = pendingPhotos
                         android.util.Log.d("MainScreen", "Codex CLI input from glasses (${text.length} chars, photos=${photosToSend.size})")
-                        val sent = codexCliBridgeClient.sendInput(text, photosToSend)
-                        if (sent) {
-                            if (photosToSend.isNotEmpty()) {
-                                pendingPhotos = emptyList()
-                                glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
-                            }
-                        } else {
-                            glassesManager.sendRawMessage("""{"type":"cli_output","text":"[error] Codex send failed","append":true}""")
-                        }
+                        sendCodexCliWithRefresh(
+                            PendingCodexCliSend(
+                                prompt = text,
+                                visiblePrompt = text.ifBlank { "[image] Analyze image." },
+                                photos = photosToSend,
+                            )
+                        )
                     }
                     "cli_stop" -> {
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI stop")
@@ -1015,6 +1180,7 @@ fun MainScreen() {
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
                         openClawClient.requestModels()
                         glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
+                        sendCodexCliSnapshotToGlasses()
                     }
                     "tts_toggle" -> {
                         val enabled = json.optBoolean("enabled", false)
@@ -1405,6 +1571,9 @@ fun MainScreen() {
                         hasPendingPhoto = pendingPhotos.isNotEmpty(),
                         pendingPhotoCount = pendingPhotos.size,
                         pendingPhotos = pendingPhotos,
+                        sessions = codexCliSessions,
+                        currentSessionId = codexCliCurrentSessionId,
+                        showSessionPicker = showCodexCliSessionPicker,
                         onRemovePendingPhoto = {
                             pendingPhotos = emptyList()
                             glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
@@ -1416,6 +1585,22 @@ fun MainScreen() {
                         onDisconnect = {
                             codexCliBridgeClient.disconnect()
                         },
+                        onToggleSessionPicker = {
+                            showCodexCliSessionPicker = !showCodexCliSessionPicker
+                            if (codexCliStatus == CodexCliBridgeClient.State.CONNECTED) {
+                                codexCliBridgeClient.requestSessions()
+                            }
+                        },
+                        onRefreshSessions = {
+                            if (codexCliStatus == CodexCliBridgeClient.State.CONNECTED) {
+                                codexCliBridgeClient.requestSessions()
+                            }
+                        },
+                        onResumeSession = { sessionId ->
+                            if (!codexCliBridgeClient.resumeSession(sessionId)) {
+                                codexCliLines = (codexCliLines + "[error] Codex resume failed").takeLast(220)
+                            }
+                        },
                         onSend = {
                             val textToSend = codexCliInput.trim()
                             val photosToSend = pendingPhotos
@@ -1424,19 +1609,16 @@ fun MainScreen() {
                                     "Analyze the attached image carefully. Identify the important visible objects, text, UI elements, spatial layout, and anything unusual or relevant. If the image shows a screen, app, HUD, error message, code, document, device, or real-world scene, explain what is visible and what it likely means. Answer in the user's language. Do not invent details that are not visible."
                                 }
                                 val visiblePrompt = textToSend.ifBlank { "[image] Analyze image." }
-                                codexCliLines = (codexCliLines + "> $visiblePrompt").takeLast(220)
                                 codexCliInput = ""
                                 android.util.Log.d("MainScreen", "Codex Core send requested (${promptToSend.length} chars, stagedPhotos=${photosToSend.size})")
-                                val sent = codexCliBridgeClient.sendInput(promptToSend, photosToSend)
-                                if (sent) {
-                                    if (photosToSend.isNotEmpty()) {
-                                        pendingPhotos = emptyList()
-                                        glassesManager.sendRawMessage("""{"type":"remove_photo","all":true}""")
-                                    }
-                                } else {
-                                    codexCliInput = textToSend
-                                    codexCliLines = (codexCliLines + "[error] Codex send failed").takeLast(220)
-                                }
+                                sendCodexCliWithRefresh(
+                                    PendingCodexCliSend(
+                                        prompt = promptToSend,
+                                        visiblePrompt = visiblePrompt,
+                                        photos = photosToSend,
+                                        restoreInput = textToSend,
+                                    )
+                                )
                             }
                         },
                         onTakePhoto = {
@@ -2636,9 +2818,15 @@ private fun CodexCliDeck(
     hasPendingPhoto: Boolean,
     pendingPhotoCount: Int,
     pendingPhotos: List<String>,
+    sessions: List<CodexCliSession>,
+    currentSessionId: String?,
+    showSessionPicker: Boolean,
     onRemovePendingPhoto: () -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    onToggleSessionPicker: () -> Unit,
+    onRefreshSessions: () -> Unit,
+    onResumeSession: (String) -> Unit,
     onSend: () -> Unit,
     onTakePhoto: () -> Unit,
     onStop: () -> Unit,
@@ -2653,6 +2841,11 @@ private fun CodexCliDeck(
     }
     val lineBlocks = remember(lines) { codexCliLineBlocks(lines) }
     val lastBlockText = lineBlocks.lastOrNull()?.text.orEmpty()
+    val currentSessionLabel = remember(sessions, currentSessionId) {
+        sessions.firstOrNull { it.id == currentSessionId }?.label
+            ?: currentSessionId?.take(8)
+            ?: "New/Live"
+    }
 
     LaunchedEffect(lineBlocks.size, lastBlockText) {
         listState.animateScrollToItem(lineBlocks.size)
@@ -2671,9 +2864,92 @@ private fun CodexCliDeck(
             rows = listOf(
                 "State" to status.name,
                 "Workspace" to "Admin",
+                "Session" to currentSessionLabel,
                 "Action" to if (connected) "SEND" else "CONNECT",
             ),
         )
+
+        AnimatedVisibility(visible = showSessionPicker) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 190.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = JsosPalette.Card,
+                border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.68f)),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "RESUME SESSION",
+                            color = JsosPalette.Cyan,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                        )
+                        TextButton(onClick = onRefreshSessions, enabled = connected) {
+                            Text("REFRESH", fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                    if (sessions.isEmpty()) {
+                        Text(
+                            text = if (connected) "No Codex sessions reported." else "Link Admin Codex first.",
+                            color = JsosPalette.Muted,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            items(sessions, key = { it.id }) { session ->
+                                val selected = session.id == currentSessionId || session.isCurrent
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = connected) { onResumeSession(session.id) },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (selected) Color(0xFF092418) else Color(0xFF061214),
+                                    border = BorderStroke(
+                                        width = if (selected) 1.dp else 0.5.dp,
+                                        color = if (selected) JsosPalette.Green else JsosPalette.Green.copy(alpha = 0.35f),
+                                    ),
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)) {
+                                        Text(
+                                            text = "${if (selected) "* " else ""}${session.label}",
+                                            color = if (selected) JsosPalette.Green else JsosPalette.Text,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        val subtitle = session.subtitle ?: session.id
+                                        Text(
+                                            text = subtitle,
+                                            color = JsosPalette.Muted,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Surface(
             modifier = Modifier
@@ -2788,6 +3064,9 @@ private fun CodexCliDeck(
             TextButton(onClick = if (connected) onDisconnect else onConnect, modifier = Modifier.weight(1f)) {
                 Text(if (connected) "DISC" else "LINK", fontFamily = FontFamily.Monospace)
             }
+            TextButton(onClick = onToggleSessionPicker, enabled = connected, modifier = Modifier.weight(1f)) {
+                Text("RESUME", fontFamily = FontFamily.Monospace)
+            }
             TextButton(
                 onClick = onSend,
                 enabled = connected && (inputText.isNotBlank() || hasPendingPhoto),
@@ -2811,6 +3090,13 @@ private enum class CodexCliLineType {
     ERROR,
     SYSTEM,
 }
+
+private data class PendingCodexCliSend(
+    val prompt: String,
+    val visiblePrompt: String,
+    val photos: List<String>,
+    val restoreInput: String? = null,
+)
 
 private data class CodexCliLineBlock(
     val type: CodexCliLineType,
