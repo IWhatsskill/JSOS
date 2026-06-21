@@ -252,6 +252,8 @@ data class ChatHudState(
     val selectedSlashParamIndex: Int = 0,
     val slashParamMenuType: SlashParamMenuType? = null,
     val modelParamOptions: List<SlashParamOption> = MODEL_PARAM_OPTIONS,
+    val currentModelLabel: String = LLM_MODEL_OPTIONS.first().label,
+    val currentModelRef: String? = LLM_MODEL_OPTIONS.first().command.removePrefix("/model").trim(),
     // Input staging area (voice text accumulation)
     val stagingText: String = "",
     val showInputStaging: Boolean = false,
@@ -568,6 +570,8 @@ fun HudScreen(
                     batteryLevel = state.batteryLevel,
                     batteryCharging = state.batteryCharging,
                     currentTime = state.currentTime,
+                    currentModelLabel = state.currentModelLabel,
+                    currentModelRef = state.currentModelRef,
                     ttsEnabled = state.ttsEnabled,
                     fontFamily = monoFontFamily,
                     fontSize = fontSize,
@@ -707,6 +711,8 @@ fun HudScreen(
                 menuType = state.slashParamMenuType,
                 selectedIndex = state.selectedSlashParamIndex,
                 modelOptions = state.modelParamOptions,
+                currentModelLabel = state.currentModelLabel,
+                currentModelRef = state.currentModelRef,
                 fontFamily = monoFontFamily
             )
         }
@@ -1098,6 +1104,8 @@ private fun VoiceStatusStrip(
     batteryLevel: Int?,
     batteryCharging: Boolean,
     currentTime: String,
+    currentModelLabel: String = "",
+    currentModelRef: String? = null,
     ttsEnabled: Boolean,
     fontFamily: FontFamily,
     fontSize: androidx.compose.ui.unit.TextUnit,
@@ -1168,14 +1176,21 @@ private fun VoiceStatusStrip(
         else -> HudColors.green
     }
     val sessionLabel = sessionTitle?.takeIf { it.isNotBlank() } ?: "main"
-    val rightLabel = listOf(
-        statusTag,
-        "|",
-        sessionLabel,
-        "|",
+    val modelLabel = if (currentModelLabel.isNotBlank() || !currentModelRef.isNullOrBlank()) {
+        currentModelHeaderLabel(currentModelLabel, currentModelRef)
+    } else {
+        ""
+    }
+    val timeBatteryLabel = listOf(
         currentTime,
         batteryLevel?.let { "${if (batteryCharging) "+" else ""}$it%" }.orEmpty()
     ).filter { it.isNotBlank() }.joinToString(" ")
+    val rightLabel = listOf(
+        statusTag,
+        modelLabel,
+        sessionLabel,
+        timeBatteryLabel
+    ).filter { it.isNotBlank() }.joinToString(" | ")
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -2352,6 +2367,8 @@ private fun SlashParamOverlay(
     menuType: SlashParamMenuType?,
     selectedIndex: Int,
     modelOptions: List<SlashParamOption>,
+    currentModelLabel: String,
+    currentModelRef: String?,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
@@ -2366,7 +2383,11 @@ private fun SlashParamOverlay(
     }
 
     HudOverlayPanel(
-        title = type.title,
+        title = if (type == SlashParamMenuType.MODEL && options.isNotEmpty()) {
+            "MODEL ${(selectedIndex + 1).coerceIn(1, options.size)}/${options.size} ${currentModelHeaderLabel(currentModelLabel, currentModelRef)}"
+        } else {
+            type.title
+        },
         fontFamily = fontFamily,
         modifier = modifier,
         footerText = "SWIPE SELECT  TAP SEND  2XTAP BACK"
@@ -2380,6 +2401,7 @@ private fun SlashParamOverlay(
         ) {
             itemsIndexed(options) { index, item ->
                 val isSelected = index == selectedIndex
+                val isCurrent = type == SlashParamMenuType.MODEL && item.matchesCurrentModel(currentModelRef, currentModelLabel)
                 val displayLabel = item.hudDisplayLabel()
                 val displayDescription = item.hudDisplayDescription(displayLabel)
 
@@ -2396,7 +2418,11 @@ private fun SlashParamOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isSelected) ">" else " ",
+                        text = when {
+                            isSelected -> ">"
+                            isCurrent -> "*"
+                            else -> " "
+                        },
                         color = HudColors.green,
                         fontSize = 12.sp,
                         fontFamily = fontFamily
@@ -2423,8 +2449,12 @@ private fun SlashParamOverlay(
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isSelected) "<" else " ",
-                        color = if (isSelected) HudColors.green else Color.Transparent,
+                        text = when {
+                            isSelected -> "<"
+                            isCurrent -> "*"
+                            else -> " "
+                        },
+                        color = if (isSelected || isCurrent) HudColors.green else Color.Transparent,
                         fontSize = 12.sp,
                         fontFamily = fontFamily
                     )
@@ -2432,6 +2462,32 @@ private fun SlashParamOverlay(
             }
         }
     }
+}
+
+private fun currentModelHeaderLabel(label: String, ref: String?): String {
+    val raw = label.takeIf { it.isNotBlank() }
+        ?: ref?.substringAfter('/')?.takeIf { it.isNotBlank() }
+        ?: "UNKNOWN"
+    val compact = raw
+        .removeSuffix(":cloud")
+        .removeSuffix("-cloud")
+    return if (compact.length <= 18) compact else compact.take(15) + "..."
+}
+
+private fun SlashParamOption.matchesCurrentModel(ref: String?, label: String): Boolean {
+    val optionRef = command.removePrefix("/model").trim()
+    val currentRef = ref?.trim()
+    val currentLabel = label.trim()
+    return (currentRef != null && (
+        optionRef.equals(currentRef, ignoreCase = true) ||
+            optionRef.substringAfter('/').equals(currentRef, ignoreCase = true) ||
+            currentRef.substringAfter('/').equals(optionRef.substringAfter('/'), ignoreCase = true)
+        )) ||
+        (currentLabel.isNotBlank() && (
+            this.label.equals(currentLabel, ignoreCase = true) ||
+                optionRef.equals(currentLabel, ignoreCase = true) ||
+                optionRef.substringAfter('/').equals(currentLabel, ignoreCase = true)
+            ))
 }
 
 private fun SlashParamOption.hudDisplayLabel(): String {

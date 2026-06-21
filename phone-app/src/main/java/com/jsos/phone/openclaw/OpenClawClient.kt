@@ -124,6 +124,10 @@ class OpenClawClient(
     // Available LLM models from the gateway. Falls back to the local public list.
     private val _modelOptions = MutableStateFlow(LLM_MODEL_OPTIONS)
     val modelOptions: StateFlow<List<LlmModelOption>> = _modelOptions.asStateFlow()
+    private val _currentModelLabel = MutableStateFlow(LLM_MODEL_OPTIONS.first().label)
+    val currentModelLabel: StateFlow<String> = _currentModelLabel.asStateFlow()
+    private val _currentModelRef = MutableStateFlow(LLM_MODEL_OPTIONS.first().modelRef())
+    val currentModelRef: StateFlow<String?> = _currentModelRef.asStateFlow()
 
     // Challenge nonce for auth handshake
     private var challengeNonce: String? = null
@@ -628,8 +632,18 @@ class OpenClawClient(
      * Send a slash command (e.g., "/model", "/clear").
      */
     fun sendSlashCommand(command: String) {
+        val trimmed = command.trim()
+        val isModelCommand = trimmed.startsWith("/model ")
         // Slash commands are just user messages starting with /
-        sendMessage(command)
+        sendMessage(trimmed) { success ->
+            if (success && isModelCommand) {
+                publishCurrentModelForCommand(trimmed)
+                scope.launch {
+                    delay(900L)
+                    requestModels()
+                }
+            }
+        }
     }
 
     fun requestModels(view: String = "default") {
@@ -644,12 +658,20 @@ class OpenClawClient(
                     return@launch
                 }
 
-                val options = parseGatewayModelOptions(response.payload)
-                if (options.isEmpty()) {
+                val parsed = parseGatewayModelOptions(response.payload)
+                if (parsed.options.isEmpty()) {
                     Log.w(TAG, "Gateway returned no usable models; keeping fallback list")
-                    publishModelOptions(LLM_MODEL_OPTIONS)
+                    publishModelOptions(
+                        LLM_MODEL_OPTIONS,
+                        currentModelRef = parsed.currentModelRef,
+                        currentModelLabel = parsed.currentModelLabel
+                    )
                 } else {
-                    publishModelOptions(options)
+                    publishModelOptions(
+                        parsed.options,
+                        currentModelRef = parsed.currentModelRef,
+                        currentModelLabel = parsed.currentModelLabel
+                    )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Unable to load gateway model list")
@@ -1109,10 +1131,37 @@ class OpenClawClient(
         ))
     }
 
-    private fun publishModelOptions(options: List<LlmModelOption>) {
+    fun modelOptionsUpdate(): ModelOptionsUpdate = ModelOptionsUpdate(
+        options = _modelOptions.value,
+        currentModelLabel = _currentModelLabel.value,
+        currentModelRef = _currentModelRef.value
+    )
+
+    private fun publishModelOptions(
+        options: List<LlmModelOption>,
+        currentModelRef: String? = null,
+        currentModelLabel: String? = null
+    ) {
         val next = options.ifEmpty { LLM_MODEL_OPTIONS }
         _modelOptions.value = next
-        onModelOptions?.invoke(ModelOptionsUpdate(options = next))
+        val resolved = resolveCurrentModel(next, currentModelRef, currentModelLabel)
+            ?: resolveCurrentModel(next, _currentModelRef.value, _currentModelLabel.value)
+            ?: next.firstOrNull()?.let { it.label to it.modelRef() }
+        if (resolved != null) {
+            _currentModelLabel.value = resolved.first
+            _currentModelRef.value = resolved.second
+        }
+        onModelOptions?.invoke(modelOptionsUpdate())
+    }
+
+    private fun publishCurrentModelForCommand(command: String) {
+        val ref = command.modelRefFromSlashCommand() ?: return
+        val option = _modelOptions.value.firstOrNull { it.matchesModel(ref, null) }
+        publishModelOptions(
+            _modelOptions.value,
+            currentModelRef = ref,
+            currentModelLabel = option?.label ?: ref.substringAfter('/')
+        )
     }
 
     private fun isCurrentSocket(generation: Long, callbackSocket: WebSocket): Boolean {
@@ -1155,10 +1204,22 @@ class OpenClawClient(
     }
 }
 
-private fun parseGatewayModelOptions(payload: JsonObject?): List<LlmModelOption> {
-    val models = payload?.getAsJsonArray("models") ?: return emptyList()
+private data class ParsedModelOptions(
+    val options: List<LlmModelOption>,
+    val currentModelRef: String?,
+    val currentModelLabel: String?
+)
+
+private fun parseGatewayModelOptions(payload: JsonObject?): ParsedModelOptions {
+    val models = payload?.getAsJsonArray("models") ?: return ParsedModelOptions(
+        options = emptyList(),
+        currentModelRef = payload.currentModelRef(),
+        currentModelLabel = payload.currentModelLabel()
+    )
     val seen = linkedSetOf<String>()
     val options = mutableListOf<LlmModelOption>()
+    var flaggedCurrentRef: String? = null
+    var flaggedCurrentLabel: String? = null
 
     for (element in models) {
         val model = element.takeIf { it.isJsonObject }?.asJsonObject ?: continue
@@ -1174,14 +1235,107 @@ private fun parseGatewayModelOptions(payload: JsonObject?): List<LlmModelOption>
         if (!seen.add(ref)) continue
 
         val name = model.stringOrNull("name")
+        val label = name ?: id
         options += LlmModelOption(
-            label = name ?: id,
+            label = label,
             command = "/model $ref",
             description = modelSourceLabel(provider, id)
         )
+        if (model.booleanOrFalse("current") || model.booleanOrFalse("active") || model.booleanOrFalse("selected")) {
+            flaggedCurrentRef = ref
+            flaggedCurrentLabel = label
+        }
     }
 
-    return options
+    return ParsedModelOptions(
+        options = options,
+        currentModelRef = payload.currentModelRef() ?: flaggedCurrentRef,
+        currentModelLabel = payload.currentModelLabel() ?: flaggedCurrentLabel
+    )
+}
+
+private fun resolveCurrentModel(
+    options: List<LlmModelOption>,
+    currentModelRef: String?,
+    currentModelLabel: String?
+): Pair<String, String>? {
+    val ref = currentModelRef?.trim()?.takeIf { it.isNotBlank() }
+    val label = currentModelLabel?.trim()?.takeIf { it.isNotBlank() }
+
+    val option = options.firstOrNull { it.matchesModel(ref, label) }
+        ?: options.firstOrNull { candidate ->
+            label != null && candidate.modelRef().substringAfter('/').equals(label, ignoreCase = true)
+        }
+
+    if (option != null) return option.label to option.modelRef()
+    if (label != null) return label to (ref ?: label)
+    if (ref != null) return ref.substringAfter('/') to ref
+    return null
+}
+
+private fun JsonObject?.currentModelRef(): String? {
+    if (this == null) return null
+    val fields = listOf("currentModel", "current_model", "current", "activeModel", "active", "selectedModel", "model")
+    for (field in fields) {
+        val parsed = get(field).modelPointer()
+        if (parsed?.first != null) return parsed.first
+    }
+    return null
+}
+
+private fun JsonObject?.currentModelLabel(): String? {
+    if (this == null) return null
+    val direct = stringOrNull("currentModelLabel")
+        ?: stringOrNull("current_model_label")
+        ?: stringOrNull("modelLabel")
+    if (direct != null) return direct
+
+    val fields = listOf("currentModel", "current_model", "current", "activeModel", "active", "selectedModel", "model")
+    for (field in fields) {
+        val parsed = get(field).modelPointer()
+        if (parsed?.second != null) return parsed.second
+    }
+    return null
+}
+
+private fun com.google.gson.JsonElement?.modelPointer(): Pair<String?, String?>? {
+    if (this == null || isJsonNull) return null
+    if (isJsonPrimitive) {
+        val value = runCatching { asString }.getOrNull()?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return if (value.contains("/")) value to value.substringAfter('/') else null to value
+    }
+    if (!isJsonObject) return null
+    val obj = asJsonObject
+    val provider = obj.stringOrNull("provider")
+    val idOrModel = obj.stringOrNull("id") ?: obj.stringOrNull("model") ?: obj.stringOrNull("name")
+    val ref = when {
+        provider != null && idOrModel != null && !idOrModel.contains("/") -> "$provider/$idOrModel"
+        idOrModel != null && idOrModel.contains("/") -> idOrModel
+        else -> null
+    }
+    val label = obj.stringOrNull("label") ?: obj.stringOrNull("name") ?: idOrModel?.substringAfter('/')
+    return if (ref != null || label != null) ref to label else null
+}
+
+private fun String.modelRefFromSlashCommand(): String? {
+    if (!startsWith("/model")) return null
+    return removePrefix("/model").trim().takeIf { it.isNotBlank() }
+}
+
+private fun LlmModelOption.modelRef(): String = command.modelRefFromSlashCommand() ?: command
+
+private fun LlmModelOption.matchesModel(ref: String?, label: String?): Boolean {
+    val optionRef = modelRef()
+    return (ref != null && (
+        optionRef.equals(ref, ignoreCase = true) ||
+            optionRef.substringAfter('/').equals(ref, ignoreCase = true) ||
+            ref.substringAfter('/').equals(optionRef.substringAfter('/'), ignoreCase = true)
+        )) ||
+        (label != null && (
+            this.label.equals(label, ignoreCase = true) ||
+                optionRef.equals(label, ignoreCase = true) ||
+                optionRef.substringAfter('/').equals(label, ignoreCase = true)
+            ))
 }
 
 private fun modelSourceLabel(provider: String, id: String): String {
@@ -1200,6 +1354,12 @@ private fun JsonObject.stringOrNull(name: String): String? {
     val value = get(name) ?: return null
     if (value.isJsonNull) return null
     return runCatching { value.asString }.getOrNull()?.takeIf { it.isNotBlank() }
+}
+
+private fun JsonObject.booleanOrFalse(name: String): Boolean {
+    val value = get(name) ?: return false
+    if (!value.isJsonPrimitive) return false
+    return runCatching { value.asBoolean }.getOrDefault(false)
 }
 
 private fun JsonObject.longOrNull(name: String): Long? {

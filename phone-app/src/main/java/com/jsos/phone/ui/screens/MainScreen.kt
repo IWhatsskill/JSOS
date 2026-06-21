@@ -111,7 +111,6 @@ import com.jsos.shared.ChatMessage
 import com.jsos.shared.ConnectionUpdate
 import com.jsos.shared.LLM_MODEL_OPTIONS
 import com.jsos.shared.LlmModelOption
-import com.jsos.shared.ModelOptionsUpdate
 import com.jsos.shared.SessionInfo
 import com.jsos.shared.SessionListUpdate
 import com.jsos.shared.TtsState
@@ -189,6 +188,7 @@ fun MainScreen() {
     val selectedVoiceLanguage by voiceLanguageManager.selectedLanguage.collectAsState()
     val sessionList by openClawClient.sessionList.collectAsState()
     val modelOptions by openClawClient.modelOptions.collectAsState()
+    val currentModelLabel by openClawClient.currentModelLabel.collectAsState()
     val currentSessionKey by openClawClient.currentSessionKey.collectAsState()
     val unreadSessions by openClawClient.unreadSessions.collectAsState()
     val wakeOnStreamEnabled by glassesManager.wakeSignalManager.enabled.collectAsState()
@@ -281,6 +281,12 @@ fun MainScreen() {
     var showModelPicker by remember { mutableStateOf(false) }
     var selectedModelLabel by remember {
         mutableStateOf(prefs.getString("selected_llm_model_label", LLM_MODEL_OPTIONS.first().label) ?: LLM_MODEL_OPTIONS.first().label)
+    }
+    LaunchedEffect(currentModelLabel) {
+        if (currentModelLabel.isNotBlank() && selectedModelLabel != currentModelLabel) {
+            selectedModelLabel = currentModelLabel
+            prefs.edit().putString("selected_llm_model_label", currentModelLabel).apply()
+        }
     }
     var pendingPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
     var ignoreAiExitUntilMs by remember { mutableLongStateOf(0L) }
@@ -432,9 +438,9 @@ fun MainScreen() {
                     voiceName = ttsSettingsManager.selectedVoiceName.value
                 )
                 glassesManager.sendRawMessage(ttsStateMsg.toJson())
-                glassesManager.sendRawMessage(ModelOptionsUpdate(options = modelOptions).toJson())
+                glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
                 mainHandler.postDelayed({
-                    glassesManager.sendRawMessage(ModelOptionsUpdate(options = openClawClient.modelOptions.value).toJson())
+                    glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
                 }, 700L)
             }
             is GlassesConnectionManager.ConnectionState.Disconnected -> {
@@ -1007,7 +1013,8 @@ fun MainScreen() {
                             voiceName = ttsSettingsManager.selectedVoiceName.value
                         )
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
-                        glassesManager.sendRawMessage(ModelOptionsUpdate(options = openClawClient.modelOptions.value).toJson())
+                        openClawClient.requestModels()
+                        glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
                     }
                     "tts_toggle" -> {
                         val enabled = json.optBoolean("enabled", false)

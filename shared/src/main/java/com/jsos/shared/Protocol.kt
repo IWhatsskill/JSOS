@@ -239,7 +239,9 @@ data class SessionInfo(
  */
 data class ModelOptionsUpdate(
     @SerializedName("type") val type: String = "model_options",
-    @SerializedName("options") val options: List<LlmModelOption>
+    @SerializedName("options") val options: List<LlmModelOption>,
+    @SerializedName("currentModelLabel") val currentModelLabel: String? = null,
+    @SerializedName("currentModelRef") val currentModelRef: String? = null
 ) {
     fun toJson(): String = gson.toJson(this)
 

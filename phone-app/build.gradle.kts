@@ -51,8 +51,8 @@ android {
         applicationId = "com.jsos.phone"
         minSdk = 28  // Required by CXR-M SDK
         targetSdk = 34
-        versionCode = 205
-        versionName = "2.0.5-dynamic-sessions"
+        versionCode = 206
+        versionName = "2.0.6-current-model"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

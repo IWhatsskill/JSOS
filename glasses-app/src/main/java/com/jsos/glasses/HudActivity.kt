@@ -1599,10 +1599,15 @@ class HudActivity : ComponentActivity() {
                 val item = commands[current.selectedSlashIndex]
                 when (item.command) {
                     "/model" -> {
+                        val modelOptions = slashParamOptions(SlashParamMenuType.MODEL, current.modelParamOptions)
                         hudState.value = current.copy(
                             showSlashMenu = false,
                             showSlashParamMenu = true,
-                            selectedSlashParamIndex = 0,
+                            selectedSlashParamIndex = currentModelIndex(
+                                modelOptions,
+                                current.currentModelRef,
+                                current.currentModelLabel
+                            ),
                             slashParamMenuType = SlashParamMenuType.MODEL
                         )
                     }
@@ -2370,15 +2375,25 @@ class HudActivity : ComponentActivity() {
                 }
 
                 "model_options" -> {
-                    val options = parseModelOptionsMessage(msg)
+                    val parsed = parseModelOptionsMessage(msg)
                     hudState.update { current ->
+                        val selectedIndex = if (current.slashParamMenuType == SlashParamMenuType.MODEL) {
+                            currentModelIndex(
+                                parsed.options,
+                                parsed.currentModelRef ?: current.currentModelRef,
+                                parsed.currentModelLabel ?: current.currentModelLabel
+                            )
+                        } else {
+                            current.selectedSlashParamIndex.coerceAtMost(parsed.options.lastIndex.coerceAtLeast(0))
+                        }
                         current.copy(
-                            modelParamOptions = options,
-                            selectedSlashParamIndex = current.selectedSlashParamIndex
-                                .coerceAtMost(options.lastIndex.coerceAtLeast(0))
+                            modelParamOptions = parsed.options,
+                            currentModelLabel = parsed.currentModelLabel ?: current.currentModelLabel,
+                            currentModelRef = parsed.currentModelRef ?: current.currentModelRef,
+                            selectedSlashParamIndex = selectedIndex
                         )
                     }
-                    Log.d(GlassesApp.TAG, "Model options updated: ${options.size}")
+                    Log.d(GlassesApp.TAG, "Model options updated: ${parsed.options.size}")
                 }
 
                 "remote_gesture" -> {
@@ -2579,8 +2594,20 @@ class HudActivity : ComponentActivity() {
         }
     }
 
-    private fun parseModelOptionsMessage(msg: JSONObject): List<SlashParamOption> {
-        val array = msg.optJSONArray("options") ?: return MODEL_PARAM_OPTIONS
+    private data class ParsedHudModelOptions(
+        val options: List<SlashParamOption>,
+        val currentModelLabel: String?,
+        val currentModelRef: String?
+    )
+
+    private fun parseModelOptionsMessage(msg: JSONObject): ParsedHudModelOptions {
+        val currentLabel = msg.optString("currentModelLabel", "").trim().takeIf { it.isNotBlank() }
+        val currentRef = msg.optString("currentModelRef", "").trim().takeIf { it.isNotBlank() }
+        val array = msg.optJSONArray("options") ?: return ParsedHudModelOptions(
+            options = MODEL_PARAM_OPTIONS,
+            currentModelLabel = currentLabel,
+            currentModelRef = currentRef
+        )
         val models = mutableListOf<LlmModelOption>()
 
         for (i in 0 until array.length()) {
@@ -2596,7 +2623,36 @@ class HudActivity : ComponentActivity() {
             )
         }
 
-        return if (models.isEmpty()) MODEL_PARAM_OPTIONS else modelParamOptionsFrom(models)
+        val options = if (models.isEmpty()) MODEL_PARAM_OPTIONS else modelParamOptionsFrom(models)
+        return ParsedHudModelOptions(
+            options = options,
+            currentModelLabel = currentLabel,
+            currentModelRef = currentRef
+        )
+    }
+
+    private fun currentModelIndex(
+        options: List<SlashParamOption>,
+        currentModelRef: String?,
+        currentModelLabel: String
+    ): Int {
+        if (options.isEmpty()) return 0
+        val ref = currentModelRef?.trim()?.takeIf { it.isNotBlank() }
+        val label = currentModelLabel.trim().takeIf { it.isNotBlank() }
+        val index = options.indexOfFirst { option ->
+            val optionRef = option.command.removePrefix("/model").trim()
+            (ref != null && (
+                optionRef.equals(ref, ignoreCase = true) ||
+                    optionRef.substringAfter('/').equals(ref, ignoreCase = true) ||
+                    ref.substringAfter('/').equals(optionRef.substringAfter('/'), ignoreCase = true)
+                )) ||
+                (label != null && (
+                    option.label.equals(label, ignoreCase = true) ||
+                        optionRef.equals(label, ignoreCase = true) ||
+                        optionRef.substringAfter('/').equals(label, ignoreCase = true)
+                    ))
+        }
+        return index.coerceAtLeast(0)
     }
 
     private fun pruneExpiredChunks(now: Long) {
