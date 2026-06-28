@@ -1,7 +1,12 @@
 package com.jsos.phone.ui.screens
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -108,6 +113,7 @@ import com.jsos.phone.voice.VoiceCommandHandler
 import com.jsos.phone.voice.VoiceLanguageManager
 import com.jsos.phone.voice.AgentWakeRouter
 import com.jsos.phone.voice.VoiceRecognitionManager
+import com.jsos.phone.watch.PhoneWatchBridge
 import com.jsos.shared.ChatMessage
 import com.jsos.shared.ConnectionUpdate
 import com.jsos.shared.LLM_MODEL_OPTIONS
@@ -115,6 +121,14 @@ import com.jsos.shared.LlmModelOption
 import com.jsos.shared.SessionInfo
 import com.jsos.shared.SessionListUpdate
 import com.jsos.shared.TtsState
+import com.jsos.shared.WatchChatMessage
+import com.jsos.shared.WatchChatSnapshot
+import com.jsos.shared.WatchCodexSession
+import com.jsos.shared.WatchCodexSessions
+import com.jsos.shared.WatchCommandActions
+import com.jsos.shared.WatchCommandAck
+import com.jsos.shared.WatchCoreStatus
+import com.jsos.shared.WatchVoiceOutputRoutes
 import com.jsos.shared.stableSessionDisplayName
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -174,7 +188,6 @@ fun MainScreen() {
     val voiceRecognitionManager = remember { VoiceRecognitionManager(context) }
     val ttsSettingsManager = remember { TtsSettingsManager(context) }
     val elevenLabsClient = remember { ElevenLabsClient() }
-    val ttsPlaybackManager = remember { TtsPlaybackManager(context, elevenLabsClient, ttsSettingsManager) }
     val liveTalkAudioRouteManager = remember { LiveTalkAudioRouteManager(context) }
     val codexCliBridgeClient = remember { CodexCliBridgeClient() }
 
@@ -225,6 +238,19 @@ fun MainScreen() {
     // Persist non-sensitive OpenClaw settings in SharedPreferences.
     val prefs = remember { context.getSharedPreferences("jsos", android.content.Context.MODE_PRIVATE) }
     val securePrefs = remember { SecurePrefs(context).also { it.migrateString(prefs, "openclaw_token") } }
+    var voiceOutputRoute by remember {
+        mutableStateOf(prefs.getString("watch_voice_output_route", WatchVoiceOutputRoutes.DEFAULT) ?: WatchVoiceOutputRoutes.DEFAULT)
+    }
+    val ttsPlaybackManager = remember {
+        TtsPlaybackManager(
+            context = context,
+            client = elevenLabsClient,
+            settings = ttsSettingsManager,
+            outputRouteProvider = { voiceOutputRoute },
+            watchAudioSender = { file -> PhoneWatchBridge.publishTtsAudio(context, file) },
+            watchAudioStopper = { PhoneWatchBridge.publishTtsAudioStop(context) }
+        )
+    }
     var openClawHost by remember {
         mutableStateOf(prefs.getString("openclaw_host", "10.0.2.2") ?: "10.0.2.2")
     }
@@ -289,6 +315,97 @@ fun MainScreen() {
             prefs.edit().putString("selected_llm_model_label", currentModelLabel).apply()
         }
     }
+
+    fun watchLiveTalkLabel(): String = when (liveTalkState) {
+        is LiveTalkState.Connecting -> "THINKING"
+        is LiveTalkState.Listening -> "LISTENING"
+        is LiveTalkState.Speaking -> "SPEAKING"
+        is LiveTalkState.Error -> "ERROR"
+        is LiveTalkState.Idle -> "IDLE"
+    }
+
+    fun currentWatchSessionLabel(): String {
+        val key = currentSessionKey ?: return ""
+        return visibleSessionList.firstOrNull { it.key == key }
+            ?.coreDisplayLabel()
+            ?.title
+            ?: stableSessionDisplayName(key)
+    }
+
+    fun lastWatchAnswer(): String =
+        chatMessages
+            .lastOrNull { it.role.equals("assistant", ignoreCase = true) }
+            ?.content
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            ?.take(96)
+            .orEmpty()
+
+    fun watchChatMessages(source: List<ChatMessage> = chatMessages): List<WatchChatMessage> =
+        source
+            .takeLast(60)
+            .mapNotNull { message ->
+                val text = message.content
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                    .take(900)
+                if (text.isBlank()) {
+                    null
+                } else {
+                    WatchChatMessage(
+                        id = message.id,
+                        role = message.role,
+                        text = text,
+                        timestamp = message.timestamp
+                    )
+                }
+            }
+
+    fun publishWatchChatSnapshot(source: List<ChatMessage> = chatMessages) {
+        PhoneWatchBridge.publishChatSnapshot(
+            context,
+            WatchChatSnapshot(
+                currentSession = currentWatchSessionLabel(),
+                currentModel = currentModelLabel.ifBlank { selectedModelLabel },
+                messages = watchChatMessages(source)
+            )
+        )
+    }
+
+    fun publishWatchStatus() {
+        PhoneWatchBridge.publishStatus(
+            context,
+            WatchCoreStatus(
+                coreOnline = true,
+                hudOnline = glassesState is GlassesConnectionManager.ConnectionState.Connected,
+                gatewayOnline = openClawState is OpenClawClient.ConnectionState.Connected,
+                liveTalkState = watchLiveTalkLabel(),
+                ttsEnabled = ttsEnabled,
+                sttEnabled = isListening,
+                voiceOutputRoute = voiceOutputRoute,
+                currentSession = currentWatchSessionLabel(),
+                currentModel = currentModelLabel,
+                lastAnswer = lastWatchAnswer()
+            )
+        )
+    }
+
+    LaunchedEffect(
+        glassesState,
+        openClawState,
+        liveTalkState,
+        ttsEnabled,
+        isListening,
+        voiceOutputRoute,
+        currentSessionKey,
+        visibleSessionList,
+        currentModelLabel,
+        chatMessages
+    ) {
+        publishWatchStatus()
+        publishWatchChatSnapshot()
+    }
+
     var pendingPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
     var ignoreAiExitUntilMs by remember { mutableLongStateOf(0L) }
     var liveTalkSource by remember { mutableStateOf<LiveTalkSource?>(null) }
@@ -302,6 +419,7 @@ fun MainScreen() {
     var codexCliSessions by remember { mutableStateOf<List<CodexCliSession>>(emptyList()) }
     var codexCliCurrentSessionId by remember { mutableStateOf<String?>(null) }
     var pendingCodexCliSend by remember { mutableStateOf<PendingCodexCliSend?>(null) }
+    var pendingWatchCodexResumeAck by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showCodexCliSessionPicker by remember { mutableStateOf(false) }
     val codexCliUrl = remember(openClawHost) { codexCliBridgeUrl(openClawHost) }
     var glassesVoiceButtonMode by remember {
@@ -360,6 +478,27 @@ fun MainScreen() {
             })
         }
         glassesManager.sendRawMessage(msg.toString())
+    }
+
+    fun publishWatchCodexSessions(
+        sessions: List<CodexCliSession> = codexCliSessions,
+        currentSessionId: String? = codexCliCurrentSessionId,
+    ) {
+        PhoneWatchBridge.publishCodexSessions(
+            context,
+            WatchCodexSessions(
+                sessions = sessions.map { session ->
+                    WatchCodexSession(
+                        id = session.id,
+                        label = session.label.take(36),
+                        subtitle = session.subtitle.orEmpty().take(48),
+                        isCurrent = session.isCurrent || session.id == currentSessionId,
+                        updatedAt = session.updatedAt
+                    )
+                },
+                currentSessionId = currentSessionId.orEmpty()
+            )
+        )
     }
 
     fun sendCodexCliSnapshotToGlasses(
@@ -525,11 +664,14 @@ fun MainScreen() {
                 codexCliCurrentSessionId = currentSessionId
             }
             sendCodexSessionsToGlasses(sessions, currentSessionId)
+            publishWatchCodexSessions(sessions, currentSessionId)
         }
         codexCliBridgeClient.onSessionResumed = { session ->
             mainHandler.post {
                 val pendingSend = pendingCodexCliSend
+                val pendingWatchAck = pendingWatchCodexResumeAck
                 pendingCodexCliSend = null
+                pendingWatchCodexResumeAck = null
                 val updatedSessions = codexCliSessions.map {
                     it.copy(isCurrent = it.id == session.id)
                 }.ifEmpty { listOf(session.copy(isCurrent = true)) }
@@ -537,6 +679,18 @@ fun MainScreen() {
                 codexCliSessions = updatedSessions
                 showCodexCliSessionPicker = false
                 sendCodexSessionsToGlasses(updatedSessions, session.id)
+                publishWatchCodexSessions(updatedSessions, session.id)
+                if (pendingWatchAck?.second == session.id) {
+                    PhoneWatchBridge.publishCommandAck(
+                        context,
+                        WatchCommandAck(
+                            id = pendingWatchAck.first,
+                            action = WatchCommandActions.CODEX_RESUME,
+                            ok = true,
+                            message = "Resumed ${session.label.take(24)}"
+                        )
+                    )
+                }
                 if (pendingSend == null) {
                     codexCliLines = (codexCliLines + "[resume] ${session.label}").takeLast(220)
                     val resumedMsg = org.json.JSONObject().apply {
@@ -944,6 +1098,315 @@ fun MainScreen() {
 
     fun startLiveTalkFromGlasses() = startLiveTalk(LiveTalkSource.Glasses)
     fun toggleLiveTalkFromPhone() = startLiveTalk(LiveTalkSource.Phone)
+
+    fun acknowledgeWatchCommand(commandId: String, action: String, ok: Boolean, message: String) {
+        PhoneWatchBridge.publishCommandAck(
+            context,
+            WatchCommandAck(
+                id = commandId,
+                action = action,
+                ok = ok,
+                message = message
+            )
+        )
+        publishWatchStatus()
+    }
+
+    fun voiceOutputRouteLabel(route: String): String =
+        when (route) {
+            WatchVoiceOutputRoutes.GLASSES -> "GLASSES"
+            WatchVoiceOutputRoutes.PHONE -> "PHONE"
+            WatchVoiceOutputRoutes.WATCH -> "WATCH"
+            WatchVoiceOutputRoutes.OFF -> "OFF"
+            else -> "GLASSES"
+        }
+
+    fun toggleWatchTts(): Pair<Boolean, String> {
+        val enabled = !ttsSettingsManager.isEnabled.value
+        ttsSettingsManager.setEnabled(enabled)
+        if (!enabled) {
+            ttsPlaybackManager.stop()
+        }
+        val ttsStateMsg = TtsState(
+            enabled = enabled,
+            voiceName = ttsSettingsManager.selectedVoiceName.value
+        )
+        glassesManager.sendRawMessage(ttsStateMsg.toJson())
+        return true to "TTS ${if (enabled) "ON" else "OFF"}"
+    }
+
+    fun toggleWatchStt(): Pair<Boolean, String> {
+        if (voiceRecognitionManager.isListening.value) {
+            stopGlassesVoiceRecognition()
+            return true to "STT OFF"
+        }
+        if (openClawState !is OpenClawClient.ConnectionState.Connected) {
+            return false to "Gateway offline"
+        }
+        if (liveTalkManager.isActive) {
+            stopLiveTalk()
+        }
+        startVoiceRecognitionWithManager(
+            voiceRecognitionManager = voiceRecognitionManager,
+            voiceHandler = voiceHandler,
+            openClawClient = openClawClient,
+            glassesManager = glassesManager,
+            mainHandler = mainHandler,
+            isRetry = false,
+            languageTag = voiceLanguageManager.getActiveLanguageTag(),
+            pendingPhotos = { pendingPhotos },
+            onPhotosConsumed = { pendingPhotos = emptyList() }
+        )
+        return true to "STT ON"
+    }
+
+    fun cycleWatchVoiceOutput(): Pair<Boolean, String> {
+        val nextRoute = WatchVoiceOutputRoutes.next(voiceOutputRoute)
+        voiceOutputRoute = nextRoute
+        prefs.edit().putString("watch_voice_output_route", nextRoute).apply()
+        if (nextRoute == WatchVoiceOutputRoutes.OFF || nextRoute == WatchVoiceOutputRoutes.WATCH) {
+            ttsPlaybackManager.stop()
+        }
+        return true to "Output ${voiceOutputRouteLabel(nextRoute)}"
+    }
+
+    fun stopSpeakingNow(): Pair<Boolean, String> {
+        ttsPlaybackManager.stop()
+        liveTalkManager.stopSpeaking()
+        return true to "Speaking stopped"
+    }
+
+    fun closeHudNow(): Pair<Boolean, String> {
+        if (liveTalkManager.isActive) {
+            stopLiveTalk()
+        } else {
+            sendVoiceState("idle")
+        }
+        voiceRecognitionManager.stopListening()
+        ttsPlaybackManager.stop()
+        liveTalkManager.stopSpeaking()
+        dismissRokidAiSceneBurst()
+        return true to "HUD idle"
+    }
+
+    fun startLiveTalkForWatch(): Pair<Boolean, String> {
+        if (liveTalkManager.isActive) {
+            return true to "Live Talk already active"
+        }
+        if (openClawState !is OpenClawClient.ConnectionState.Connected) {
+            sendVoiceError("OpenClaw gateway offline")
+            sendVoiceState("idle")
+            return false to "Gateway offline"
+        }
+        startLiveTalk(LiveTalkSource.Phone)
+        return true to "Live Talk starting"
+    }
+
+    fun stopLiveTalkForWatch(): Pair<Boolean, String> {
+        if (!liveTalkManager.isActive) {
+            return true to "Live Talk already stopped"
+        }
+        stopLiveTalk()
+        return true to "Live Talk stopped"
+    }
+
+    fun cycleSessionForWatch(direction: Int): Pair<Boolean, String> {
+        if (openClawState !is OpenClawClient.ConnectionState.Connected) {
+            return false to "Gateway offline"
+        }
+
+        val sessions = visibleSessionList
+        if (sessions.isEmpty()) {
+            openClawClient.requestSessions()
+            return false to "No sessions"
+        }
+
+        val currentIndex = sessions.indexOfFirst { it.key == currentSessionKey }
+        val nextIndex = if (currentIndex >= 0) {
+            (currentIndex + direction + sessions.size) % sessions.size
+        } else if (direction >= 0) {
+            0
+        } else {
+            sessions.lastIndex
+        }
+        val next = sessions[nextIndex]
+        openClawClient.switchSession(next.key)
+        return true to "Session ${next.coreDisplayLabel().title.take(32)}"
+    }
+
+    fun cycleModelForWatch(direction: Int): Pair<Boolean, String> {
+        if (openClawState !is OpenClawClient.ConnectionState.Connected) {
+            return false to "Gateway offline"
+        }
+        if (agentActivity != OpenClawClient.AgentActivityState.Ready) {
+            return false to "Agent busy"
+        }
+
+        val options = modelOptions.ifEmpty { LLM_MODEL_OPTIONS }
+        val currentLabel = currentModelLabel.ifBlank { selectedModelLabel }
+        val currentIndex = options.indexOfFirst { it.label == currentLabel }
+        val nextIndex = if (currentIndex >= 0) {
+            (currentIndex + direction + options.size) % options.size
+        } else if (direction >= 0) {
+            0
+        } else {
+            options.lastIndex
+        }
+        val next = options[nextIndex]
+        selectedModelLabel = next.label
+        prefs.edit().putString("selected_llm_model_label", next.label).apply()
+        openClawClient.sendSlashCommand(next.command)
+        return true to "Model ${next.label}"
+    }
+
+    fun requestWatchCodexSessions(commandId: String, action: String) {
+        when (codexCliStatus) {
+            CodexCliBridgeClient.State.CONNECTED -> {
+                val requested = codexCliBridgeClient.requestSessions()
+                if (requested) {
+                    publishWatchCodexSessions()
+                    acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex sessions")
+                } else {
+                    acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex request failed")
+                }
+            }
+            CodexCliBridgeClient.State.CONNECTING -> {
+                acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex connecting")
+            }
+            else -> {
+                codexCliBridgeClient.connect(codexCliBridgeUrl(openClawHost))
+                acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex connecting")
+            }
+        }
+    }
+
+    fun resumeWatchCodexSession(commandId: String, action: String, targetId: String) {
+        val sessionId = targetId.trim()
+        if (sessionId.isBlank()) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "No Codex session")
+            return
+        }
+        if (codexCliStatus != CodexCliBridgeClient.State.CONNECTED) {
+            codexCliBridgeClient.connect(codexCliBridgeUrl(openClawHost))
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex offline")
+            return
+        }
+        pendingWatchCodexResumeAck = commandId to sessionId
+        if (!codexCliBridgeClient.resumeSession(sessionId)) {
+            pendingWatchCodexResumeAck = null
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Resume failed")
+        }
+    }
+
+    fun handleWatchAssistantText(text: String, commandId: String, action: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Empty command")
+            return
+        }
+        if (openClawState !is OpenClawClient.ConnectionState.Connected) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Gateway offline")
+            return
+        }
+        if (trimmed.startsWith("/")) {
+            openClawClient.sendSlashCommand(trimmed)
+            acknowledgeWatchCommand(commandId, action, ok = true, message = "Command $trimmed")
+            return
+        }
+        submitChatMessage(trimmed, emptyList())
+        acknowledgeWatchCommand(commandId, action, ok = true, message = "Sent")
+    }
+
+    fun handleWatchCommand(commandId: String, action: String, targetId: String) {
+        when (action) {
+            WatchCommandActions.STOP_SPEAKING -> {
+                val (ok, message) = stopSpeakingNow()
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.HUD_CLEAR,
+            WatchCommandActions.HUD_CLOSE -> {
+                val (ok, message) = closeHudNow()
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.LIVE_TALK_TOGGLE -> {
+                val (ok, message) = if (liveTalkManager.isActive) {
+                    stopLiveTalkForWatch()
+                } else {
+                    startLiveTalkForWatch()
+                }
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.REQUEST_STATE -> {
+                publishWatchStatus()
+                publishWatchChatSnapshot()
+                acknowledgeWatchCommand(commandId, action, ok = true, message = "State sent")
+            }
+            WatchCommandActions.SESSION_PREVIOUS -> {
+                val (ok, message) = cycleSessionForWatch(direction = -1)
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.SESSION_NEXT -> {
+                val (ok, message) = cycleSessionForWatch(direction = 1)
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.MODEL_PREVIOUS -> {
+                val (ok, message) = cycleModelForWatch(direction = -1)
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.MODEL_NEXT -> {
+                val (ok, message) = cycleModelForWatch(direction = 1)
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.CODEX_SESSIONS_REQUEST -> requestWatchCodexSessions(commandId, action)
+            WatchCommandActions.CODEX_RESUME -> resumeWatchCodexSession(commandId, action, targetId)
+            WatchCommandActions.TTS_TOGGLE -> {
+                val (ok, message) = toggleWatchTts()
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.STT_TOGGLE -> {
+                val (ok, message) = toggleWatchStt()
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.VOICE_OUTPUT_NEXT -> {
+                val (ok, message) = cycleWatchVoiceOutput()
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
+            WatchCommandActions.ASSISTANT_COMMAND -> handleWatchAssistantText(
+                text = targetId,
+                commandId = commandId,
+                action = action
+            )
+            else -> acknowledgeWatchCommand(commandId, action, ok = false, message = "Unknown command")
+        }
+    }
+
+    val watchCommandHandlerState = rememberUpdatedState<(String, String, String) -> Unit>(
+        newValue = { commandId, action, targetId -> handleWatchCommand(commandId, action, targetId) }
+    )
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != PhoneWatchBridge.ACTION_WATCH_COMMAND) return
+                val commandId = intent.getStringExtra(PhoneWatchBridge.EXTRA_COMMAND_ID).orEmpty()
+                val action = intent.getStringExtra(PhoneWatchBridge.EXTRA_COMMAND_ACTION).orEmpty()
+                val targetId = intent.getStringExtra(PhoneWatchBridge.EXTRA_COMMAND_TARGET_ID).orEmpty()
+                if (commandId.isNotBlank() && action.isNotBlank()) {
+                    watchCommandHandlerState.value(commandId, action, targetId)
+                }
+            }
+        }
+        val filter = IntentFilter(PhoneWatchBridge.ACTION_WATCH_COMMAND)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+    }
 
     LaunchedEffect(liveTalkState) {
         when (val state = liveTalkState) {

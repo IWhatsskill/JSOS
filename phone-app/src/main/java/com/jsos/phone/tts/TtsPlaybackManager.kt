@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.util.Log
 import com.jsos.phone.glasses.RokidSdkManager
+import com.jsos.shared.WatchVoiceOutputRoutes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
@@ -23,7 +24,10 @@ import java.io.FileOutputStream
 class TtsPlaybackManager(
     private val context: Context,
     private val client: ElevenLabsClient,
-    private val settings: TtsSettingsManager
+    private val settings: TtsSettingsManager,
+    private val outputRouteProvider: () -> String = { WatchVoiceOutputRoutes.DEFAULT },
+    private val watchAudioSender: (File) -> Unit = {},
+    private val watchAudioStopper: () -> Unit = {}
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val playbackLock = Any()
@@ -39,6 +43,11 @@ class TtsPlaybackManager(
     fun speak(text: String) {
         if (!settings.isEnabled.value) {
             Log.d(TAG, "TTS disabled, skipping")
+            return
+        }
+
+        if (outputRouteProvider() == WatchVoiceOutputRoutes.OFF) {
+            Log.d(TAG, "TTS output off, skipping")
             return
         }
 
@@ -94,12 +103,20 @@ class TtsPlaybackManager(
 
                     Log.d(TAG, "Audio saved to temp file: ${tempFile.absolutePath}")
 
-                    // Play on main thread
-                    withContext(Dispatchers.Main) {
+                    if (outputRouteProvider() == WatchVoiceOutputRoutes.WATCH) {
                         if (isCurrentGeneration(generation)) {
-                            playAudioFile(tempFile, generation)
+                            sendAudioToWatch(tempFile, generation)
                         } else {
                             tempFile.delete()
+                        }
+                    } else {
+                        // Play on main thread
+                        withContext(Dispatchers.Main) {
+                            if (isCurrentGeneration(generation)) {
+                                playAudioFile(tempFile, generation)
+                            } else {
+                                tempFile.delete()
+                            }
                         }
                     }
                 }.onFailure { error ->
@@ -151,7 +168,11 @@ class TtsPlaybackManager(
             mediaPlayer?.release()
             mediaPlayer = null
 
-            RokidSdkManager.setCommunicationDevice()
+            if (outputRouteProvider() == WatchVoiceOutputRoutes.GLASSES) {
+                RokidSdkManager.setCommunicationDevice()
+            } else {
+                RokidSdkManager.clearCommunicationDevice()
+            }
 
             val player = MediaPlayer().apply {
                 setAudioAttributes(
@@ -191,6 +212,26 @@ class TtsPlaybackManager(
         }
     }
 
+    private fun sendAudioToWatch(file: File, generation: Int) {
+        if (!isCurrentGeneration(generation)) {
+            file.delete()
+            return
+        }
+
+        try {
+            Log.d(TAG, "Sending TTS audio to watch (${file.length()} bytes)")
+            watchAudioSender(file)
+            cleanup(generation)
+        } catch (e: Exception) {
+            if (isCurrentGeneration(generation)) {
+                Log.e(TAG, "Error sending audio to watch", e)
+                cleanup(generation)
+            } else {
+                file.delete()
+            }
+        }
+    }
+
     /**
      * Stop current playback and cleanup.
      */
@@ -200,6 +241,7 @@ class TtsPlaybackManager(
             synthesisJob?.cancel()
             synthesisJob = null
         }
+        watchAudioStopper()
         stopPlaybackResources()
     }
 

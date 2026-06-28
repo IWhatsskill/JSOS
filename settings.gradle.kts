@@ -21,3 +21,4 @@ rootProject.name = "JSOS"
 include(":phone-app")
 include(":glasses-app")
 include(":shared")
+include(":watch-app")

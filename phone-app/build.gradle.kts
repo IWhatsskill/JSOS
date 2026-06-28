@@ -119,6 +119,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("com.google.android.gms:play-services-wearable:18.2.0")
 
     // Jetpack Compose
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

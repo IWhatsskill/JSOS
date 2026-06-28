@@ -140,6 +140,11 @@ class OpenClawTalkManager(
         stopInternal(closeRemote = true, advanceGeneration = true)
     }
 
+    fun stopSpeaking() {
+        val sessionId = activeSessionId ?: return
+        handleBargeIn(sessionId, sessionGeneration.get(), trigger = "watch")
+    }
+
     private fun stopInternal(closeRemote: Boolean, advanceGeneration: Boolean = false) {
         if (advanceGeneration) {
             sessionGeneration.incrementAndGet()
