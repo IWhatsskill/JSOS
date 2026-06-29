@@ -125,6 +125,7 @@ import com.jsos.shared.WatchChatMessage
 import com.jsos.shared.WatchChatSnapshot
 import com.jsos.shared.WatchCodexSession
 import com.jsos.shared.WatchCodexSessions
+import com.jsos.shared.WatchCodexSnapshot
 import com.jsos.shared.WatchCommandActions
 import com.jsos.shared.WatchCommandAck
 import com.jsos.shared.WatchCoreStatus
@@ -341,9 +342,16 @@ fun MainScreen() {
             ?.take(96)
             .orEmpty()
 
-    fun watchChatMessages(source: List<ChatMessage> = chatMessages): List<WatchChatMessage> =
+    var watchMessageLimit by remember { mutableIntStateOf(60) }
+    var watchChatHasMore by remember { mutableStateOf(true) }
+    var pendingWatchChatMoreCommandId by remember { mutableStateOf<String?>(null) }
+
+    fun watchChatMessages(
+        source: List<ChatMessage> = chatMessages,
+        maxMessages: Int = watchMessageLimit
+    ): List<WatchChatMessage> =
         source
-            .takeLast(60)
+            .takeLast(maxMessages.coerceAtLeast(1))
             .mapNotNull { message ->
                 val text = message.content
                     .replace(Regex("\\s+"), " ")
@@ -361,13 +369,21 @@ fun MainScreen() {
                 }
             }
 
-    fun publishWatchChatSnapshot(source: List<ChatMessage> = chatMessages) {
+    fun publishWatchChatSnapshot(
+        source: List<ChatMessage> = chatMessages,
+        isLoadMore: Boolean = false,
+        hasMore: Boolean = watchChatHasMore || watchMessageLimit < source.size,
+        prependedCount: Int = 0,
+    ) {
         PhoneWatchBridge.publishChatSnapshot(
             context,
             WatchChatSnapshot(
                 currentSession = currentWatchSessionLabel(),
                 currentModel = currentModelLabel.ifBlank { selectedModelLabel },
-                messages = watchChatMessages(source)
+                messages = watchChatMessages(source),
+                hasMore = hasMore,
+                isLoadMore = isLoadMore,
+                prependedCount = prependedCount,
             )
         )
     }
@@ -501,6 +517,52 @@ fun MainScreen() {
         )
     }
 
+    fun watchCodexMessages(lines: List<String> = codexCliLines): List<WatchChatMessage> {
+        val now = System.currentTimeMillis()
+        return codexCliLineBlocks(lines.takeLast(120), showPrompts = true)
+            .takeLast(80)
+            .mapIndexedNotNull { index, block ->
+                val text = block.text.trim().take(1200)
+                if (text.isBlank()) {
+                    null
+                } else {
+                    val role = when (block.type) {
+                        CodexCliLineType.PROMPT -> "user"
+                        CodexCliLineType.ERROR -> "error"
+                        CodexCliLineType.SYSTEM -> "system"
+                        CodexCliLineType.RESPONSE -> "assistant"
+                    }
+                    WatchChatMessage(
+                        id = "codex-${now}-${index}-${text.hashCode()}",
+                        role = role,
+                        text = text,
+                        timestamp = now + index
+                    )
+                }
+            }
+    }
+
+    fun publishWatchCodexSnapshot(
+        lines: List<String> = codexCliLines,
+        status: CodexCliBridgeClient.State = codexCliStatus,
+        detail: String? = codexCliDetail,
+        sessions: List<CodexCliSession> = codexCliSessions,
+        currentSessionId: String? = codexCliCurrentSessionId,
+    ) {
+        val currentSession = sessions.firstOrNull { it.id == currentSessionId }
+            ?: sessions.firstOrNull { it.isCurrent }
+        PhoneWatchBridge.publishCodexSnapshot(
+            context,
+            WatchCodexSnapshot(
+                status = status.name,
+                detail = detail.orEmpty(),
+                currentSessionId = currentSession?.id.orEmpty(),
+                currentSessionLabel = currentSession?.label.orEmpty(),
+                messages = watchCodexMessages(lines)
+            )
+        )
+    }
+
     fun sendCodexCliSnapshotToGlasses(
         lines: List<String> = codexCliLines,
         status: CodexCliBridgeClient.State = codexCliStatus,
@@ -524,6 +586,7 @@ fun MainScreen() {
             put("append", false)
         }
         glassesManager.sendRawMessage(outputMsg.toString())
+        publishWatchCodexSnapshot(lines, status, detail)
     }
 
     fun sendCodexCliOutputToGlasses(text: String, append: Boolean = true) {
@@ -533,6 +596,7 @@ fun MainScreen() {
             put("append", append)
         }
         glassesManager.sendRawMessage(outputMsg.toString())
+        publishWatchCodexSnapshot()
     }
 
     fun failPendingCodexCliSend(message: String) {
@@ -546,6 +610,7 @@ fun MainScreen() {
 
     fun dispatchCodexCliSend(request: PendingCodexCliSend) {
         codexCliLines = (codexCliLines + "> ${request.visiblePrompt}").takeLast(220)
+        publishWatchCodexSnapshot()
         val sent = codexCliBridgeClient.sendInput(request.prompt, request.photos)
         if (sent) {
             if (request.photos.isNotEmpty()) {
@@ -633,6 +698,7 @@ fun MainScreen() {
                         failPendingCodexCliSend("Codex session refresh failed")
                     }
                 }
+                publishWatchCodexSnapshot(status = state, detail = detail)
             }
             val statusMsg = org.json.JSONObject().apply {
                 put("type", "cli_status")
@@ -650,6 +716,7 @@ fun MainScreen() {
                 if (output.isNotBlank()) {
                     codexCliLines = mergeCodexCliOutput(codexCliLines, output, append).takeLast(220)
                 }
+                publishWatchCodexSnapshot()
             }
             val outputMsg = org.json.JSONObject().apply {
                 put("type", "cli_output")
@@ -665,6 +732,7 @@ fun MainScreen() {
             }
             sendCodexSessionsToGlasses(sessions, currentSessionId)
             publishWatchCodexSessions(sessions, currentSessionId)
+            publishWatchCodexSnapshot(sessions = sessions, currentSessionId = currentSessionId)
         }
         codexCliBridgeClient.onSessionResumed = { session ->
             mainHandler.post {
@@ -700,7 +768,15 @@ fun MainScreen() {
                         put("subtitle", session.subtitle ?: "")
                     }
                     glassesManager.sendRawMessage(resumedMsg.toString())
+                    publishWatchCodexSnapshot(
+                        sessions = updatedSessions,
+                        currentSessionId = session.id,
+                    )
                 } else {
+                    publishWatchCodexSnapshot(
+                        sessions = updatedSessions,
+                        currentSessionId = session.id,
+                    )
                     dispatchCodexCliSend(pendingSend)
                 }
             }
@@ -852,6 +928,30 @@ fun MainScreen() {
             val json = buildChatHistoryJson(allMessages, glassesMessageLimit, isLoadMore = true, hasMore = hasMore)
             android.util.Log.i("MainScreen", "Forwarding expanded chat_history to glasses: limit=$glassesMessageLimit of ${allMessages.size}, prepended=$prependedCount, hasMore=$hasMore")
             glassesManager.sendRawMessage(json)
+
+            val pendingWatchCommandId = pendingWatchChatMoreCommandId
+            if (!pendingWatchCommandId.isNullOrBlank()) {
+                pendingWatchChatMoreCommandId = null
+                if (prependedCount > 0) {
+                    watchMessageLimit = (watchMessageLimit + prependedCount).coerceAtMost(allMessages.size)
+                }
+                watchChatHasMore = hasMore
+                publishWatchChatSnapshot(
+                    source = allMessages,
+                    isLoadMore = true,
+                    hasMore = hasMore,
+                    prependedCount = prependedCount,
+                )
+                PhoneWatchBridge.publishCommandAck(
+                    context,
+                    WatchCommandAck(
+                        id = pendingWatchCommandId,
+                        action = WatchCommandActions.CHAT_MORE,
+                        ok = true,
+                        message = if (prependedCount > 0) "More chat" else "No more chat",
+                    )
+                )
+            }
         }
     }
 
@@ -1298,6 +1398,88 @@ fun MainScreen() {
         }
     }
 
+    fun requestWatchChatMore(commandId: String, action: String) {
+        val allMessages = openClawClient.chatMessages.value
+        if (allMessages.isEmpty()) {
+            watchChatHasMore = false
+            publishWatchChatSnapshot(source = allMessages, isLoadMore = true, hasMore = false, prependedCount = 0)
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "No chat")
+            return
+        }
+
+        val oldVisibleCount = minOf(watchMessageLimit, allMessages.size)
+        if (watchMessageLimit < allMessages.size) {
+            watchMessageLimit = (watchMessageLimit + 20).coerceAtMost(allMessages.size)
+            val newVisibleCount = minOf(watchMessageLimit, allMessages.size)
+            val prependedCount = (newVisibleCount - oldVisibleCount).coerceAtLeast(0)
+            val hasMore = watchMessageLimit < allMessages.size || watchChatHasMore
+            publishWatchChatSnapshot(
+                source = allMessages,
+                isLoadMore = true,
+                hasMore = hasMore,
+                prependedCount = prependedCount,
+            )
+            acknowledgeWatchCommand(commandId, action, ok = true, message = if (prependedCount > 0) "More chat" else "No more chat")
+            return
+        }
+
+        if (openClawState !is OpenClawClient.ConnectionState.Connected) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Gateway offline")
+            return
+        }
+
+        pendingWatchChatMoreCommandId = commandId
+        acknowledgeWatchCommand(commandId, action, ok = true, message = "Loading chat")
+        openClawClient.loadMoreHistory()
+    }
+
+    fun handleWatchCodexInput(commandId: String, action: String, text: String) {
+        val clean = text.trim()
+        if (clean.isBlank()) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Empty Codex input")
+            return
+        }
+        if (pendingCodexCliSend != null) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex busy")
+            return
+        }
+        when (codexCliStatus) {
+            CodexCliBridgeClient.State.CONNECTED -> {
+                sendCodexCliWithRefresh(
+                    PendingCodexCliSend(
+                        prompt = clean,
+                        visiblePrompt = clean,
+                        photos = emptyList(),
+                    )
+                )
+                acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex sent")
+            }
+            CodexCliBridgeClient.State.CONNECTING -> {
+                publishWatchCodexSnapshot()
+                acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex connecting")
+            }
+            else -> {
+                codexCliBridgeClient.connect(codexCliBridgeUrl(openClawHost))
+                publishWatchCodexSnapshot()
+                acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex connecting")
+            }
+        }
+    }
+
+    fun stopWatchCodex(commandId: String, action: String) {
+        codexCliBridgeClient.stop()
+        val line = "[status] Codex stop requested"
+        codexCliLines = (codexCliLines + line).takeLast(220)
+        sendCodexCliOutputToGlasses(line)
+        acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex stop")
+    }
+
+    fun clearWatchCodex(commandId: String, action: String) {
+        codexCliLines = listOf("Codex CLI output cleared.")
+        sendCodexCliSnapshotToGlasses()
+        acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex clear")
+    }
+
     fun handleWatchAssistantText(text: String, commandId: String, action: String) {
         val trimmed = text.trim()
         if (trimmed.isBlank()) {
@@ -1336,6 +1518,7 @@ fun MainScreen() {
                 }
                 acknowledgeWatchCommand(commandId, action, ok, message)
             }
+            WatchCommandActions.CHAT_MORE -> requestWatchChatMore(commandId, action)
             WatchCommandActions.REQUEST_STATE -> {
                 publishWatchStatus()
                 publishWatchChatSnapshot()
@@ -1359,6 +1542,9 @@ fun MainScreen() {
             }
             WatchCommandActions.CODEX_SESSIONS_REQUEST -> requestWatchCodexSessions(commandId, action)
             WatchCommandActions.CODEX_RESUME -> resumeWatchCodexSession(commandId, action, targetId)
+            WatchCommandActions.CODEX_INPUT -> handleWatchCodexInput(commandId, action, targetId)
+            WatchCommandActions.CODEX_STOP -> stopWatchCodex(commandId, action)
+            WatchCommandActions.CODEX_CLEAR -> clearWatchCodex(commandId, action)
             WatchCommandActions.TTS_TOGGLE -> {
                 val (ok, message) = toggleWatchTts()
                 acknowledgeWatchCommand(commandId, action, ok, message)
@@ -3604,7 +3790,10 @@ private fun mergeCodexCliOutput(
     return merged
 }
 
-private fun codexCliLineBlocks(lines: List<String>): List<CodexCliLineBlock> {
+private fun codexCliLineBlocks(
+    lines: List<String>,
+    showPrompts: Boolean = true
+): List<CodexCliLineBlock> {
     val blocks = mutableListOf<CodexCliLineBlock>()
     val responseBuffer = mutableListOf<String>()
 
@@ -3622,7 +3811,9 @@ private fun codexCliLineBlocks(lines: List<String>): List<CodexCliLineBlock> {
         when {
             line.startsWith(">") -> {
                 flushResponse()
-                blocks += CodexCliLineBlock(CodexCliLineType.PROMPT, line.removePrefix(">").trim())
+                if (showPrompts) {
+                    blocks += CodexCliLineBlock(CodexCliLineType.PROMPT, line.removePrefix(">").trim())
+                }
             }
             line.startsWith("[error]", ignoreCase = true) -> {
                 flushResponse()

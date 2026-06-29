@@ -11,6 +11,7 @@ import com.jsos.shared.WatchCommand
 import com.jsos.shared.WatchCommandAck
 import com.jsos.shared.WatchCommandActions
 import com.jsos.shared.WatchChatSnapshot
+import com.jsos.shared.WatchCodexSnapshot
 import com.jsos.shared.WatchCodexSessions
 import com.jsos.shared.WatchCoreIds
 import com.jsos.shared.WatchCoreStatus
@@ -51,6 +52,7 @@ class PhoneWatchBridge : WearableListenerService() {
     private fun sendCoreStatus(nodeId: String) {
         sendMessage(nodeId, WatchPaths.CORE_STATUS, latestStatus.toJson())
         sendMessage(nodeId, WatchPaths.CHAT_SNAPSHOT, latestChatSnapshot.toJson())
+        sendMessage(nodeId, WatchPaths.CODEX_SNAPSHOT, latestCodexSnapshot.toJson())
     }
 
     private fun handleCommand(event: MessageEvent) {
@@ -122,6 +124,9 @@ class PhoneWatchBridge : WearableListenerService() {
         @Volatile
         private var latestChatSnapshot = WatchChatSnapshot(coreId = WatchCoreIds.CORE)
 
+        @Volatile
+        private var latestCodexSnapshot = WatchCodexSnapshot(coreId = WatchCoreIds.CORE)
+
         fun publishStatus(context: Context, status: WatchCoreStatus) {
             latestStatus = status.copy(
                 coreId = WatchCoreIds.CORE,
@@ -138,6 +143,11 @@ class PhoneWatchBridge : WearableListenerService() {
         fun publishCodexSessions(context: Context, sessions: WatchCodexSessions) {
             val enriched = sessions.copy(coreId = WatchCoreIds.CORE)
             publishToWatch(context, WatchPaths.CODEX_SESSIONS, enriched.toJson())
+        }
+
+        fun publishCodexSnapshot(context: Context, snapshot: WatchCodexSnapshot) {
+            latestCodexSnapshot = snapshot.copy(coreId = WatchCoreIds.CORE)
+            publishToWatch(context, WatchPaths.CODEX_SNAPSHOT, latestCodexSnapshot.toJson())
         }
 
         fun publishChatSnapshot(context: Context, snapshot: WatchChatSnapshot) {

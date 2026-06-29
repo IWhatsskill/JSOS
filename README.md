@@ -1,10 +1,12 @@
 # JSOS
 
-**Spatial Operating System for Smart Glasses**
+**Smart Glasses HUD + Wear OS Watch Companion for OpenClaw**
 
-JSOS is an Android-based smart-glasses interface for **Rokid glasses** and a local or private **OpenClaw Gateway**. It combines a phone-side control deck with a lightweight glasses HUD for sessions, voice input, camera handoff, direct R08 ring control, and optional private bridge workflows.
+Turn Rokid glasses and a Wear OS watch into a live OpenClaw cockpit.
 
-JSOS started as an AGPL-3.0 fork of the upstream Clawsses project and has been substantially reworked into a JSOS-specific development-preview project. It is not presented as a finished consumer product.
+JSOS is an Android-based HUD stack for **Rokid glasses**, **JSOS Core**, and a local or private **OpenClaw Gateway**. It brings sessions, voice, chat, Codex CLI workflows, camera handoff, HUD controls, and a lightweight watch companion into one phone-led flow.
+
+This is a development preview for builders and testers, not a finished consumer product.
 
 <p align="center">
   <a href="https://github.com/IWhatsskill/JSOS/releases"><strong>Download preview APKs</strong></a>
@@ -22,27 +24,28 @@ JSOS started as an AGPL-3.0 fork of the upstream Clawsses project and has been s
   <img src="docs/images/jsos-social-preview.png" alt="JSOS smart-glasses HUD preview" width="100%">
 </p>
 
+<p align="center">
+  <img src="docs/images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="31%">
+  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="31%">
+  <img src="docs/images/jsos-codex-hud-home.jpeg" alt="JSOS Codex HUD view captured through Rokid glasses" width="31%">
+</p>
+
+## Why JSOS Exists
+
+JSOS exists to make local AI on smart glasses feel like an everyday HUD workflow: glanceable, voice-first, session-aware, and controlled from the phone, glasses, or watch without turning the glasses into a mirrored chat window.
+
 ## What JSOS Includes
 
 | Part | Runs on | Purpose |
 | --- | --- | --- |
-| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions, stores local runtime settings, handles voice input, TTS settings, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the optional Admin Codex bridge client. |
-| **JSOS HUD** | Rokid glasses | Renders the lightweight glasses HUD, receives streamed chat updates, handles touchpad and configurable direct R08 ring gestures, stages voice input, displays sessions, requests photo capture, and triggers Rokid AI/photo/AR picture/recording scenes. |
-| **JSOS Watch** | Wear OS watch | Optional companion app for controlling JSOS Core, mirroring status/chat, switching sessions/models, triggering Codex resume, and testing watch mic/TTS output flows through the phone. |
+| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions/models, stores local runtime settings, handles STT, realtime voice, optional ElevenLabs TTS, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the optional Admin Codex bridge client. |
+| **JSOS HUD** | Rokid glasses | Renders the green monochrome HUD with assistant output, session/voice state, STT, realtime voice, optional ElevenLabs TTS, OPTIONS, COMMANDS, SESSIONS, AR tools, Codex views, photo/image preview, and touchpad navigation. |
+| **JSOS Watch** | Wear OS watch | Optional companion for Core status, chat, STT/TTS controls, session/model switching, and Codex CLI resume/write/stop/clear from the wrist. |
 | **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
-
-## Preview Boundaries
-
-- JSOS is a **development preview**, not a finished consumer product.
-- Rokid behavior depends on the proprietary Rokid CXR SDK, target device firmware, and Hi Rokid availability.
-- OpenClaw Live Talk and the Admin Codex bridge path are experimental and should be tested against the target gateway/bridge version.
-- Runtime OpenClaw, Rokid, OpenAI, ElevenLabs, and bridge credentials are configured locally and are not shipped in this repository.
-- JSOS Watch is a companion surface only. It does not store credentials and does not connect directly to OpenClaw.
-- Release signing keys, local signing properties, and built APKs must remain private.
 
 ## Visual Overview
 
-The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md). The main README keeps only a short preview so the GitHub project page stays readable.
+The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
 
 ### JSOS Core
 
@@ -71,12 +74,19 @@ The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCRE
 5. Pair the Rokid glasses through Hi Rokid and connect them from JSOS Core.
 6. Install the separate JSOS HUD APK on the glasses through JSOS Core HUD Deployment, or manually through Hi Rokid / APK Manager.
 7. Launch JSOS HUD on the glasses and connect to the phone-side JSOS Core session flow.
+8. Optional: install JSOS Watch on a Wear OS device and pair it with the same phone for wrist controls.
 
 ### Upgrade Note
 
 This release was signed with a new public JSOS signing certificate.
 
 If you already have an older JSOS version installed, Android may refuse to install these APKs as an update. In that case, uninstall the old JSOS Core and JSOS HUD apps first, then install the new APKs from this release.
+
+## Preview Status
+
+JSOS is a development preview. Rokid behavior depends on the proprietary Rokid CXR SDK, device firmware, and Hi Rokid availability. OpenClaw Live Talk, watch companion flows, and the optional Admin Codex bridge should be tested against the exact gateway, device, and bridge versions you plan to use.
+
+Runtime OpenClaw, Rokid, OpenAI, ElevenLabs, and bridge credentials are configured locally and are not shipped in this repository. JSOS Watch is a companion surface only: it talks to JSOS Core through the Wear OS Data Layer, does not store credentials, and does not connect directly to OpenClaw.
 
 ## Architecture
 
@@ -90,9 +100,9 @@ If you already have an older JSOS version installed, Android may refuse to insta
 
 ### Wear OS Companion Preview
 
-`watch-app/` is a small Wear OS companion for JSOS Core. It can show Core/HUD/Gateway status, mirror the current chat snapshot, switch sessions and models, send `/reset` or `/clear`, start/stop voice flows, trigger compact Codex resume actions, and test watch microphone input or TTS playback routed back to the watch.
+`watch-app/` is a small Wear OS companion for JSOS Core. It shows Core/HUD/Gateway status, mirrors the current chat, switches sessions/models, controls voice flows, routes watch STT/TTS output, and can resume/write/stop/clear Codex CLI sessions.
 
-The watch talks to the phone through the Wear OS Data Layer. JSOS Core on the phone keeps the OpenClaw connection, runtime credentials, sessions, model list, gateway state, HUD state, and optional Codex bridge state. No OpenClaw tokens, API keys, signing files, or private host configuration belong on the watch.
+The watch talks to the phone through the Wear OS Data Layer. JSOS Core remains the source of truth for credentials, sessions, models, gateway state, HUD state, and optional Codex bridge state.
 
 ## Build From Source
 
@@ -159,18 +169,9 @@ Release signing is local-only. Keep `jsos-release.properties`, keystores such as
 
 ## Security Notes
 
-Do not publish:
+Keep local signing files, runtime credentials, transcripts, device identifiers, private logs, and private screenshots out of public commits and release assets.
 
-- `local.properties`
-- `jsos-release.properties`
-- `signing.properties`
-- `*.jks`
-- `.env` or `.env.*`
-- private keys, tokens, API keys, access keys, client secrets, or signing passwords
-- built APKs from private local configurations
-- logs, screenshots, or APKs containing transcripts, session keys, API keys, device identifiers, or account data
-
-Use trusted private-network access for local gateways and private bridges. Do not expose an OpenClaw Gateway or experimental Admin Codex bridge directly to the public internet.
+See [docs/SECURITY.md](docs/SECURITY.md) for the full public-safe checklist.
 
 ## Attribution And License
 

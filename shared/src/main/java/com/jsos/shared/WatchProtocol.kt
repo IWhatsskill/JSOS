@@ -45,6 +45,7 @@ object WatchPaths {
     const val COMMAND = "$PREFIX/command"
     const val COMMAND_ACK = "$PREFIX/command_ack"
     const val CODEX_SESSIONS = "$PREFIX/codex_sessions"
+    const val CODEX_SNAPSHOT = "$PREFIX/codex_snapshot"
     const val CHAT_SNAPSHOT = "$PREFIX/chat_snapshot"
     const val TTS_AUDIO_CHUNK = "$PREFIX/tts_audio_chunk"
     const val TTS_AUDIO_STOP = "$PREFIX/tts_audio_stop"
@@ -56,12 +57,16 @@ object WatchCommandActions {
     const val HUD_CLOSE = "hud_close"
     const val LIVE_TALK_TOGGLE = "live_talk_toggle"
     const val REQUEST_STATE = "request_state"
+    const val CHAT_MORE = "chat_more"
     const val SESSION_PREVIOUS = "session_previous"
     const val SESSION_NEXT = "session_next"
     const val MODEL_PREVIOUS = "model_previous"
     const val MODEL_NEXT = "model_next"
     const val CODEX_SESSIONS_REQUEST = "codex_sessions_request"
     const val CODEX_RESUME = "codex_resume"
+    const val CODEX_INPUT = "codex_input"
+    const val CODEX_STOP = "codex_stop"
+    const val CODEX_CLEAR = "codex_clear"
     const val ASSISTANT_COMMAND = "assistant_command"
     const val TTS_TOGGLE = "tts_toggle"
     const val STT_TOGGLE = "stt_toggle"
@@ -109,6 +114,10 @@ data class WatchCoreStatus(
     @SerializedName("currentSession") val currentSession: String = "",
     @SerializedName("currentModel") val currentModel: String = "",
     @SerializedName("lastAnswer") val lastAnswer: String = "",
+    @SerializedName("lastAction") val lastAction: String = "",
+    @SerializedName("lastResult") val lastResult: String = "",
+    @SerializedName("lastError") val lastError: String = "",
+    @SerializedName("lastEventAt") val lastEventAt: Long = 0L,
     @SerializedName("updatedAt") val updatedAt: Long = System.currentTimeMillis()
 ) {
     fun toJson(): String = watchGson.toJson(this)
@@ -184,12 +193,32 @@ data class WatchChatSnapshot(
     @SerializedName("currentSession") val currentSession: String = "",
     @SerializedName("currentModel") val currentModel: String = "",
     @SerializedName("messages") val messages: List<WatchChatMessage> = emptyList(),
+    @SerializedName("hasMore") val hasMore: Boolean = true,
+    @SerializedName("isLoadMore") val isLoadMore: Boolean = false,
+    @SerializedName("prependedCount") val prependedCount: Int = 0,
     @SerializedName("updatedAt") val updatedAt: Long = System.currentTimeMillis()
 ) {
     fun toJson(): String = watchGson.toJson(this)
 
     companion object {
         fun fromJson(json: String): WatchChatSnapshot = watchGson.fromJson(json, WatchChatSnapshot::class.java)
+    }
+}
+
+data class WatchCodexSnapshot(
+    @SerializedName("type") val type: String = "codex_snapshot",
+    @SerializedName("coreId") val coreId: String = WatchCoreIds.DEFAULT,
+    @SerializedName("status") val status: String = "DISCONNECTED",
+    @SerializedName("detail") val detail: String = "",
+    @SerializedName("currentSessionId") val currentSessionId: String = "",
+    @SerializedName("currentSessionLabel") val currentSessionLabel: String = "",
+    @SerializedName("messages") val messages: List<WatchChatMessage> = emptyList(),
+    @SerializedName("updatedAt") val updatedAt: Long = System.currentTimeMillis()
+) {
+    fun toJson(): String = watchGson.toJson(this)
+
+    companion object {
+        fun fromJson(json: String): WatchCodexSnapshot = watchGson.fromJson(json, WatchCodexSnapshot::class.java)
     }
 }
 

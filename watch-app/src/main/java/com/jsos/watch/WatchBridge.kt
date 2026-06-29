@@ -15,6 +15,7 @@ import com.jsos.shared.WatchChatMessage
 import com.jsos.shared.WatchChatSnapshot
 import com.jsos.shared.WatchCodexSession
 import com.jsos.shared.WatchCodexSessions
+import com.jsos.shared.WatchCodexSnapshot
 import com.jsos.shared.WatchCoreIds
 import com.jsos.shared.WatchCoreStatus
 import com.jsos.shared.WatchPaths
@@ -44,12 +45,23 @@ data class WatchUiState(
     val currentModel: String = "",
     val lastAnswer: String = "",
     val chatMessages: List<WatchChatMessage> = emptyList(),
+    val chatHasMore: Boolean = true,
+    val chatLoadingMore: Boolean = false,
+    val chatPrependedCount: Int = 0,
     val codexSessions: List<WatchCodexSession> = emptyList(),
     val showCodexSessions: Boolean = false,
+    val codexStatus: String = "DISCONNECTED",
+    val codexDetail: String = "",
+    val codexCurrentSessionId: String = "",
+    val codexCurrentSessionLabel: String = "",
+    val codexMessages: List<WatchChatMessage> = emptyList(),
     val commandPending: Boolean = false,
     val lastCommandLabel: String = "",
     val lastCommandOk: Boolean? = null,
     val lastPongAt: Long? = null,
+    val lastAction: String = "",
+    val lastResult: String = "",
+    val lastEventAt: Long = 0L,
     val lastError: String? = null
 )
 
@@ -168,6 +180,13 @@ class WatchBridge(
         sendCommand(WatchCommandActions.REQUEST_STATE)
     }
 
+    fun requestMoreChat() {
+        val current = _state.value
+        if (current.chatLoadingMore || !current.chatHasMore || current.chatMessages.isEmpty()) return
+        _state.value = current.copy(chatLoadingMore = true)
+        sendCommand(WatchCommandActions.CHAT_MORE)
+    }
+
     fun previousSession() {
         sendCommand(WatchCommandActions.SESSION_PREVIOUS)
     }
@@ -197,6 +216,18 @@ class WatchBridge(
         sendCommand(WatchCommandActions.ASSISTANT_COMMAND, targetId = text.take(600))
     }
 
+    fun sendCodexInput(text: String) {
+        sendCommand(WatchCommandActions.CODEX_INPUT, targetId = text.take(1200))
+    }
+
+    fun stopCodex() {
+        sendCommand(WatchCommandActions.CODEX_STOP)
+    }
+
+    fun clearCodex() {
+        sendCommand(WatchCommandActions.CODEX_CLEAR)
+    }
+
     fun closeCodexSessions() {
         _state.value = _state.value.copy(showCodexSessions = false)
     }
@@ -210,6 +241,7 @@ class WatchBridge(
             targetId = targetId
         )
         val label = actionLabel(action)
+        val isChatMore = action == WatchCommandActions.CHAT_MORE
         _state.value = _state.value.copy(
             commandPending = true,
             lastCommandLabel = "$label ...",
@@ -225,7 +257,8 @@ class WatchBridge(
                         lastCommandOk = false,
                         statusLabel = "CORE OFFLINE",
                         detail = "NO PHONE",
-                        lastError = "No connected phone"
+                        lastError = "No connected phone",
+                        chatLoadingMore = if (isChatMore) false else _state.value.chatLoadingMore
                     )
                     vibrate(ok = false)
                     return@addOnSuccessListener
@@ -241,7 +274,8 @@ class WatchBridge(
                             lastCommandLabel = "$label ERR",
                             lastCommandOk = false,
                             detail = "SEND FAILED",
-                            lastError = "Command failed"
+                            lastError = "Command failed",
+                            chatLoadingMore = if (isChatMore) false else _state.value.chatLoadingMore
                         )
                         vibrate(ok = false)
                     }
@@ -251,12 +285,13 @@ class WatchBridge(
                 _state.value = _state.value.copy(
                     commandPending = false,
                     lastCommandLabel = "$label ERR",
-                    lastCommandOk = false,
-                    detail = "NODES FAILED",
-                    lastError = "Node lookup failed"
-                )
-                vibrate(ok = false)
-            }
+                lastCommandOk = false,
+                detail = "NODES FAILED",
+                lastError = "Node lookup failed",
+                chatLoadingMore = if (isChatMore) false else _state.value.chatLoadingMore
+            )
+            vibrate(ok = false)
+        }
     }
 
     override fun onMessageReceived(event: MessageEvent) {
@@ -280,12 +315,21 @@ class WatchBridge(
                 }.getOrNull()
                 if (!isSelectedCore(ack?.coreId)) return
                 val ok = ack?.ok == true
+                val isChatMoreAck = ack?.action == WatchCommandActions.CHAT_MORE
+                val ackMessage = ack?.message.orEmpty().trim()
+                val chatLoadingAfterAck = isChatMoreAck && ok && ackMessage.equals("Loading chat", ignoreCase = true)
+                val commandLabel = if (!ok && ackMessage.isNotBlank()) {
+                    ackMessage
+                } else {
+                    "${actionLabel(ack?.action.orEmpty())} ${if (ok) "OK" else "ERR"}"
+                }
                 _state.value = _state.value.copy(
                     commandPending = false,
-                    lastCommandLabel = "${actionLabel(ack?.action.orEmpty())} ${if (ok) "OK" else "ERR"}",
+                    lastCommandLabel = commandLabel,
                     lastCommandOk = ok,
-                    detail = ack?.message ?: "ACK",
-                    lastError = if (ok) null else ack?.message ?: "Command failed"
+                    detail = ackMessage.ifBlank { "ACK" },
+                    lastError = if (ok) null else ackMessage.ifBlank { "Command failed" },
+                    chatLoadingMore = if (isChatMoreAck) chatLoadingAfterAck else _state.value.chatLoadingMore
                 )
                 vibrate(ok)
             }
@@ -300,6 +344,20 @@ class WatchBridge(
                     lastError = null
                 )
             }
+            WatchPaths.CODEX_SNAPSHOT -> {
+                val snapshot = runCatching {
+                    WatchCodexSnapshot.fromJson(event.data.toString(Charsets.UTF_8))
+                }.getOrNull()
+                if (!isSelectedCore(snapshot?.coreId)) return
+                _state.value = _state.value.copy(
+                    codexStatus = snapshot?.status.orEmpty().ifBlank { "DISCONNECTED" },
+                    codexDetail = snapshot?.detail.orEmpty(),
+                    codexCurrentSessionId = snapshot?.currentSessionId.orEmpty(),
+                    codexCurrentSessionLabel = snapshot?.currentSessionLabel.orEmpty(),
+                    codexMessages = snapshot?.messages.orEmpty(),
+                    lastError = null
+                )
+            }
             WatchPaths.CHAT_SNAPSHOT -> {
                 val snapshot = runCatching {
                     WatchChatSnapshot.fromJson(event.data.toString(Charsets.UTF_8))
@@ -309,6 +367,9 @@ class WatchBridge(
                     currentSession = snapshot?.currentSession?.ifBlank { _state.value.currentSession } ?: _state.value.currentSession,
                     currentModel = snapshot?.currentModel?.ifBlank { _state.value.currentModel } ?: _state.value.currentModel,
                     chatMessages = snapshot?.messages.orEmpty(),
+                    chatHasMore = snapshot?.hasMore ?: _state.value.chatHasMore,
+                    chatLoadingMore = false,
+                    chatPrependedCount = snapshot?.prependedCount ?: 0,
                     lastAnswer = snapshot?.messages
                         ?.lastOrNull { it.role.equals("assistant", ignoreCase = true) }
                         ?.text
@@ -321,12 +382,18 @@ class WatchBridge(
                     WatchCoreStatus.fromJson(event.data.toString(Charsets.UTF_8))
                 }.getOrNull()
                 if (!isSelectedCore(status?.coreId)) return
-                _state.value = _state.value.copy(
+                val current = _state.value
+                val statusAction = status?.lastAction.orEmpty().trim()
+                val statusResult = status?.lastResult.orEmpty().trim()
+                val statusError = status?.lastError.orEmpty().trim()
+                val statusEventAt = status?.lastEventAt ?: 0L
+                val hasNewEvent = statusEventAt > current.lastEventAt
+                _state.value = current.copy(
                     coreOnline = status?.coreOnline == true,
                     hudOnline = status?.hudOnline == true,
                     gatewayOnline = status?.gatewayOnline == true,
                     statusLabel = if (status?.coreOnline == true) "CORE ONLINE" else "CORE OFFLINE",
-                    detail = status?.liveTalkState ?: status?.coreLabel ?: "STATUS",
+                    detail = statusError.ifBlank { status?.liveTalkState ?: status?.coreLabel ?: "STATUS" },
                     liveTalkState = status?.liveTalkState ?: "IDLE",
                     ttsEnabled = status?.ttsEnabled == true,
                     sttEnabled = status?.sttEnabled == true,
@@ -334,7 +401,24 @@ class WatchBridge(
                     currentSession = status?.currentSession.orEmpty(),
                     currentModel = status?.currentModel.orEmpty(),
                     lastAnswer = status?.lastAnswer.orEmpty(),
-                    lastError = null
+                    lastAction = statusAction.ifBlank { current.lastAction },
+                    lastResult = statusResult.ifBlank { current.lastResult },
+                    lastEventAt = maxOf(current.lastEventAt, statusEventAt),
+                    lastCommandLabel = if (statusAction.isNotBlank() && statusResult.isNotBlank()) {
+                        "$statusAction: $statusResult".take(80)
+                    } else {
+                        current.lastCommandLabel
+                    },
+                    lastCommandOk = when {
+                        statusError.isNotBlank() -> false
+                        hasNewEvent && statusAction.isNotBlank() -> true
+                        else -> current.lastCommandOk
+                    },
+                    lastError = when {
+                        statusError.isNotBlank() -> statusError
+                        hasNewEvent -> null
+                        else -> current.lastError
+                    }
                 )
             }
             WatchPaths.TTS_AUDIO_CHUNK -> {
@@ -376,12 +460,16 @@ class WatchBridge(
             WatchCommandActions.STT_TOGGLE -> "STT"
             WatchCommandActions.VOICE_OUTPUT_NEXT -> "OUT"
             WatchCommandActions.REQUEST_STATE -> "STATE"
+            WatchCommandActions.CHAT_MORE -> "MORE"
             WatchCommandActions.SESSION_PREVIOUS -> "SESS-"
             WatchCommandActions.SESSION_NEXT -> "SESS+"
             WatchCommandActions.MODEL_PREVIOUS -> "MOD-"
             WatchCommandActions.MODEL_NEXT -> "MOD+"
             WatchCommandActions.CODEX_SESSIONS_REQUEST -> "CODEX"
             WatchCommandActions.CODEX_RESUME -> "RESUME"
+            WatchCommandActions.CODEX_INPUT -> "CODEX"
+            WatchCommandActions.CODEX_STOP -> "CSTOP"
+            WatchCommandActions.CODEX_CLEAR -> "CCLR"
             WatchCommandActions.ASSISTANT_COMMAND -> "ASK"
             else -> "CMD"
         }
