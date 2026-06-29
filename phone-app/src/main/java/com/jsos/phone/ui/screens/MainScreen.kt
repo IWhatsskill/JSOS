@@ -182,8 +182,20 @@ fun MainScreen() {
     // Managers
     val glassesManager = remember { GlassesConnectionManager(context) }
     val deviceIdentity = remember { DeviceIdentity(context) }
+    val prefs = remember { context.getSharedPreferences("jsos", android.content.Context.MODE_PRIVATE) }
+    val securePrefs = remember { SecurePrefs(context).also { it.migrateString(prefs, "openclaw_token") } }
+    var voiceOutputRoute by remember {
+        mutableStateOf(prefs.getString("watch_voice_output_route", WatchVoiceOutputRoutes.DEFAULT) ?: WatchVoiceOutputRoutes.DEFAULT)
+    }
     val openClawClient = remember { OpenClawClient(deviceIdentity) }
-    val liveTalkManager = remember { OpenClawTalkManager(openClawClient) }
+    val liveTalkManager = remember {
+        OpenClawTalkManager(
+            openClawClient = openClawClient,
+            outputRouteProvider = { voiceOutputRoute },
+            watchAudioSender = { audio -> PhoneWatchBridge.publishRealtimeAudio(context, audio) },
+            watchAudioStopper = { PhoneWatchBridge.publishRealtimeAudioStop(context) }
+        )
+    }
     val voiceHandler = remember { VoiceCommandHandler(context) }
     val voiceLanguageManager = remember { VoiceLanguageManager(context) }
     val voiceRecognitionManager = remember { VoiceRecognitionManager(context) }
@@ -237,11 +249,6 @@ fun MainScreen() {
     val gatewayProtocolLabel = gatewayProtocol?.toString() ?: "4-5"
 
     // Persist non-sensitive OpenClaw settings in SharedPreferences.
-    val prefs = remember { context.getSharedPreferences("jsos", android.content.Context.MODE_PRIVATE) }
-    val securePrefs = remember { SecurePrefs(context).also { it.migrateString(prefs, "openclaw_token") } }
-    var voiceOutputRoute by remember {
-        mutableStateOf(prefs.getString("watch_voice_output_route", WatchVoiceOutputRoutes.DEFAULT) ?: WatchVoiceOutputRoutes.DEFAULT)
-    }
     val ttsPlaybackManager = remember {
         TtsPlaybackManager(
             context = context,
@@ -1144,6 +1151,16 @@ fun MainScreen() {
         sendVoiceState("idle")
     }
 
+    fun routeLiveTalkAudioForCurrentOutput() {
+        when (voiceOutputRoute) {
+            WatchVoiceOutputRoutes.GLASSES -> liveTalkAudioRouteManager.routeToGlasses()
+            WatchVoiceOutputRoutes.PHONE -> liveTalkAudioRouteManager.routeToPhoneSpeaker()
+            WatchVoiceOutputRoutes.WATCH,
+            WatchVoiceOutputRoutes.OFF -> liveTalkAudioRouteManager.clear()
+            else -> liveTalkAudioRouteManager.routeToGlasses()
+        }
+    }
+
     fun startLiveTalk(source: LiveTalkSource) {
         if (liveTalkManager.isActive) {
             if (liveTalkSource == source) {
@@ -1168,12 +1185,12 @@ fun MainScreen() {
                 android.util.Log.d("MainScreen", "Glasses requested OpenClaw Live Talk")
                 ignoreAiExitUntilMs = System.currentTimeMillis() + 1200L
                 dismissRokidAiSceneBurst()
-                liveTalkAudioRouteManager.routeToGlasses()
+                routeLiveTalkAudioForCurrentOutput()
                 RokidSdkManager.sendAsrContent("LIVE TALK")
             }
             LiveTalkSource.Phone -> {
                 android.util.Log.d("MainScreen", "Phone requested OpenClaw Live Talk")
-                liveTalkAudioRouteManager.routeToPhoneSpeaker()
+                routeLiveTalkAudioForCurrentOutput()
             }
         }
         sendVoiceState("listening", text = "Live Talk")
@@ -1266,6 +1283,12 @@ fun MainScreen() {
         prefs.edit().putString("watch_voice_output_route", nextRoute).apply()
         if (nextRoute == WatchVoiceOutputRoutes.OFF || nextRoute == WatchVoiceOutputRoutes.WATCH) {
             ttsPlaybackManager.stop()
+        }
+        if (nextRoute != WatchVoiceOutputRoutes.WATCH) {
+            PhoneWatchBridge.publishRealtimeAudioStop(context)
+        }
+        if (liveTalkManager.isActive) {
+            routeLiveTalkAudioForCurrentOutput()
         }
         return true to "Output ${voiceOutputRouteLabel(nextRoute)}"
     }

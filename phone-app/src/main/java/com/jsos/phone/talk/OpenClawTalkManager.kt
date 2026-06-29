@@ -12,6 +12,7 @@ import android.util.Base64
 import android.util.Log
 import com.google.gson.JsonObject
 import com.jsos.phone.openclaw.OpenClawClient
+import com.jsos.shared.WatchVoiceOutputRoutes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,9 @@ data class LiveTalkTranscript(
 
 class OpenClawTalkManager(
     private val openClawClient: OpenClawClient,
+    private val outputRouteProvider: () -> String = { WatchVoiceOutputRoutes.DEFAULT },
+    private val watchAudioSender: (ByteArray) -> Unit = {},
+    private val watchAudioStopper: () -> Unit = {},
 ) {
     companion object {
         private const val TAG = "OpenClawTalkManager"
@@ -383,38 +387,6 @@ class OpenClawTalkManager(
     }
 
     private fun startPlayback(generation: Long) {
-        val minBuffer = AudioTrack.getMinBufferSize(
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        )
-        if (minBuffer <= 0) {
-            throw IllegalStateException("AudioTrack buffer unavailable")
-        }
-
-        val track = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(SAMPLE_RATE)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-            )
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .setBufferSizeInBytes(minBuffer * 4)
-            .build()
-
-        synchronized(playbackLock) {
-            audioTrack = track
-            track.play()
-        }
-
         val queue = Channel<ByteArray>(capacity = Channel.UNLIMITED)
         audioOutputQueue = queue
         audioPlaybackJob = scope?.launch {
@@ -442,8 +414,22 @@ class OpenClawTalkManager(
     }
 
     private fun writeAudio(audio: ByteArray) {
+        when (outputRouteProvider()) {
+            WatchVoiceOutputRoutes.WATCH -> {
+                releaseLocalPlayback()
+                holdMicGateFor(audio.size)
+                watchAudioSender(audio)
+                return
+            }
+            WatchVoiceOutputRoutes.OFF -> {
+                releaseLocalPlayback()
+                holdMicGateFor(audio.size)
+                return
+            }
+        }
+
         synchronized(playbackLock) {
-            val track = audioTrack ?: return
+            val track = ensureLocalPlaybackLocked() ?: return
             if (track.state != AudioTrack.STATE_INITIALIZED) return
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
                 runCatching { track.play() }
@@ -452,6 +438,59 @@ class OpenClawTalkManager(
             val written = track.write(audio, 0, audio.size, AudioTrack.WRITE_BLOCKING)
             if (written < 0) {
                 Log.w(TAG, "AudioTrack write failed: $written")
+            }
+        }
+    }
+
+    private fun ensureLocalPlaybackLocked(): AudioTrack? {
+        audioTrack?.takeIf { it.state == AudioTrack.STATE_INITIALIZED }?.let { return it }
+
+        val minBuffer = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minBuffer <= 0) {
+            Log.w(TAG, "AudioTrack buffer unavailable")
+            return null
+        }
+
+        return try {
+            AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(SAMPLE_RATE)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .setBufferSizeInBytes(minBuffer * 4)
+                .build()
+                .also { track ->
+                    audioTrack = track
+                    track.play()
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "AudioTrack init failed (redacted)")
+            null
+        }
+    }
+
+    private fun releaseLocalPlayback() {
+        synchronized(playbackLock) {
+            val track = audioTrack
+            audioTrack = null
+            track?.let {
+                runCatching { it.stop() }
+                runCatching { it.flush() }
+                runCatching { it.release() }
             }
         }
     }
@@ -465,6 +504,7 @@ class OpenClawTalkManager(
         if (dropped > 0) {
             Log.d(TAG, "Dropped $dropped queued output chunks on clear")
         }
+        watchAudioStopper()
         synchronized(playbackLock) {
             audioTrack?.let { track ->
                 runCatching {
@@ -569,16 +609,9 @@ class OpenClawTalkManager(
         audioOutputQueue = null
         audioPlaybackJob?.cancel()
         audioPlaybackJob = null
+        watchAudioStopper()
 
-        synchronized(playbackLock) {
-            val track = audioTrack
-            audioTrack = null
-            track?.let {
-                runCatching { it.stop() }
-                runCatching { it.flush() }
-                runCatching { it.release() }
-            }
-        }
+        releaseLocalPlayback()
     }
 
     private fun isCurrentGeneration(generation: Long): Boolean =

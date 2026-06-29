@@ -21,6 +21,8 @@ import com.jsos.shared.WatchCoreStatus
 import com.jsos.shared.WatchPaths
 import com.jsos.shared.WatchPing
 import com.jsos.shared.WatchPong
+import com.jsos.shared.WatchRealtimeAudioChunk
+import com.jsos.shared.WatchRealtimeAudioStop
 import com.jsos.shared.WatchTtsAudioChunk
 import com.jsos.shared.WatchTtsAudioStop
 import com.jsos.shared.WatchVoiceOutputRoutes
@@ -84,6 +86,10 @@ class WatchBridge(
     private val audioPlayer = WatchAudioPlayer(appContext) { status ->
         _state.value = _state.value.copy(watchAudioStatus = status)
     }
+    private val realtimeAudioPlayer = WatchRealtimeAudioPlayer { status ->
+        _state.value = _state.value.copy(watchAudioStatus = status)
+    }
+    private var realtimeAudioActive = false
 
     fun start() {
         messageClient.addListener(this)
@@ -93,6 +99,7 @@ class WatchBridge(
     fun stop() {
         messageClient.removeListener(this)
         audioPlayer.release()
+        realtimeAudioPlayer.release()
     }
 
     fun selectCore(coreId: String) {
@@ -427,6 +434,8 @@ class WatchBridge(
                 }.getOrNull()
                 if (!isSelectedCore(chunk?.coreId)) return
                 if (chunk != null) {
+                    realtimeAudioPlayer.stop()
+                    realtimeAudioActive = false
                     audioPlayer.onChunk(chunk)
                 }
             }
@@ -436,6 +445,27 @@ class WatchBridge(
                 }.getOrNull()
                 if (!isSelectedCore(stop?.coreId)) return
                 audioPlayer.stop()
+            }
+            WatchPaths.REALTIME_AUDIO_CHUNK -> {
+                val chunk = runCatching {
+                    WatchRealtimeAudioChunk.fromJson(event.data.toString(Charsets.UTF_8))
+                }.getOrNull()
+                if (!isSelectedCore(chunk?.coreId)) return
+                if (chunk != null) {
+                    if (!realtimeAudioActive) {
+                        audioPlayer.stop()
+                        realtimeAudioActive = true
+                    }
+                    realtimeAudioPlayer.onChunk(chunk)
+                }
+            }
+            WatchPaths.REALTIME_AUDIO_STOP -> {
+                val stop = runCatching {
+                    WatchRealtimeAudioStop.fromJson(event.data.toString(Charsets.UTF_8))
+                }.getOrNull()
+                if (!isSelectedCore(stop?.coreId)) return
+                realtimeAudioPlayer.stop()
+                realtimeAudioActive = false
             }
         }
     }

@@ -49,6 +49,8 @@ object WatchPaths {
     const val CHAT_SNAPSHOT = "$PREFIX/chat_snapshot"
     const val TTS_AUDIO_CHUNK = "$PREFIX/tts_audio_chunk"
     const val TTS_AUDIO_STOP = "$PREFIX/tts_audio_stop"
+    const val REALTIME_AUDIO_CHUNK = "$PREFIX/realtime_audio_chunk"
+    const val REALTIME_AUDIO_STOP = "$PREFIX/realtime_audio_stop"
 }
 
 object WatchCommandActions {
@@ -248,5 +250,34 @@ data class WatchTtsAudioStop(
 
     companion object {
         fun fromJson(json: String): WatchTtsAudioStop = watchGson.fromJson(json, WatchTtsAudioStop::class.java)
+    }
+}
+
+data class WatchRealtimeAudioChunk(
+    @SerializedName("type") val type: String = "realtime_audio_chunk",
+    @SerializedName("coreId") val coreId: String = WatchCoreIds.DEFAULT,
+    @SerializedName("sequence") val sequence: Long,
+    @SerializedName("sampleRate") val sampleRate: Int = 24_000,
+    @SerializedName("channelCount") val channelCount: Int = 1,
+    @SerializedName("encoding") val encoding: String = "pcm16",
+    @SerializedName("base64") val base64: String,
+    @SerializedName("createdAt") val createdAt: Long = System.currentTimeMillis()
+) {
+    fun toJson(): String = watchGson.toJson(this)
+
+    companion object {
+        fun fromJson(json: String): WatchRealtimeAudioChunk = watchGson.fromJson(json, WatchRealtimeAudioChunk::class.java)
+    }
+}
+
+data class WatchRealtimeAudioStop(
+    @SerializedName("type") val type: String = "realtime_audio_stop",
+    @SerializedName("coreId") val coreId: String = WatchCoreIds.DEFAULT,
+    @SerializedName("createdAt") val createdAt: Long = System.currentTimeMillis()
+) {
+    fun toJson(): String = watchGson.toJson(this)
+
+    companion object {
+        fun fromJson(json: String): WatchRealtimeAudioStop = watchGson.fromJson(json, WatchRealtimeAudioStop::class.java)
     }
 }

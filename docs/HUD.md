@@ -54,11 +54,11 @@ JSOS separates normal speech-to-text from bidirectional OpenClaw Live Talk:
 
 - **OpenAI Realtime speech-to-text** and **Android SpeechRecognizer** recognize voice input and submit text to OpenClaw.
 - **Core Agent Wake** runs from the phone voice UI and keeps phone-side OpenAI Realtime transcription active. A configured leading session label switches to that session and sends the remaining text; follow-up phrases without a new leading label continue in the active session.
-- **Core Live Talk** starts OpenClaw Live Talk directly from the phone and routes output to the phone speaker.
+- **Core Live Talk** starts OpenClaw Live Talk directly from the phone and routes output through the selected voice output target.
 - **Glasses Voice Button / CMD** routes the glasses voice button to normal command/input speech recognition.
 - **Glasses Voice Button / LIVE TALK** routes the glasses voice button to OpenClaw Live Talk and Rokid communication audio.
 
-Live Talk includes a client-side barge-in path for interrupting assistant output while new user speech is detected. The exact behavior still depends on the target OpenClaw Gateway version and audio route.
+Live Talk includes a client-side barge-in path for interrupting assistant output while new user speech is detected. The exact behavior still depends on the target OpenClaw Gateway version and audio route. Watch realtime playback is experimental and streams PCM audio through the Wear OS Data Layer.
 
 Current limitation: Core Agent Wake uses the phone-side voice path. The glasses voice button still uses the normal HUD voice flow, and a glasses-side Agent Wake mode without pressing the voice button is planned as separate follow-up work.
 

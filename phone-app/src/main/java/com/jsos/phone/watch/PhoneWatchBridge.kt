@@ -18,11 +18,14 @@ import com.jsos.shared.WatchCoreStatus
 import com.jsos.shared.WatchPaths
 import com.jsos.shared.WatchPing
 import com.jsos.shared.WatchPong
+import com.jsos.shared.WatchRealtimeAudioChunk
+import com.jsos.shared.WatchRealtimeAudioStop
 import com.jsos.shared.WatchTtsAudioChunk
 import com.jsos.shared.WatchTtsAudioStop
 import java.io.File
 import java.io.FileInputStream
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 class PhoneWatchBridge : WearableListenerService() {
 
@@ -127,6 +130,8 @@ class PhoneWatchBridge : WearableListenerService() {
         @Volatile
         private var latestCodexSnapshot = WatchCodexSnapshot(coreId = WatchCoreIds.CORE)
 
+        private val realtimeAudioSequence = AtomicLong(0L)
+
         fun publishStatus(context: Context, status: WatchCoreStatus) {
             latestStatus = status.copy(
                 coreId = WatchCoreIds.CORE,
@@ -185,6 +190,32 @@ class PhoneWatchBridge : WearableListenerService() {
                 context,
                 WatchPaths.TTS_AUDIO_STOP,
                 WatchTtsAudioStop(coreId = WatchCoreIds.CORE).toJson()
+            )
+        }
+
+        fun publishRealtimeAudio(context: Context, audio: ByteArray) {
+            if (audio.isEmpty()) return
+
+            val chunkSize = 8 * 1024
+            var offset = 0
+            while (offset < audio.size) {
+                val end = minOf(offset + chunkSize, audio.size)
+                val bytes = audio.copyOfRange(offset, end)
+                val chunk = WatchRealtimeAudioChunk(
+                    coreId = WatchCoreIds.CORE,
+                    sequence = realtimeAudioSequence.incrementAndGet(),
+                    base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                )
+                publishToWatch(context, WatchPaths.REALTIME_AUDIO_CHUNK, chunk.toJson())
+                offset = end
+            }
+        }
+
+        fun publishRealtimeAudioStop(context: Context) {
+            publishToWatch(
+                context,
+                WatchPaths.REALTIME_AUDIO_STOP,
+                WatchRealtimeAudioStop(coreId = WatchCoreIds.CORE).toJson()
             )
         }
 

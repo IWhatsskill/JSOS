@@ -46,8 +46,8 @@ After approval, reconnect from JSOS Core. The device token is stored locally by 
 
 - Configure an ElevenLabs API key and voice in JSOS Core.
 - Make sure voice responses / TTS are enabled in JSOS Core or from the HUD toggle path.
-- Check the phone audio route and volume. The TTS playback path is phone-side.
-- For bidirectional Live Talk audio on the phone, use `Voice` -> `Core Live Talk` -> `START PHONE LIVE`.
+- Check the selected voice output route and volume. TTS can play on the phone, glasses, or watch when configured.
+- For bidirectional Live Talk audio on the phone, use `Voice` -> `Core Live Talk` -> `START PHONE LIVE`. Watch realtime audio output is experimental and depends on Wear OS Data Layer latency.
 - The normal phone mic / Realtime Whisper path is speech-to-text and returns text unless TTS is enabled.
 - If TTS is disabled, JSOS still displays text responses on the phone and HUD.
 

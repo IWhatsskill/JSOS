@@ -40,7 +40,7 @@ JSOS exists to make local AI on smart glasses feel like an everyday HUD workflow
 | --- | --- | --- |
 | **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions/models, stores local runtime settings, handles STT, realtime voice, optional ElevenLabs TTS, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the optional Admin Codex bridge client. |
 | **JSOS HUD** | Rokid glasses | Renders the green monochrome HUD with assistant output, session/voice state, STT, realtime voice, optional ElevenLabs TTS, OPTIONS, COMMANDS, SESSIONS, AR tools, Codex views, photo/image preview, and touchpad navigation. |
-| **JSOS Watch** | Wear OS watch | Optional companion for Core status, chat, STT/TTS controls, session/model switching, and Codex CLI resume/write/stop/clear from the wrist. |
+| **JSOS Watch** | Wear OS watch | Optional companion for Core status, chat, STT/TTS controls, experimental realtime audio output, session/model switching, and Codex CLI resume/write/stop/clear from the wrist. |
 | **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
 
 ## Visual Overview
@@ -100,7 +100,7 @@ Runtime OpenClaw, Rokid, OpenAI, ElevenLabs, and bridge credentials are configur
 
 ### Wear OS Companion Preview
 
-`watch-app/` is a small Wear OS companion for JSOS Core. It shows Core/HUD/Gateway status, mirrors the current chat, switches sessions/models, controls voice flows, routes watch STT/TTS output, and can resume/write/stop/clear Codex CLI sessions.
+`watch-app/` is a small Wear OS companion for JSOS Core. It shows Core/HUD/Gateway status, mirrors the current chat, switches sessions/models, controls voice flows, routes watch STT/TTS and experimental realtime audio output, and can resume/write/stop/clear Codex CLI sessions.
 
 The watch talks to the phone through the Wear OS Data Layer. JSOS Core remains the source of truth for credentials, sessions, models, gateway state, HUD state, and optional Codex bridge state.
 
