@@ -23,7 +23,7 @@ This is a development preview for builders and testers, not a finished consumer 
 <p align="center">
   <img src="docs/images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="31%">
   <img src="docs/images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="31%">
-  <img src="docs/images/jsos-codex-hud-home.jpeg" alt="JSOS Codex HUD view captured through Rokid glasses" width="31%">
+  <img src="docs/images/jsos-hud-ar-tools.jpeg" alt="JSOS HUD AR tools panel captured through Rokid glasses" width="31%">
 </p>
 
 ## Why JSOS Exists
