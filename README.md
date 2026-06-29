@@ -21,12 +21,8 @@ This is a development preview for builders and testers, not a finished consumer 
 </p>
 
 <p align="center">
-  <img src="docs/images/jsos-social-preview.png" alt="JSOS smart-glasses HUD preview" width="100%">
-</p>
-
-<p align="center">
   <img src="docs/images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="31%">
-  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="31%">
+  <img src="docs/images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="31%">
   <img src="docs/images/jsos-codex-hud-home.jpeg" alt="JSOS Codex HUD view captured through Rokid glasses" width="31%">
 </p>
 
