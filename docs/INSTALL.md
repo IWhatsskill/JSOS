@@ -21,8 +21,9 @@ Each release should provide:
 
 - `JSOS-Core-v<version>.apk` for the Android phone.
 - `JSOS-HUD-v<version>.apk` for the Rokid glasses.
+- `JSOS-Watch-v<version>.apk` for an optional Wear OS companion.
 
-The current public preview APKs are signed with a new public JSOS signing certificate. If Android refuses to install them as updates over an older JSOS version, uninstall the old JSOS Core and JSOS HUD apps first, then install the new APKs from the release.
+The current public preview APKs are signed with a new public JSOS signing certificate. If Android refuses to install them as updates over an older JSOS version, uninstall the old JSOS Core, JSOS HUD, or JSOS Watch apps first, then install the new APKs from the release.
 
 JSOS never ships private OpenClaw tokens, Rokid credentials, OpenAI keys, ElevenLabs keys, signing keys, or Admin Codex bridge credentials. These values are entered locally inside JSOS Core.
 
