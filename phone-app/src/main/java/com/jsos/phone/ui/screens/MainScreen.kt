@@ -2727,13 +2727,13 @@ private fun CompactStatusTile(
     showDot: Boolean,
 ) {
     Surface(
-        modifier = modifier.height(64.dp),
-        color = JsosPalette.Card,
-        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.32f)),
-        shape = RoundedCornerShape(7.dp),
+        modifier = modifier.height(68.dp),
+        color = JsosPalette.CardAlt,
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.24f)),
+        shape = RoundedCornerShape(22.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
@@ -2798,37 +2798,47 @@ private fun ChatDeck(
         ?: currentSessionKey?.let { stableSessionDisplayName(it) }
         ?: "JSOS"
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         if (openClawState is OpenClawClient.ConnectionState.Connected) {
-            SessionSelector(
-                sessions = sessions,
-                hiddenSessions = hiddenSessions,
-                currentSessionKey = currentSessionKey,
-                unreadSessionKeys = unreadSessions,
-                expanded = showSessionPicker,
-                onToggle = onToggleSessionPicker,
-                onSelect = onSelectSession,
-                onHideSession = onHideSession,
-                onShowSession = onShowSession,
-                onDismiss = onDismissSessionPicker,
-                agentActivity = agentActivity,
-            )
-            ModelSelector(
-                options = modelOptions,
-                selectedLabel = selectedModelLabel,
-                expanded = showModelPicker,
-                enabled = modelPickerEnabled,
-                onToggle = onToggleModelPicker,
-                onSelect = onSelectModel,
-                onDismiss = onDismissModelPicker,
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SessionSelector(
+                    sessions = sessions,
+                    hiddenSessions = hiddenSessions,
+                    currentSessionKey = currentSessionKey,
+                    unreadSessionKeys = unreadSessions,
+                    expanded = showSessionPicker,
+                    onToggle = onToggleSessionPicker,
+                    onSelect = onSelectSession,
+                    onHideSession = onHideSession,
+                    onShowSession = onShowSession,
+                    onDismiss = onDismissSessionPicker,
+                    agentActivity = agentActivity,
+                )
+                ModelSelector(
+                    options = modelOptions,
+                    selectedLabel = selectedModelLabel,
+                    expanded = showModelPicker,
+                    enabled = modelPickerEnabled,
+                    onToggle = onToggleModelPicker,
+                    onSelect = onSelectModel,
+                    onDismiss = onDismissModelPicker,
+                )
+            }
         }
 
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .padding(horizontal = 10.dp)
         ) {
             if (chatMessages.isEmpty()) {
                 Text(
@@ -2873,8 +2883,8 @@ private fun VoiceModeQuickSwitch(
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 4.dp),
         color = JsosPalette.CardAlt,
-        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = if (liveActive) 0.72f else 0.56f)),
-        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = if (liveActive) 0.42f else 0.22f)),
+        shape = RoundedCornerShape(24.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -2907,12 +2917,19 @@ private fun VoiceModeQuickSwitch(
                 fontSize = 10.sp,
                 modifier = Modifier.padding(end = 8.dp),
             )
-            TextButton(onClick = { onModeChange(GlassesVoiceButtonMode.Command) }) {
-                Text("CMD", fontFamily = FontFamily.Monospace, color = if (!liveActive) JsosPalette.Cyan else JsosPalette.Disabled)
-            }
-            TextButton(onClick = { onModeChange(GlassesVoiceButtonMode.LiveTalk) }) {
-                Text("LIVE", fontFamily = FontFamily.Monospace, color = if (liveActive) JsosPalette.Cyan else JsosPalette.Disabled)
-            }
+            CoreCompactActionButton(
+                label = "CMD",
+                onClick = { onModeChange(GlassesVoiceButtonMode.Command) },
+                modifier = Modifier.width(58.dp),
+                selected = !liveActive,
+            )
+            Spacer(Modifier.width(6.dp))
+            CoreCompactActionButton(
+                label = "LIVE",
+                onClick = { onModeChange(GlassesVoiceButtonMode.LiveTalk) },
+                modifier = Modifier.width(64.dp),
+                selected = liveActive,
+            )
         }
     }
 }
@@ -3080,20 +3097,20 @@ private fun DashboardModuleCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(82.dp)
+            .height(92.dp)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         color = JsosPalette.Card,
-        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.46f)),
-        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
+        shape = RoundedCornerShape(24.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
-                modifier = Modifier.width(34.dp),
+                modifier = Modifier.width(42.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -3154,16 +3171,22 @@ private fun DashboardModuleCard(
             }
             if (onClick != null) {
                 if (actionIcon != null && onAction != null) {
-                    IconButton(
-                        onClick = onAction,
-                        modifier = Modifier.size(36.dp),
+                    Surface(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable(onClick = onAction),
+                        color = JsosPalette.Cyan.copy(alpha = 0.10f),
+                        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.34f)),
+                        shape = RoundedCornerShape(999.dp),
                     ) {
+                        Box(contentAlignment = Alignment.Center) {
                         Icon(
                             actionIcon,
                             contentDescription = "Connect",
                             tint = JsosPalette.Cyan,
-                            modifier = Modifier.size(21.dp),
+                            modifier = Modifier.size(20.dp),
                         )
+                        }
                     }
                 } else {
                     Icon(
@@ -3174,6 +3197,41 @@ private fun DashboardModuleCard(
                 )
             }
             }
+        }
+    }
+}
+
+@Composable
+private fun CoreCompactActionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+) {
+    val tint = if (enabled) JsosPalette.Cyan else JsosPalette.Disabled
+    Surface(
+        modifier = modifier
+            .height(34.dp)
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = when {
+            !enabled -> JsosPalette.CardDark.copy(alpha = 0.50f)
+            selected -> JsosPalette.Cyan.copy(alpha = 0.12f)
+            else -> JsosPalette.CardAlt
+        },
+        border = BorderStroke(1.dp, tint.copy(alpha = if (enabled) 0.44f else 0.22f)),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                color = tint,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -3418,8 +3476,8 @@ private fun PendingPhotoPreviewStrip(
     Surface(
         modifier = modifier.padding(horizontal = 8.dp, vertical = 6.dp),
         color = JsosPalette.Card,
-        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.55f)),
-        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
+        shape = RoundedCornerShape(24.dp),
     ) {
         Row(
             modifier = Modifier
@@ -3443,7 +3501,7 @@ private fun PendingPhotoPreviewStrip(
                         contentDescription = "Queued photo",
                         modifier = Modifier
                             .size(width = 70.dp, height = 52.dp)
-                            .clip(RoundedCornerShape(6.dp)),
+                            .clip(RoundedCornerShape(16.dp)),
                         contentScale = ContentScale.Crop,
                     )
                 } else {
@@ -3451,7 +3509,7 @@ private fun PendingPhotoPreviewStrip(
                         modifier = Modifier.size(width = 70.dp, height = 52.dp),
                         color = Color.Black.copy(alpha = 0.60f),
                         border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.42f)),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(16.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -3546,9 +3604,9 @@ private fun CodexCliDeck(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 190.dp),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = JsosPalette.Card,
-                border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.68f)),
+                border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.34f)),
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -3566,9 +3624,12 @@ private fun CodexCliDeck(
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                         )
-                        TextButton(onClick = onRefreshSessions, enabled = connected) {
-                            Text("REFRESH", fontFamily = FontFamily.Monospace)
-                        }
+                        CoreCompactActionButton(
+                            label = "REFRESH",
+                            onClick = onRefreshSessions,
+                            enabled = connected,
+                            modifier = Modifier.width(86.dp),
+                        )
                     }
                     if (sessions.isEmpty()) {
                         Text(
@@ -3588,17 +3649,17 @@ private fun CodexCliDeck(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable(enabled = connected) { onResumeSession(session.id) },
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (selected) Color(0xFF092418) else Color(0xFF061214),
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = if (selected) JsosPalette.CardAlt else JsosPalette.CardDark,
                                     border = BorderStroke(
                                         width = if (selected) 1.dp else 0.5.dp,
-                                        color = if (selected) JsosPalette.Green else JsosPalette.Green.copy(alpha = 0.35f),
+                                        color = if (selected) JsosPalette.Cyan else JsosPalette.Cyan.copy(alpha = 0.35f),
                                     ),
                                 ) {
                                     Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)) {
                                         Text(
                                             text = "${if (selected) "* " else ""}${session.label}",
-                                            color = if (selected) JsosPalette.Green else JsosPalette.Text,
+                                            color = if (selected) JsosPalette.Cyan else JsosPalette.Text,
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                             fontSize = 12.sp,
@@ -3627,9 +3688,9 @@ private fun CodexCliDeck(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(24.dp),
             color = JsosPalette.Card,
-            border = BorderStroke(1.dp, JsosPalette.Green.copy(alpha = 0.72f)),
+            border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
         ) {
             LazyColumn(
                 state = listState,
@@ -3650,14 +3711,14 @@ private fun CodexCliDeck(
 
                         CodexCliLineType.RESPONSE -> Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF061214).copy(alpha = 0.88f),
-                            border = BorderStroke(1.dp, JsosPalette.Green.copy(alpha = 0.82f)),
+                            shape = RoundedCornerShape(18.dp),
+                            color = JsosPalette.CardAlt,
+                            border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
                         ) {
                             Text(
                                 text = block.text,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                color = JsosPalette.Green,
+                                color = JsosPalette.Text,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp,
@@ -3666,7 +3727,7 @@ private fun CodexCliDeck(
 
                         CodexCliLineType.ERROR -> Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(18.dp),
                             color = Color(0xFF1B0C10).copy(alpha = 0.86f),
                             border = BorderStroke(1.dp, Color(0xFFFF5F6D).copy(alpha = 0.82f)),
                         ) {
@@ -3726,32 +3787,41 @@ private fun CodexCliDeck(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextButton(onClick = onTakePhoto, modifier = Modifier.weight(1f)) {
-                Text(
-                    if (pendingPhotoCount > 0) "CAM $pendingPhotoCount" else "CAM",
-                    fontFamily = FontFamily.Monospace,
-                    color = if (hasPendingPhoto) JsosPalette.Green else JsosPalette.Cyan,
-                )
-            }
-            TextButton(onClick = if (connected) onDisconnect else onConnect, modifier = Modifier.weight(1f)) {
-                Text(if (connected) "DISC" else "LINK", fontFamily = FontFamily.Monospace)
-            }
-            TextButton(onClick = onToggleSessionPicker, enabled = connected, modifier = Modifier.weight(1f)) {
-                Text("RESUME", fontFamily = FontFamily.Monospace)
-            }
-            TextButton(
+            CoreCompactActionButton(
+                label = if (pendingPhotoCount > 0) "CAM $pendingPhotoCount" else "CAM",
+                onClick = onTakePhoto,
+                modifier = Modifier.weight(1f),
+                selected = hasPendingPhoto,
+            )
+            CoreCompactActionButton(
+                label = if (connected) "DISC" else "LINK",
+                onClick = if (connected) onDisconnect else onConnect,
+                modifier = Modifier.weight(1f),
+                selected = connected,
+            )
+            CoreCompactActionButton(
+                label = "RESUME",
+                onClick = onToggleSessionPicker,
+                enabled = connected,
+                modifier = Modifier.weight(1f),
+            )
+            CoreCompactActionButton(
+                label = "SEND",
                 onClick = onSend,
                 enabled = connected && (inputText.isNotBlank() || hasPendingPhoto),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("SEND", fontFamily = FontFamily.Monospace)
-            }
-            TextButton(onClick = onStop, enabled = connected, modifier = Modifier.weight(1f)) {
-                Text("STOP", fontFamily = FontFamily.Monospace)
-            }
-            TextButton(onClick = onClear, modifier = Modifier.weight(1f)) {
-                Text("CLEAR", fontFamily = FontFamily.Monospace)
-            }
+                modifier = Modifier.weight(1f),
+            )
+            CoreCompactActionButton(
+                label = "STOP",
+                onClick = onStop,
+                enabled = connected,
+                modifier = Modifier.weight(1f),
+            )
+            CoreCompactActionButton(
+                label = "CLEAR",
+                onClick = onClear,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -3940,13 +4010,13 @@ private fun AgentWakeCard(
     val accent = if (enabled) Color(0xFF63F45C) else Color(0xFF22D3EE)
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(24.dp),
         color = JsosPalette.Card,
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.70f)),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -3967,24 +4037,16 @@ private fun AgentWakeCard(
                 )
             }
 
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .clickable(onClick = onToggle),
-                shape = RoundedCornerShape(8.dp),
-                color = if (enabled) Color(0xFF16321D) else Color(0xFF071010),
-                border = BorderStroke(1.dp, accent),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = if (enabled) "STOP AGENT WAKE" else "START AGENT WAKE",
-                        color = accent,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                    )
-                }
+                CoreCompactActionButton(
+                    label = if (enabled) "STOP WAKE" else "START WAKE",
+                    onClick = onToggle,
+                    modifier = Modifier.widthIn(min = 122.dp),
+                    selected = enabled,
+                )
             }
 
             Text(
@@ -4008,13 +4070,13 @@ private fun CoreLiveTalkCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(24.dp),
         color = JsosPalette.Card,
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.70f)),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -4041,32 +4103,19 @@ private fun CoreLiveTalkCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp)
-                        .clickable(onClick = onTogglePhoneLiveTalk),
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (phoneActive) Color(0xFF16321D) else Color(0xFF071010),
-                    border = BorderStroke(1.dp, accent),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = when {
-                                phoneActive -> "STOP PHONE LIVE"
-                                glassesActive -> "SWITCH TO PHONE"
-                                else -> "START PHONE LIVE"
-                            },
-                            color = accent,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                        )
-                    }
-                }
+                CoreCompactActionButton(
+                    label = when {
+                        phoneActive -> "STOP LIVE"
+                        glassesActive -> "PHONE"
+                        else -> "START LIVE"
+                    },
+                    onClick = onTogglePhoneLiveTalk,
+                    modifier = Modifier.widthIn(min = 118.dp),
+                    selected = phoneActive,
+                )
             }
             Text(
                 text = "Output: phone speaker",
@@ -4086,13 +4135,13 @@ private fun GlassesVoiceButtonCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(24.dp),
         color = JsosPalette.Card,
-        border = BorderStroke(1.dp, Color(0xFF1D5C2A)),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -4114,18 +4163,19 @@ private fun GlassesVoiceButtonCard(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.End,
             ) {
                 GlassesVoiceModePill(
                     label = "COMMAND",
                     selected = mode == GlassesVoiceButtonMode.Command,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.widthIn(min = 104.dp),
                     onClick = { onModeChange(GlassesVoiceButtonMode.Command) },
                 )
+                Spacer(Modifier.width(8.dp))
                 GlassesVoiceModePill(
-                    label = "LIVE TALK",
+                    label = "LIVE",
                     selected = mode == GlassesVoiceButtonMode.LiveTalk,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.widthIn(min = 82.dp),
                     onClick = { onModeChange(GlassesVoiceButtonMode.LiveTalk) },
                 )
             }
@@ -4142,17 +4192,17 @@ private fun GlassesVoiceModePill(
 ) {
     Surface(
         modifier = modifier
-            .height(38.dp)
+            .height(34.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(6.dp),
-        color = if (selected) JsosPalette.CardAlt else JsosPalette.ScreenTop,
-        border = BorderStroke(1.dp, if (selected) JsosPalette.Green else JsosPalette.BorderSubtle),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) JsosPalette.Cyan.copy(alpha = 0.12f) else JsosPalette.CardAlt,
+        border = BorderStroke(1.dp, if (selected) JsosPalette.Cyan.copy(alpha = 0.44f) else JsosPalette.Cyan.copy(alpha = 0.18f)),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = label,
-                color = if (selected) JsosPalette.Green else JsosPalette.Muted,
-                fontSize = 12.sp,
+                color = if (selected) JsosPalette.Cyan else JsosPalette.Muted,
+                fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
             )
@@ -4311,9 +4361,9 @@ private fun DiagnosticsDeck(
 private fun TabHint(text: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFF040907),
-        border = BorderStroke(1.dp, Color(0xFF24573A)),
-        shape = RoundedCornerShape(8.dp),
+        color = JsosPalette.CardDark,
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.18f)),
+        shape = RoundedCornerShape(20.dp),
     ) {
         Text(
             text,
@@ -4345,8 +4395,8 @@ fun ChatMessageRow(msg: ChatMessage, speakerLabel: String = "JSOS") {
             .fillMaxWidth()
             .padding(vertical = if (isSystemOnly) 3.dp else 4.dp),
         color = if (isSystemOnly) JsosPalette.CardDark.copy(alpha = 0.68f) else JsosPalette.Card,
-        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = if (isSystemOnly) 0.22f else 0.46f)),
-        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = if (isSystemOnly) 0.18f else 0.28f)),
+        shape = RoundedCornerShape(18.dp),
     ) {
         Column(
             modifier = Modifier
@@ -4403,9 +4453,9 @@ private fun CoreCommandPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 6.dp),
-        color = Color(0xFF050C0A),
-        border = BorderStroke(1.dp, Color(0xFF24573A)),
-        shape = RoundedCornerShape(8.dp),
+        color = JsosPalette.Card,
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.20f)),
+        shape = RoundedCornerShape(24.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Row(
@@ -4494,9 +4544,9 @@ private fun CommandTile(
 ) {
     Surface(
         modifier = modifier.height(68.dp),
-        color = Color(0xFF07100D),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.34f)),
-        shape = RoundedCornerShape(7.dp),
+        color = JsosPalette.CardAlt,
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.22f)),
+        shape = RoundedCornerShape(22.dp),
     ) {
         Row(
             modifier = Modifier
@@ -4614,9 +4664,9 @@ private fun CoreStatusCard(
 ) {
     Surface(
         modifier = modifier,
-        color = Color(0xFF07100D),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.48f)),
-        shape = RoundedCornerShape(8.dp),
+        color = JsosPalette.CardAlt,
+        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.22f)),
+        shape = RoundedCornerShape(22.dp),
     ) {
         Row(
             modifier = Modifier
@@ -4688,8 +4738,8 @@ fun SessionSelector(
                 .fillMaxWidth()
                 .clickable(onClick = onToggle),
             color = JsosPalette.Card,
-            border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.46f)),
-            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
+            shape = RoundedCornerShape(24.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -5142,7 +5192,7 @@ private fun ModelSelector(
                 .clickable(enabled = enabled, onClick = onToggle),
             color = JsosPalette.Card,
             border = BorderStroke(1.dp, borderColor),
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(24.dp),
         ) {
             Row(
                 modifier = Modifier
