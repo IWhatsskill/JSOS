@@ -1,9 +1,5 @@
 package com.jsos.watch
 
-import android.graphics.Typeface
-
-import android.graphics.Paint
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -11,27 +7,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import kotlin.math.roundToInt
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,8 +33,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,23 +63,28 @@ import com.jsos.shared.WatchCodexSession
 import com.jsos.shared.WatchCoreIds
 import com.jsos.shared.WatchVoiceOutputRoutes
 
-private val ScreenTop = Color(0xFF1D282C)
-private val ScreenMid = Color(0xFF141D20)
-private val ScreenBottom = Color(0xFF101719)
+private val ScreenTop = Color.Black
+private val ScreenMid = Color.Black
+private val ScreenBottom = Color.Black
 private val Background = ScreenBottom
-private val TextPrimary = Color(0xFFE6F6EA)
-private val TextMuted = Color(0xFF9EB7A8)
-private val OnlineGreen = Color(0xFF63F45C)
-private val WarningYellow = Color(0xFFFFD166)
-private val ErrorRed = Color(0xFFFF5F56)
-private val CodexBlue = Color(0xFF123A42)
-private val StopRed = Color(0xFF4A1714)
-private val TalkGreen = Color(0xFF1D5C2A)
-private val Neutral = Color(0xFF123A42)
-private val SessionPurple = Color(0xFF0E3A46)
-private val ModelOlive = Color(0xFF123A42)
-private val FieldSurface = Color(0xCC142225)
-private val DisabledSurface = Color(0xD10A1214)
+private val TextPrimary = Color(0xFF171A1D)
+private val TextMuted = Color(0xFF6F777D)
+private val OnlineGreen = Color(0xFF22A35A)
+private val WarningYellow = Color(0xFFB88414)
+private val ErrorRed = Color(0xFFD84B4B)
+private val BrandCyan = Color(0xFF168CAA)
+private val BrandBlue = Color(0xFF168CAA)
+private val PanelBorder = Color(0x3D168CAA)
+private val CodexBlue = Color(0xFFE9F3F5)
+private val StopRed = Color(0xFFF3DDDD)
+private val TalkGreen = Color(0xFFDDF6E6)
+private val Neutral = Color(0xFFFFFFFF)
+private val SessionPurple = Color(0xFFE9ECE8)
+private val ModelOlive = Color(0xFFF1F3F0)
+private val FieldSurface = Color(0xFFFFFFFF)
+private val DisabledSurface = Color(0xFFE8ECE8)
+private val BackgroundText = Color(0xFFF7F8F6)
+private val BackgroundMuted = Color(0xFFC8D0CC)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -293,18 +284,6 @@ private fun WatchApp(
 
 @Composable
 private fun WatchMatrixBackground(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "watch_matrix")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 16000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "watch_matrix_phase",
-    )
-    val glyphs = remember { "0123456789JSOS<>[]" }
-
     Canvas(modifier = modifier) {
         drawRect(
             brush = Brush.verticalGradient(
@@ -316,74 +295,21 @@ private fun WatchMatrixBackground(modifier: Modifier = Modifier) {
         drawRect(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFF245257).copy(alpha = 0.42f),
+                    Color.White.copy(alpha = 0.00f),
                     Color.Transparent,
                 ),
-                center = Offset(size.width * 0.24f, size.height * 0.04f),
+                center = Offset(size.width * 0.28f, size.height * 0.10f),
                 radius = size.width * 0.72f,
             )
         )
         drawRect(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFF1E452B).copy(alpha = 0.28f),
+                    BrandCyan.copy(alpha = 0.00f),
                     Color.Transparent,
                 ),
-                center = Offset(size.width * 0.60f, size.height * 0.52f),
-                radius = size.width * 0.82f,
-            )
-        )
-
-        val columnStep = 18.dp.toPx()
-        val rowStep = 16.dp.toPx()
-        val textSize = 11.sp.toPx()
-        val columns = (size.width / columnStep).roundToInt() + 3
-        val travel = size.height + rowStep * 18f
-
-        drawIntoCanvas { canvas ->
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                typeface = Typeface.MONOSPACE
-                this.textSize = textSize
-                textAlign = Paint.Align.CENTER
-            }
-            for (col in 0 until columns) {
-                val x = (col - 1) * columnStep + if (col % 2 == 0) 0f else columnStep * 0.38f
-                val length = 10 + (col * 5 % 9)
-                val speed = 0.52f + (col % 4) * 0.07f
-                val headY = ((phase * travel * speed) + col * rowStep * 2.9f) % travel - rowStep * 8f
-                for (i in 0 until length) {
-                    val y = headY - i * rowStep
-                    if (y < -rowStep || y > size.height + rowStep) continue
-
-                    val fade = 1f - (i.toFloat() / length.toFloat())
-                    val head = i == 0
-                    val alpha = if (head) 0.68f else 0.24f * fade
-                    val colorAlpha = (alpha * 255f).roundToInt().coerceIn(0, 255)
-                    paint.color = if (head) {
-                        android.graphics.Color.argb(colorAlpha, 230, 246, 234)
-                    } else {
-                        android.graphics.Color.argb(colorAlpha, 99, 244, 92)
-                    }
-                    paint.setShadowLayer(
-                        if (head) 12f else 5f,
-                        0f,
-                        0f,
-                        android.graphics.Color.argb((colorAlpha * 0.70f).roundToInt(), 34, 211, 238)
-                    )
-                    val glyphIndex = ((phase * glyphs.length * 2f).roundToInt() + col * 11 + i * 5) % glyphs.length
-                    canvas.nativeCanvas.drawText(glyphs[glyphIndex].toString(), x, y, paint)
-                }
-            }
-            paint.clearShadowLayer()
-        }
-
-        drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF0A1214).copy(alpha = 0.04f),
-                    Color.Transparent,
-                    Color(0xFF040708).copy(alpha = 0.08f),
-                )
+                center = Offset(size.width * 0.70f, size.height * 0.70f),
+                radius = size.width * 0.86f,
             )
         )
     }
@@ -394,33 +320,88 @@ private fun StatusPage(state: WatchUiState) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(top = 22.dp, bottom = 30.dp),
+            .padding(top = 3.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        WatchHeader(state = state, pageTitle = "STATUS")
-        Spacer(modifier = Modifier.height(8.dp))
-        WatchLine(label = "SESSION", value = state.currentSession.ifBlank { "--" })
-        WatchLine(label = "MODEL", value = state.currentModel.ifBlank { "--" })
-        Spacer(modifier = Modifier.height(8.dp))
-        TinyStatusLine("OUTPUT: ${voiceOutputLabel(state.voiceOutputRoute)}")
-        TinyStatusLine("AUDIO: ${state.watchAudioStatus}")
+        SectionLabel("JSOS STATUS")
+        StatusPanel {
+            StatusPanelLine("CORE", yesNo(state.coreOnline), if (state.coreOnline) OnlineGreen else ErrorRed)
+            StatusPanelLine("GATEWAY", onlineOffline(state.gatewayOnline), if (state.gatewayOnline) OnlineGreen else ErrorRed)
+            StatusPanelLine("HUD", onOff(state.hudOnline), if (state.hudOnline) OnlineGreen else ErrorRed)
+        }
+        StatusPanel {
+            StatusPanelLine("SESSION", state.currentSession.ifBlank { "--" }, TextPrimary)
+            StatusPanelLine("MODEL", state.currentModel.ifBlank { "--" }, TextPrimary)
+        }
+        StatusPanel {
+            StatusPanelLine("LIVE", state.liveTalkState, if (state.liveTalkState == "IDLE") TextPrimary else OnlineGreen)
+            StatusPanelLine("OUTPUT", voiceOutputLabel(state.voiceOutputRoute), if (state.voiceOutputRoute == WatchVoiceOutputRoutes.OFF) ErrorRed else TextPrimary)
+            StatusPanelLine("AUDIO", state.watchAudioStatus, if (state.watchAudioStatus.contains("READY", ignoreCase = true)) OnlineGreen else ErrorRed)
+        }
     }
 }
+
+@Composable
+private fun StatusPanel(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(FieldSurface)
+            .border(1.dp, PanelBorder.copy(alpha = 0.72f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 9.dp, vertical = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun StatusPanelLine(label: String, value: String, valueColor: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = TextPrimary,
+            fontSize = 7.sp,
+            lineHeight = 8.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            modifier = Modifier
+                .padding(start = 6.dp)
+                .weight(1f),
+            text = value,
+            color = valueColor,
+            fontSize = 7.sp,
+            lineHeight = 8.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 @Composable
 private fun WatchHeader(state: WatchUiState, pageTitle: String) {
     Text(
         text = "JSOS  $pageTitle",
-        color = TextPrimary,
-        fontSize = 12.sp,
-        lineHeight = 13.sp,
+        color = BackgroundText,
+        fontSize = 9.sp,
+        lineHeight = 10.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         maxLines = 1
     )
     Text(
         text = "SELECTED: ${WatchCoreIds.label(state.selectedCoreId)}",
-        color = Color(0xFF22D3EE),
+        color = BrandCyan,
         fontSize = 9.sp,
         lineHeight = 10.sp,
         fontWeight = FontWeight.Bold,
@@ -430,8 +411,8 @@ private fun WatchHeader(state: WatchUiState, pageTitle: String) {
     Text(
         text = "CONNECTED: ${yesNo(state.coreOnline)}",
         color = if (state.coreOnline) OnlineGreen else WarningYellow,
-        fontSize = 11.sp,
-        lineHeight = 12.sp,
+        fontSize = 9.sp,
+        lineHeight = 10.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         maxLines = 1,
@@ -449,9 +430,9 @@ private fun WatchHeader(state: WatchUiState, pageTitle: String) {
     )
     Text(
         text = "HUD ${onOff(state.hudOnline)}  LIVE ${state.liveTalkState}",
-        color = TextMuted,
-        fontSize = 8.sp,
-        lineHeight = 9.sp,
+        color = BackgroundMuted,
+        fontSize = 7.sp,
+        lineHeight = 8.sp,
         textAlign = TextAlign.Center,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
@@ -956,27 +937,53 @@ private fun CommandFeedback(state: WatchUiState) {
 
 @Composable
 private fun ChatBubble(label: String, text: String, color: Color) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(color)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+    val role = label.uppercase()
+    val isUser = role == "YOU"
+    val isSystem = role == "SYSTEM"
+    val shape = RoundedCornerShape(16.dp)
+    val alignment = when {
+        isUser -> Alignment.CenterEnd
+        isSystem -> Alignment.Center
+        else -> Alignment.CenterStart
+    }
+    val widthFraction = when {
+        isUser -> 0.78f
+        isSystem -> 0.80f
+        else -> 0.88f
+    }
+    val textAlign = if (isUser) TextAlign.End else TextAlign.Start
+
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = alignment
     ) {
-        Text(
-            text = label,
-            color = Color(0xFF22D3EE),
-            fontSize = 7.sp,
-            lineHeight = 8.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
-        )
-        Text(
-            text = text,
-            color = TextPrimary,
-            fontSize = 12.sp,
-            lineHeight = 14.sp
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(widthFraction)
+                .clip(shape)
+                .background(color)
+                .border(1.dp, PanelBorder.copy(alpha = 0.55f), shape)
+                .padding(horizontal = 9.dp, vertical = 6.dp)
+        ) {
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = label,
+                color = TextPrimary,
+                fontSize = 7.sp,
+                lineHeight = 8.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = textAlign,
+                maxLines = 1
+            )
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = text,
+                color = TextPrimary,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                textAlign = textAlign
+            )
+        }
     }
 }
 
@@ -984,7 +991,7 @@ private fun WatchChatMessage.watchLabel(): String =
     if (role.equals("user", ignoreCase = true)) "YOU" else "AGENT"
 
 private fun WatchChatMessage.watchBubbleColor(): Color =
-    if (role.equals("user", ignoreCase = true)) SessionPurple else FieldSurface
+    FieldSurface
 
 private fun WatchChatMessage.codexWatchLabel(): String =
     when {
@@ -996,9 +1003,17 @@ private fun WatchChatMessage.codexWatchLabel(): String =
 
 private fun WatchChatMessage.codexWatchBubbleColor(): Color =
     when {
-        role.equals("user", ignoreCase = true) -> SessionPurple
+        role.equals("user", ignoreCase = true) -> FieldSurface
         role.equals("error", ignoreCase = true) -> StopRed
-        role.equals("system", ignoreCase = true) -> Neutral
+        role.equals("system", ignoreCase = true) -> FieldSurface
+        else -> FieldSurface
+    }
+
+private fun commandFillColor(color: Color, enabled: Boolean): Color =
+    when {
+        !enabled -> DisabledSurface
+        color == TalkGreen || color == OnlineGreen -> TalkGreen
+        color == StopRed || color == ErrorRed -> StopRed
         else -> FieldSurface
     }
 
@@ -1009,31 +1024,24 @@ private fun ChatMiniButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
+    val shape = RoundedCornerShape(999.dp)
+    val fill = commandFillColor(color, enabled)
+    Box(
         modifier = Modifier
-            .widthIn(min = 42.dp)
-            .height(26.dp),
-        shape = RoundedCornerShape(13.dp),
-        contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = color,
-            contentColor = TextPrimary,
-            disabledContainerColor = DisabledSurface,
-            disabledContentColor = TextMuted
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        )
+            .widthIn(min = 38.dp, max = 56.dp)
+            .height(24.dp)
+            .clip(shape)
+            .background(fill)
+            .border(1.dp, if (enabled) PanelBorder.copy(alpha = 0.72f) else PanelBorder.copy(alpha = 0.16f), shape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
             fontSize = 7.sp,
             lineHeight = 8.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1047,31 +1055,25 @@ private fun SmallCommandButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
+    val shape = RoundedCornerShape(999.dp)
+    val fill = commandFillColor(color, enabled)
+    Box(
         modifier = Modifier
-            .widthIn(min = 50.dp)
-            .height(32.dp),
-        shape = RoundedCornerShape(17.dp),
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = color,
-            contentColor = TextPrimary,
-            disabledContainerColor = DisabledSurface,
-            disabledContentColor = TextMuted
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        )
+            .widthIn(min = 46.dp, max = 66.dp)
+            .height(27.dp)
+            .clip(shape)
+            .background(fill)
+            .border(1.dp, if (enabled) PanelBorder.copy(alpha = 0.72f) else PanelBorder.copy(alpha = 0.16f), shape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 8.sp,
-            lineHeight = 9.sp,
+            color = if (enabled) TextPrimary else TextMuted,
+            fontSize = 7.sp,
+            lineHeight = 8.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1084,31 +1086,25 @@ private fun CommandButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
+    val shape = RoundedCornerShape(999.dp)
+    val fill = commandFillColor(color, enabled)
+    Box(
         modifier = Modifier
-            .widthIn(min = 68.dp)
-            .height(34.dp),
-        shape = RoundedCornerShape(18.dp),
-        contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = color,
-            contentColor = TextPrimary,
-            disabledContainerColor = DisabledSurface,
-            disabledContentColor = TextMuted
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        )
+            .widthIn(min = 56.dp, max = 66.dp)
+            .height(28.dp)
+            .clip(shape)
+            .background(fill)
+            .border(1.dp, if (enabled) PanelBorder.copy(alpha = 0.72f) else PanelBorder.copy(alpha = 0.16f), shape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 8.sp,
-            lineHeight = 10.sp,
+            color = if (enabled) TextPrimary else TextMuted,
+            fontSize = 7.sp,
+            lineHeight = 8.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1121,31 +1117,25 @@ private fun WideCommandButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
+    val shape = RoundedCornerShape(999.dp)
+    val fill = commandFillColor(color, enabled)
+    Box(
         modifier = Modifier
-            .widthIn(min = 138.dp, max = 164.dp)
-            .height(36.dp),
-        shape = RoundedCornerShape(20.dp),
-        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = color,
-            contentColor = TextPrimary,
-            disabledContainerColor = DisabledSurface,
-            disabledContentColor = TextMuted
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        )
+            .widthIn(min = 112.dp, max = 138.dp)
+            .height(29.dp)
+            .clip(shape)
+            .background(fill)
+            .border(1.dp, if (enabled) PanelBorder.copy(alpha = 0.72f) else PanelBorder.copy(alpha = 0.16f), shape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 8.sp,
-            lineHeight = 10.sp,
+            color = if (enabled) TextPrimary else TextMuted,
+            fontSize = 7.sp,
+            lineHeight = 8.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1156,9 +1146,9 @@ private fun WatchLine(label: String, value: String) {
     Text(
         modifier = Modifier.padding(horizontal = 8.dp),
         text = "$label $value",
-        color = TextPrimary,
-        fontSize = 8.sp,
-        lineHeight = 9.sp,
+        color = BackgroundText,
+        fontSize = 7.sp,
+        lineHeight = 8.sp,
         textAlign = TextAlign.Center,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
@@ -1167,13 +1157,19 @@ private fun WatchLine(label: String, value: String) {
 @Composable
 private fun SectionLabel(label: String) {
     Text(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(FieldSurface)
+            .border(1.dp, PanelBorder.copy(alpha = 0.70f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 9.dp, vertical = 3.dp),
         text = label,
-        color = Color(0xFF22D3EE),
+        color = TextPrimary,
         fontSize = 9.sp,
         lineHeight = 10.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
-        maxLines = 1
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
     )
 }
 
@@ -1182,9 +1178,9 @@ private fun TinyStatusLine(value: String) {
     Text(
         modifier = Modifier.padding(horizontal = 8.dp),
         text = value,
-        color = TextMuted,
-        fontSize = 8.sp,
-        lineHeight = 9.sp,
+        color = BackgroundMuted,
+        fontSize = 7.sp,
+        lineHeight = 8.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         maxLines = 1,
@@ -1196,9 +1192,9 @@ private fun DetailText(value: String) {
     Text(
         modifier = Modifier.padding(horizontal = 12.dp),
         text = value,
-        color = TextPrimary,
-        fontSize = 10.sp,
-        lineHeight = 12.sp,
+        color = BackgroundText,
+        fontSize = 9.sp,
+        lineHeight = 10.sp,
         fontWeight = FontWeight.Bold,
         textAlign = TextAlign.Center,
         maxLines = 3,
@@ -1209,9 +1205,9 @@ private fun DetailText(value: String) {
 private fun EmptyText(text: String) {
     Text(
         text = text,
-        color = TextMuted,
-        fontSize = 10.sp,
-        lineHeight = 11.sp,
+        color = BackgroundMuted,
+        fontSize = 9.sp,
+        lineHeight = 10.sp,
         textAlign = TextAlign.Center,
         maxLines = 1
     )
