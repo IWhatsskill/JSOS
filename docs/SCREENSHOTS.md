@@ -14,7 +14,7 @@ Before adding new screenshots, check that they do not expose private hosts, API 
   <a href="images/jsos-core-home.jpeg"><img src="images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="23%"></a>
   <a href="images/jsos-core-session-chat.jpeg"><img src="images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="23%"></a>
   <a href="images/jsos-core-voice.jpeg"><img src="images/jsos-core-voice.jpeg" alt="JSOS Core voice settings" width="23%"></a>
-  <a href="images/jsos-core-diagnostics.jpeg"><img src="images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="23%"></a>
+  <a href="images/jsos-core-diagnostics.jpeg"><img src="images/jsos-core-diagnostics.jpeg" alt="JSOS Core control cockpit menu" width="23%"></a>
 </p>
 
 <p align="center">

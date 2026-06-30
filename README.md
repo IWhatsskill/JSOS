@@ -53,7 +53,7 @@ The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCRE
   <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="23%">
   <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="23%">
   <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings" width="23%">
-  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core diagnostics dashboard" width="23%">
+  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core control cockpit menu" width="23%">
 </p>
 
 ### JSOS HUD
