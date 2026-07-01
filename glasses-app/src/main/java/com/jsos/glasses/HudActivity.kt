@@ -1006,11 +1006,15 @@ class HudActivity : ComponentActivity() {
             }
             Gesture.TAP -> {
                 val selectedItem = items[current.selectedMoreIndex]
-                // Close more menu first, then execute (which may open a submenu)
-                hudState.value = current.copy(
-                    showMoreMenu = false,
-                    selectedMoreIndex = 0
-                )
+                if (selectedItem == MoreMenuItem.VOICE_OUTPUT) {
+                    hudState.value = current.copy(showMoreMenu = true)
+                } else {
+                    // Close more menu first, then execute (which may open a submenu)
+                    hudState.value = current.copy(
+                        showMoreMenu = false,
+                        selectedMoreIndex = 0
+                    )
+                }
                 executeMoreMenuItem(selectedItem)
             }
             Gesture.DOUBLE_TAP -> {
@@ -1070,6 +1074,13 @@ class HudActivity : ComponentActivity() {
                 }
                 phoneConnection.sendToPhone(json.toString())
                 Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
+            }
+            MoreMenuItem.VOICE_OUTPUT -> {
+                val json = JSONObject().apply {
+                    put("type", "tts_output_next")
+                }
+                phoneConnection.sendToPhone(json.toString())
+                Log.d(GlassesApp.TAG, "TTS output cycle requested")
             }
             else -> {}
         }
@@ -2644,10 +2655,14 @@ class HudActivity : ComponentActivity() {
                     val voiceName = if (msg.has("voiceName") && !msg.isNull("voiceName")) {
                         msg.optString("voiceName")
                     } else null
+                    val outputRoute = msg.optString("voiceOutputRoute", hudState.value.ttsOutputRoute)
                     hudState.update { current ->
-                        current.copy(ttsEnabled = enabled)
+                        current.copy(
+                            ttsEnabled = enabled,
+                            ttsOutputRoute = outputRoute
+                        )
                     }
-                    Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName")
+                    Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName, output=$outputRoute")
                 }
 
                 else -> {

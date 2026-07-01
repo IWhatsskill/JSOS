@@ -133,6 +133,8 @@ import com.jsos.shared.WatchVoiceOutputRoutes
 import com.jsos.shared.stableSessionDisplayName
 import java.util.UUID
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -442,6 +444,8 @@ fun MainScreen() {
     var codexCliSessions by remember { mutableStateOf<List<CodexCliSession>>(emptyList()) }
     var codexCliCurrentSessionId by remember { mutableStateOf<String?>(null) }
     var pendingCodexCliSend by remember { mutableStateOf<PendingCodexCliSend?>(null) }
+    var codexCliTtsJob by remember { mutableStateOf<Job?>(null) }
+    var lastSpokenCodexTtsText by remember { mutableStateOf("") }
     var pendingWatchCodexResumeAck by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showCodexCliSessionPicker by remember { mutableStateOf(false) }
     val codexCliUrl = remember(openClawHost) { codexCliBridgeUrl(openClawHost) }
@@ -615,7 +619,25 @@ fun MainScreen() {
         sendCodexCliOutputToGlasses(line)
     }
 
+    fun resetCodexTts() {
+        codexCliTtsJob?.cancel()
+        codexCliTtsJob = null
+        lastSpokenCodexTtsText = ""
+    }
+
+    fun scheduleCodexTts(lines: List<String>) {
+        val text = latestCodexTtsResponse(lines) ?: return
+        if (text == lastSpokenCodexTtsText) return
+        codexCliTtsJob?.cancel()
+        codexCliTtsJob = scope.launch {
+            delay(900L)
+            lastSpokenCodexTtsText = text
+            ttsPlaybackManager.onMessageComplete(text)
+        }
+    }
+
     fun dispatchCodexCliSend(request: PendingCodexCliSend) {
+        resetCodexTts()
         codexCliLines = (codexCliLines + "> ${request.visiblePrompt}").takeLast(220)
         publishWatchCodexSnapshot()
         val sent = codexCliBridgeClient.sendInput(request.prompt, request.photos)
@@ -721,7 +743,9 @@ fun MainScreen() {
         codexCliBridgeClient.onOutput = { output, append ->
             mainHandler.post {
                 if (output.isNotBlank()) {
-                    codexCliLines = mergeCodexCliOutput(codexCliLines, output, append).takeLast(220)
+                    val mergedLines = mergeCodexCliOutput(codexCliLines, output, append).takeLast(220)
+                    codexCliLines = mergedLines
+                    scheduleCodexTts(mergedLines)
                 }
                 publishWatchCodexSnapshot()
             }
@@ -790,11 +814,12 @@ fun MainScreen() {
         }
     }
     // Sync TTS state to glasses when settings change
-    LaunchedEffect(ttsEnabled, ttsVoiceName) {
+    LaunchedEffect(ttsEnabled, ttsVoiceName, voiceOutputRoute) {
         if (glassesState is GlassesConnectionManager.ConnectionState.Connected) {
             val ttsStateMsg = TtsState(
                 enabled = ttsEnabled,
-                voiceName = ttsVoiceName
+                voiceName = ttsVoiceName,
+                voiceOutputRoute = voiceOutputRoute
             )
             glassesManager.sendRawMessage(ttsStateMsg.toJson())
         }
@@ -819,7 +844,8 @@ fun MainScreen() {
                 // Send TTS state to glasses
                 val ttsStateMsg = TtsState(
                     enabled = ttsSettingsManager.isEnabled.value,
-                    voiceName = ttsSettingsManager.selectedVoiceName.value
+                    voiceName = ttsSettingsManager.selectedVoiceName.value,
+                    voiceOutputRoute = voiceOutputRoute
                 )
                 glassesManager.sendRawMessage(ttsStateMsg.toJson())
                 glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
@@ -1238,6 +1264,15 @@ fun MainScreen() {
             else -> "GLASSES"
         }
 
+    fun sendTtsStateToGlasses() {
+        val ttsStateMsg = TtsState(
+            enabled = ttsSettingsManager.isEnabled.value,
+            voiceName = ttsSettingsManager.selectedVoiceName.value,
+            voiceOutputRoute = voiceOutputRoute
+        )
+        glassesManager.sendRawMessage(ttsStateMsg.toJson())
+    }
+
     fun toggleWatchTts(): Pair<Boolean, String> {
         val enabled = !ttsSettingsManager.isEnabled.value
         ttsSettingsManager.setEnabled(enabled)
@@ -1246,7 +1281,8 @@ fun MainScreen() {
         }
         val ttsStateMsg = TtsState(
             enabled = enabled,
-            voiceName = ttsSettingsManager.selectedVoiceName.value
+            voiceName = ttsSettingsManager.selectedVoiceName.value,
+            voiceOutputRoute = voiceOutputRoute
         )
         glassesManager.sendRawMessage(ttsStateMsg.toJson())
         return true to "TTS ${if (enabled) "ON" else "OFF"}"
@@ -1290,6 +1326,7 @@ fun MainScreen() {
         if (liveTalkManager.isActive) {
             routeLiveTalkAudioForCurrentOutput()
         }
+        sendTtsStateToGlasses()
         return true to "Output ${voiceOutputRouteLabel(nextRoute)}"
     }
 
@@ -1490,6 +1527,7 @@ fun MainScreen() {
     }
 
     fun stopWatchCodex(commandId: String, action: String) {
+        resetCodexTts()
         codexCliBridgeClient.stop()
         val line = "[status] Codex stop requested"
         codexCliLines = (codexCliLines + line).takeLast(220)
@@ -1498,6 +1536,7 @@ fun MainScreen() {
     }
 
     fun clearWatchCodex(commandId: String, action: String) {
+        resetCodexTts()
         codexCliLines = listOf("Codex CLI output cleared.")
         sendCodexCliSnapshotToGlasses()
         acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex clear")
@@ -1818,6 +1857,7 @@ fun MainScreen() {
                     }
                     "cli_stop" -> {
                         android.util.Log.d("MainScreen", "Glasses requested Codex CLI stop")
+                        resetCodexTts()
                         codexCliBridgeClient.stop()
                     }
                     "request_state" -> {
@@ -1847,7 +1887,8 @@ fun MainScreen() {
                         // Send TTS state
                         val ttsStateMsg = TtsState(
                             enabled = ttsSettingsManager.isEnabled.value,
-                            voiceName = ttsSettingsManager.selectedVoiceName.value
+                            voiceName = ttsSettingsManager.selectedVoiceName.value,
+                            voiceOutputRoute = voiceOutputRoute
                         )
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
                         openClawClient.requestModels()
@@ -1861,9 +1902,14 @@ fun MainScreen() {
                         // Send updated state back to glasses
                         val ttsStateMsg = TtsState(
                             enabled = enabled,
-                            voiceName = ttsSettingsManager.selectedVoiceName.value
+                            voiceName = ttsSettingsManager.selectedVoiceName.value,
+                            voiceOutputRoute = voiceOutputRoute
                         )
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                    }
+                    "tts_output_next" -> {
+                        val (ok, message) = cycleWatchVoiceOutput()
+                        android.util.Log.d("MainScreen", "TTS output next from glasses: ok=$ok, message=$message")
                     }
                     "take_photo" -> {
                         android.util.Log.d("MainScreen", "Glasses requested photo capture")
@@ -2300,8 +2346,14 @@ fun MainScreen() {
                                 android.widget.Toast.makeText(context, "Glasses offline", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         },
-                        onStop = { codexCliBridgeClient.stop() },
-                        onClear = { codexCliLines = listOf("Codex CLI output cleared.") },
+                        onStop = {
+                            resetCodexTts()
+                            codexCliBridgeClient.stop()
+                        },
+                        onClear = {
+                            resetCodexTts()
+                            codexCliLines = listOf("Codex CLI output cleared.")
+                        },
                     )
                 }
 
@@ -3932,6 +3984,20 @@ private fun codexCliLineBlocks(
 
     flushResponse()
     return blocks
+}
+
+private fun latestCodexTtsResponse(lines: List<String>): String? {
+    val lastPromptIndex = lines.indexOfLast { it.trimStart().startsWith(">") }
+    val relevantLines = if (lastPromptIndex >= 0) {
+        lines.drop(lastPromptIndex + 1)
+    } else {
+        lines
+    }
+    return codexCliLineBlocks(relevantLines, showPrompts = false)
+        .lastOrNull { it.type == CodexCliLineType.RESPONSE }
+        ?.text
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
 }
 
 @Composable

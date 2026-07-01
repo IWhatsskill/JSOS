@@ -57,6 +57,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import com.jsos.shared.LLM_MODEL_OPTIONS
 import com.jsos.shared.LlmModelOption
+import com.jsos.shared.WatchVoiceOutputRoutes
 import kotlinx.coroutines.delay
 
 /**
@@ -135,6 +136,7 @@ enum class MoreMenuItem(val icon: String, val label: String) {
     DISPLAY("DISP", "Display"),
     RING_TOOLS("RING", "Ring Tools"),
     VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
+    VOICE_OUTPUT("OUT", "TTS Output"),
 }
 
 enum class VoiceSendMode {
@@ -285,6 +287,7 @@ data class ChatHudState(
     val voiceSendMode: VoiceSendMode = VoiceSendMode.ASK,
     // TTS state (voice responses)
     val ttsEnabled: Boolean = false,
+    val ttsOutputRoute: String = WatchVoiceOutputRoutes.DEFAULT,
     // Experimental Codex CLI terminal overlay
     val showCliTerminal: Boolean = false,
     val cliAgentState: AgentState = AgentState.IDLE,
@@ -678,6 +681,7 @@ fun HudScreen(
                 currentDisplaySize = state.displaySize,
                 voiceSendMode = state.voiceSendMode,
                 ttsEnabled = state.ttsEnabled,
+                ttsOutputRoute = state.ttsOutputRoute,
                 fontFamily = monoFontFamily
             )
         }
@@ -2116,12 +2120,22 @@ private fun CodexSessionPickerOverlay(
 // MORE MENU OVERLAY
 // ============================================================================
 
+private fun ttsOutputRouteLabel(route: String): String =
+    when (route) {
+        WatchVoiceOutputRoutes.GLASSES -> "GLASSES"
+        WatchVoiceOutputRoutes.PHONE -> "PHONE"
+        WatchVoiceOutputRoutes.WATCH -> "WATCH"
+        WatchVoiceOutputRoutes.OFF -> "OFF"
+        else -> route.ifBlank { "GLASSES" }
+    }
+
 @Composable
 private fun MoreMenuOverlay(
     selectedIndex: Int,
     currentDisplaySize: HudDisplaySize,
     voiceSendMode: VoiceSendMode,
     ttsEnabled: Boolean,
+    ttsOutputRoute: String,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
 ) {
@@ -2143,6 +2157,7 @@ private fun MoreMenuOverlay(
                     val isActive = when (item) {
                         MoreMenuItem.VOICE_SEND -> voiceSendMode == VoiceSendMode.AUTO
                         MoreMenuItem.VOICE -> ttsEnabled
+                        MoreMenuItem.VOICE_OUTPUT -> ttsOutputRoute != WatchVoiceOutputRoutes.OFF
                         else -> false
                     }
 
@@ -2153,6 +2168,7 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.DISPLAY -> "DISPLAY"
                         MoreMenuItem.RING_TOOLS -> "RING TOOLS"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
+                        MoreMenuItem.VOICE_OUTPUT -> "OUT ${ttsOutputRouteLabel(ttsOutputRoute)}"
                     }
                     val activeMark = if (isActive) "*" else " "
                     val leftMark = if (isSelected) ">" else " "

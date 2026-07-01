@@ -51,8 +51,8 @@ android {
         applicationId = "com.jsos.phone"
         minSdk = 28  // Required by CXR-M SDK
         targetSdk = 34
-        versionCode = 207
-        versionName = "2.0.7-codex-resume"
+        versionCode = 208
+        versionName = "2.0.8-watch-output-routing"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
