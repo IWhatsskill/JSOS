@@ -18,10 +18,30 @@ Before adding new screenshots, check that they do not expose private hosts, API 
 </p>
 
 <p align="center">
+  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch chat page" width="15%"></a>
+  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status page" width="15%"></a>
+  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch core control page" width="15%"></a>
+  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model page" width="15%"></a>
+  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex page" width="15%"></a>
+  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice page" width="15%"></a>
+</p>
+
+<p align="center">
   <a href="images/jsos-hud-home.jpeg"><img src="images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="23%"></a>
   <a href="images/jsos-hud-bottom-menu.jpeg"><img src="images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="23%"></a>
   <a href="images/jsos-hud-ar-tools.jpeg"><img src="images/jsos-hud-ar-tools.jpeg" alt="JSOS HUD AR tools panel captured through Rokid glasses" width="23%"></a>
   <a href="images/jsos-codex-hud-home.jpeg"><img src="images/jsos-codex-hud-home.jpeg" alt="JSOS Admin Codex HUD captured through Rokid glasses" width="23%"></a>
+</p>
+
+## Additional Watch Screenshots
+
+<p align="center">
+  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch chat page" width="15%"></a>
+  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status page" width="15%"></a>
+  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch core control page" width="15%"></a>
+  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model page" width="15%"></a>
+  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex page" width="15%"></a>
+  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice page" width="15%"></a>
 </p>
 
 ## Additional Core Screenshots
