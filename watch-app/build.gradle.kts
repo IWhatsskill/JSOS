@@ -41,8 +41,8 @@ android {
         applicationId = "com.jsos.watch"
         minSdk = 28
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2-watch-output-routing"
+        versionCode = 3
+        versionName = "0.3-codex-new-delete"
     }
 
     compileOptions {

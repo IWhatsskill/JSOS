@@ -235,6 +235,17 @@ class WatchBridge(
         sendCommand(WatchCommandActions.CODEX_CLEAR)
     }
 
+    fun newCodexSession() {
+        sendCommand(WatchCommandActions.CODEX_NEW)
+    }
+
+    fun deleteCodexSession() {
+        val sessionId = _state.value.codexCurrentSessionId.ifBlank {
+            _state.value.codexSessions.firstOrNull { it.isCurrent }?.id.orEmpty()
+        }
+        sendCommand(WatchCommandActions.CODEX_DELETE, targetId = sessionId)
+    }
+
     fun closeCodexSessions() {
         _state.value = _state.value.copy(showCodexSessions = false)
     }
@@ -500,6 +511,8 @@ class WatchBridge(
             WatchCommandActions.CODEX_INPUT -> "CODEX"
             WatchCommandActions.CODEX_STOP -> "CSTOP"
             WatchCommandActions.CODEX_CLEAR -> "CCLR"
+            WatchCommandActions.CODEX_NEW -> "CNEW"
+            WatchCommandActions.CODEX_DELETE -> "CDEL"
             WatchCommandActions.ASSISTANT_COMMAND -> "ASK"
             else -> "CMD"
         }

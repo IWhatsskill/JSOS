@@ -41,8 +41,8 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 231
-        versionName = "2.0.30-watch-output-routing"
+        versionCode = 232
+        versionName = "2.0.31-codex-new-delete"
     }
 
     signingConfigs {

@@ -9,7 +9,7 @@ JSOS is an Android-based HUD stack for **Rokid glasses**, **JSOS Core**, and a l
 This is a development preview for builders and testers, not a finished consumer product.
 
 <p align="center">
-  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.29-core-watch-ui-polish"><strong>Download preview APKs</strong></a>
+  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.30-watch-output-routing"><strong>Download preview APKs</strong></a>
   &nbsp;|&nbsp;
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch showcase video</strong></a>
   &nbsp;|&nbsp;
@@ -78,7 +78,7 @@ The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCRE
 
 ## Quick Start
 
-1. Download the latest JSOS Core, JSOS HUD, and optional JSOS Watch APKs from the [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.29-core-watch-ui-polish).
+1. Download the latest JSOS Core, JSOS HUD, and optional JSOS Watch APKs from the [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.30-watch-output-routing).
 2. Allow Android to install APKs from the app used to open the downloaded files.
 3. Install JSOS Core on the phone.
 4. Open JSOS Core and configure OpenClaw Gateway host, port, token, and required runtime credentials.

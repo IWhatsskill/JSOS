@@ -69,6 +69,8 @@ object WatchCommandActions {
     const val CODEX_INPUT = "codex_input"
     const val CODEX_STOP = "codex_stop"
     const val CODEX_CLEAR = "codex_clear"
+    const val CODEX_NEW = "codex_new"
+    const val CODEX_DELETE = "codex_delete"
     const val ASSISTANT_COMMAND = "assistant_command"
     const val TTS_TOGGLE = "tts_toggle"
     const val STT_TOGGLE = "stt_toggle"

@@ -1542,6 +1542,56 @@ fun MainScreen() {
         acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex clear")
     }
 
+    fun newWatchCodexSession(commandId: String, action: String) {
+        if (pendingCodexCliSend != null) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex busy")
+            return
+        }
+        when (codexCliStatus) {
+            CodexCliBridgeClient.State.CONNECTED -> {
+                showCodexCliSessionPicker = false
+                sendCodexCliWithRefresh(
+                    PendingCodexCliSend(
+                        prompt = "/new",
+                        visiblePrompt = "/new",
+                        photos = emptyList(),
+                    )
+                )
+                acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex new")
+            }
+            CodexCliBridgeClient.State.CONNECTING -> {
+                publishWatchCodexSnapshot()
+                acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex connecting")
+            }
+            else -> {
+                codexCliBridgeClient.connect(codexCliBridgeUrl(openClawHost))
+                publishWatchCodexSnapshot()
+                acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex connecting")
+            }
+        }
+    }
+
+    fun deleteWatchCodexSession(commandId: String, action: String, targetId: String) {
+        val sessionId = targetId.trim().ifBlank { codexCliCurrentSessionId.orEmpty() }
+        if (sessionId.isBlank()) {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "No Codex session")
+            return
+        }
+        if (codexCliStatus != CodexCliBridgeClient.State.CONNECTED) {
+            codexCliBridgeClient.connect(codexCliBridgeUrl(openClawHost))
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Codex connecting")
+            return
+        }
+        if (codexCliBridgeClient.deleteSession(sessionId)) {
+            showCodexCliSessionPicker = false
+            codexCliLines = (codexCliLines + "[status] Codex delete requested").takeLast(220)
+            codexCliBridgeClient.requestSessions()
+            acknowledgeWatchCommand(commandId, action, ok = true, message = "Codex delete")
+        } else {
+            acknowledgeWatchCommand(commandId, action, ok = false, message = "Delete failed")
+        }
+    }
+
     fun handleWatchAssistantText(text: String, commandId: String, action: String) {
         val trimmed = text.trim()
         if (trimmed.isBlank()) {
@@ -1607,6 +1657,8 @@ fun MainScreen() {
             WatchCommandActions.CODEX_INPUT -> handleWatchCodexInput(commandId, action, targetId)
             WatchCommandActions.CODEX_STOP -> stopWatchCodex(commandId, action)
             WatchCommandActions.CODEX_CLEAR -> clearWatchCodex(commandId, action)
+            WatchCommandActions.CODEX_NEW -> newWatchCodexSession(commandId, action)
+            WatchCommandActions.CODEX_DELETE -> deleteWatchCodexSession(commandId, action, targetId)
             WatchCommandActions.TTS_TOGGLE -> {
                 val (ok, message) = toggleWatchTts()
                 acknowledgeWatchCommand(commandId, action, ok, message)
@@ -2317,6 +2369,39 @@ fun MainScreen() {
                         onResumeSession = { sessionId ->
                             if (!codexCliBridgeClient.resumeSession(sessionId)) {
                                 codexCliLines = (codexCliLines + "[error] Codex resume failed").takeLast(220)
+                            }
+                        },
+                        onNewSession = {
+                            if (pendingCodexCliSend != null) {
+                                codexCliLines = (codexCliLines + "[error] Codex session refresh already running").takeLast(220)
+                            } else if (codexCliStatus == CodexCliBridgeClient.State.CONNECTED) {
+                                showCodexCliSessionPicker = false
+                                sendCodexCliWithRefresh(
+                                    PendingCodexCliSend(
+                                        prompt = "/new",
+                                        visiblePrompt = "/new",
+                                        photos = emptyList(),
+                                    )
+                                )
+                            } else {
+                                codexCliLines = (codexCliLines + "[status] Link Codex first").takeLast(220)
+                                codexCliBridgeClient.connect(codexCliUrl)
+                            }
+                        },
+                        onDeleteSession = { sessionId ->
+                            if (sessionId.isBlank()) {
+                                codexCliLines = (codexCliLines + "[error] No Codex session selected").takeLast(220)
+                            } else if (codexCliStatus != CodexCliBridgeClient.State.CONNECTED) {
+                                codexCliLines = (codexCliLines + "[status] Link Codex first").takeLast(220)
+                                codexCliBridgeClient.connect(codexCliUrl)
+                            } else if (codexCliBridgeClient.deleteSession(sessionId)) {
+                                showCodexCliSessionPicker = false
+                                codexCliCurrentSessionId = null
+                                codexCliSessions = codexCliSessions.filterNot { it.id == sessionId }
+                                codexCliLines = (codexCliLines + "[status] Codex delete requested").takeLast(220)
+                                codexCliBridgeClient.requestSessions()
+                            } else {
+                                codexCliLines = (codexCliLines + "[error] Codex delete failed").takeLast(220)
                             }
                         },
                         onSend = {
@@ -3609,6 +3694,8 @@ private fun CodexCliDeck(
     onToggleSessionPicker: () -> Unit,
     onRefreshSessions: () -> Unit,
     onResumeSession: (String) -> Unit,
+    onNewSession: () -> Unit,
+    onDeleteSession: (String) -> Unit,
     onSend: () -> Unit,
     onTakePhoto: () -> Unit,
     onStop: () -> Unit,
@@ -3835,45 +3922,64 @@ private fun CodexCliDeck(
             ),
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CoreCompactActionButton(
-                label = if (pendingPhotoCount > 0) "CAM $pendingPhotoCount" else "CAM",
-                onClick = onTakePhoto,
-                modifier = Modifier.weight(1f),
-                selected = hasPendingPhoto,
-            )
-            CoreCompactActionButton(
-                label = if (connected) "DISC" else "LINK",
-                onClick = if (connected) onDisconnect else onConnect,
-                modifier = Modifier.weight(1f),
-                selected = connected,
-            )
-            CoreCompactActionButton(
-                label = "RESUME",
-                onClick = onToggleSessionPicker,
-                enabled = connected,
-                modifier = Modifier.weight(1f),
-            )
-            CoreCompactActionButton(
-                label = "SEND",
-                onClick = onSend,
-                enabled = connected && (inputText.isNotBlank() || hasPendingPhoto),
-                modifier = Modifier.weight(1f),
-            )
-            CoreCompactActionButton(
-                label = "STOP",
-                onClick = onStop,
-                enabled = connected,
-                modifier = Modifier.weight(1f),
-            )
-            CoreCompactActionButton(
-                label = "CLEAR",
-                onClick = onClear,
-                modifier = Modifier.weight(1f),
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CoreCompactActionButton(
+                    label = if (pendingPhotoCount > 0) "CAM $pendingPhotoCount" else "CAM",
+                    onClick = onTakePhoto,
+                    modifier = Modifier.weight(1f),
+                    selected = hasPendingPhoto,
+                )
+                CoreCompactActionButton(
+                    label = if (connected) "DISC" else "LINK",
+                    onClick = if (connected) onDisconnect else onConnect,
+                    modifier = Modifier.weight(1f),
+                    selected = connected,
+                )
+                CoreCompactActionButton(
+                    label = "RESUME",
+                    onClick = onToggleSessionPicker,
+                    enabled = connected,
+                    modifier = Modifier.weight(1f),
+                )
+                CoreCompactActionButton(
+                    label = "NEW",
+                    onClick = onNewSession,
+                    enabled = connected,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CoreCompactActionButton(
+                    label = "DEL",
+                    onClick = { onDeleteSession(currentSessionId.orEmpty()) },
+                    enabled = connected && !currentSessionId.isNullOrBlank(),
+                    modifier = Modifier.weight(1f),
+                )
+                CoreCompactActionButton(
+                    label = "SEND",
+                    onClick = onSend,
+                    enabled = connected && (inputText.isNotBlank() || hasPendingPhoto),
+                    modifier = Modifier.weight(1f),
+                )
+                CoreCompactActionButton(
+                    label = "STOP",
+                    onClick = onStop,
+                    enabled = connected,
+                    modifier = Modifier.weight(1f),
+                )
+                CoreCompactActionButton(
+                    label = "CLEAR",
+                    onClick = onClear,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

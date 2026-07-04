@@ -140,6 +140,16 @@ class CodexCliBridgeClient {
         )
     }
 
+    fun deleteSession(sessionId: String): Boolean {
+        val trimmed = sessionId.trim()
+        if (trimmed.isEmpty()) return false
+        return sendControl(
+            JSONObject()
+                .put("type", "codex_session.delete")
+                .put("sessionId", trimmed)
+        )
+    }
+
     fun disconnect() {
         connectionGeneration.incrementAndGet()
         webSocket?.send(JSONObject().put("type", "stop").toString())

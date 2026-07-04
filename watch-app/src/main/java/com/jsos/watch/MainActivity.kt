@@ -161,6 +161,8 @@ class MainActivity : ComponentActivity() {
                 onSendCodexInput = bridge::sendCodexInput,
                 onStopCodex = bridge::stopCodex,
                 onClearCodex = bridge::clearCodex,
+                onNewCodexSession = bridge::newCodexSession,
+                onDeleteCodexSession = bridge::deleteCodexSession,
                 onSpeechTargetChanged = { sendSpeechToCodex = it }
             )
         }
@@ -194,6 +196,8 @@ private fun WatchApp(
     onSendCodexInput: (String) -> Unit,
     onStopCodex: () -> Unit,
     onClearCodex: () -> Unit,
+    onNewCodexSession: () -> Unit,
+    onDeleteCodexSession: () -> Unit,
     onSpeechTargetChanged: (Boolean) -> Unit
 ) {
     val pages = listOf("CHAT", "STATUS", "CTRL", "SESSION", "CODEX", "VOICE")
@@ -259,7 +263,9 @@ private fun WatchApp(
                                 onStopWatchMic = onStopWatchMic,
                                 onSendCodexInput = onSendCodexInput,
                                 onStopCodex = onStopCodex,
-                                onClearCodex = onClearCodex
+                                onClearCodex = onClearCodex,
+                                onNewCodexSession = onNewCodexSession,
+                                onDeleteCodexSession = onDeleteCodexSession
                             )
                             5 -> VoicePage(
                                 state = state,
@@ -654,7 +660,9 @@ private fun CodexPage(
     onStopWatchMic: () -> Unit,
     onSendCodexInput: (String) -> Unit,
     onStopCodex: () -> Unit,
-    onClearCodex: () -> Unit
+    onClearCodex: () -> Unit,
+    onNewCodexSession: () -> Unit,
+    onDeleteCodexSession: () -> Unit
 ) {
     val codexScrollState = rememberScrollState()
     val sessionScrollState = rememberScrollState()
@@ -737,6 +745,19 @@ private fun CodexPage(
                 )
                 ChatMiniButton("STOP", StopRed, enabled, onStopCodex)
                 ChatMiniButton("CLR", Neutral, enabled, onClearCodex)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ChatMiniButton("NEW", TalkGreen, enabled, onNewCodexSession)
+                ChatMiniButton(
+                    "DEL",
+                    StopRed,
+                    enabled && state.codexCurrentSessionId.isNotBlank(),
+                    onDeleteCodexSession
+                )
             }
             TinyStatusLine("CODEX ${state.codexStatus}")
             TinyStatusLine(
