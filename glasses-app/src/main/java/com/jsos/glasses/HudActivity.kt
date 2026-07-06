@@ -1075,6 +1075,13 @@ class HudActivity : ComponentActivity() {
                 phoneConnection.sendToPhone(json.toString())
                 Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
             }
+            MoreMenuItem.VOICE_PROVIDER -> {
+                val json = JSONObject().apply {
+                    put("type", "tts_provider_next")
+                }
+                phoneConnection.sendToPhone(json.toString())
+                Log.d(GlassesApp.TAG, "TTS provider cycle requested")
+            }
             MoreMenuItem.VOICE_OUTPUT -> {
                 val json = JSONObject().apply {
                     put("type", "tts_output_next")
@@ -2655,14 +2662,16 @@ class HudActivity : ComponentActivity() {
                     val voiceName = if (msg.has("voiceName") && !msg.isNull("voiceName")) {
                         msg.optString("voiceName")
                     } else null
+                    val providerLabel = msg.optString("providerLabel", hudState.value.ttsProviderLabel)
                     val outputRoute = msg.optString("voiceOutputRoute", hudState.value.ttsOutputRoute)
                     hudState.update { current ->
                         current.copy(
                             ttsEnabled = enabled,
+                            ttsProviderLabel = providerLabel,
                             ttsOutputRoute = outputRoute
                         )
                     }
-                    Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName, output=$outputRoute")
+                    Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, provider=$providerLabel, voice=$voiceName, output=$outputRoute")
                 }
 
                 else -> {

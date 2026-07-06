@@ -107,6 +107,7 @@ import com.jsos.phone.ui.settings.SettingsScreen
 import com.jsos.phone.ui.settings.SettingsTarget
 import com.jsos.phone.ui.theme.JsosPalette
 import com.jsos.phone.tts.ElevenLabsClient
+import com.jsos.phone.tts.OpenAITtsClient
 import com.jsos.phone.tts.TtsPlaybackManager
 import com.jsos.phone.tts.TtsSettingsManager
 import com.jsos.phone.voice.VoiceCommandHandler
@@ -203,6 +204,7 @@ fun MainScreen() {
     val voiceRecognitionManager = remember { VoiceRecognitionManager(context) }
     val ttsSettingsManager = remember { TtsSettingsManager(context) }
     val elevenLabsClient = remember { ElevenLabsClient() }
+    val openAiTtsClient = remember { OpenAITtsClient() }
     val liveTalkAudioRouteManager = remember { LiveTalkAudioRouteManager(context) }
     val codexCliBridgeClient = remember { CodexCliBridgeClient() }
 
@@ -223,7 +225,9 @@ fun MainScreen() {
     val wakeOnStreamEnabled by glassesManager.wakeSignalManager.enabled.collectAsState()
     val glassBrightness by RokidSdkManager.preferredGlassBrightness.collectAsState()
     val ttsEnabled by ttsSettingsManager.isEnabled.collectAsState()
+    val ttsProvider by ttsSettingsManager.provider.collectAsState()
     val ttsVoiceName by ttsSettingsManager.selectedVoiceName.collectAsState()
+    val openAiTtsVoice by ttsSettingsManager.openAiVoice.collectAsState()
     val liveTalkState by liveTalkManager.state.collectAsState()
     var gatewayConnectedSinceMs by remember { mutableStateOf<Long?>(null) }
     var gatewayLinkNowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -254,8 +258,10 @@ fun MainScreen() {
     val ttsPlaybackManager = remember {
         TtsPlaybackManager(
             context = context,
-            client = elevenLabsClient,
+            elevenLabsClient = elevenLabsClient,
+            openAiClient = openAiTtsClient,
             settings = ttsSettingsManager,
+            openAiApiKeyProvider = { voiceRecognitionManager.getOpenAIApiKey() },
             outputRouteProvider = { voiceOutputRoute },
             watchAudioSender = { file -> PhoneWatchBridge.publishTtsAudio(context, file) },
             watchAudioStopper = { PhoneWatchBridge.publishTtsAudioStop(context) }
@@ -351,6 +357,27 @@ fun MainScreen() {
             ?.take(96)
             .orEmpty()
 
+    fun currentTtsProvider(): String = ttsSettingsManager.provider.value
+
+    fun currentTtsProviderLabel(): String =
+        ttsSettingsManager.providerLabel(currentTtsProvider())
+
+    fun currentTtsVoiceName(): String? =
+        if (currentTtsProvider() == TtsSettingsManager.PROVIDER_OPENAI) {
+            ttsSettingsManager.openAiVoice.value
+        } else {
+            ttsSettingsManager.selectedVoiceName.value
+        }
+
+    fun currentTtsState(enabled: Boolean = ttsSettingsManager.isEnabled.value): TtsState =
+        TtsState(
+            enabled = enabled,
+            voiceName = currentTtsVoiceName(),
+            provider = currentTtsProvider(),
+            providerLabel = currentTtsProviderLabel(),
+            voiceOutputRoute = voiceOutputRoute
+        )
+
     var watchMessageLimit by remember { mutableIntStateOf(60) }
     var watchChatHasMore by remember { mutableStateOf(true) }
     var pendingWatchChatMoreCommandId by remember { mutableStateOf<String?>(null) }
@@ -405,7 +432,9 @@ fun MainScreen() {
                 hudOnline = glassesState is GlassesConnectionManager.ConnectionState.Connected,
                 gatewayOnline = openClawState is OpenClawClient.ConnectionState.Connected,
                 liveTalkState = watchLiveTalkLabel(),
-                ttsEnabled = ttsEnabled,
+                ttsEnabled = ttsSettingsManager.isEnabled.value,
+                ttsProvider = currentTtsProvider(),
+                ttsProviderLabel = currentTtsProviderLabel(),
                 sttEnabled = isListening,
                 voiceOutputRoute = voiceOutputRoute,
                 currentSession = currentWatchSessionLabel(),
@@ -420,6 +449,8 @@ fun MainScreen() {
         openClawState,
         liveTalkState,
         ttsEnabled,
+        ttsProvider,
+        openAiTtsVoice,
         isListening,
         voiceOutputRoute,
         currentSessionKey,
@@ -814,14 +845,9 @@ fun MainScreen() {
         }
     }
     // Sync TTS state to glasses when settings change
-    LaunchedEffect(ttsEnabled, ttsVoiceName, voiceOutputRoute) {
+    LaunchedEffect(ttsEnabled, ttsProvider, ttsVoiceName, openAiTtsVoice, voiceOutputRoute) {
         if (glassesState is GlassesConnectionManager.ConnectionState.Connected) {
-            val ttsStateMsg = TtsState(
-                enabled = ttsEnabled,
-                voiceName = ttsVoiceName,
-                voiceOutputRoute = voiceOutputRoute
-            )
-            glassesManager.sendRawMessage(ttsStateMsg.toJson())
+            glassesManager.sendRawMessage(currentTtsState(enabled = ttsEnabled).toJson())
         }
     }
 
@@ -842,12 +868,7 @@ fun MainScreen() {
                     glassesManager.sendRawMessage(buildChatHistoryJson(currentMessages))
                 }
                 // Send TTS state to glasses
-                val ttsStateMsg = TtsState(
-                    enabled = ttsSettingsManager.isEnabled.value,
-                    voiceName = ttsSettingsManager.selectedVoiceName.value,
-                    voiceOutputRoute = voiceOutputRoute
-                )
-                glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                glassesManager.sendRawMessage(currentTtsState().toJson())
                 glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
                 mainHandler.postDelayed({
                     glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
@@ -1265,27 +1286,39 @@ fun MainScreen() {
         }
 
     fun sendTtsStateToGlasses() {
-        val ttsStateMsg = TtsState(
-            enabled = ttsSettingsManager.isEnabled.value,
-            voiceName = ttsSettingsManager.selectedVoiceName.value,
-            voiceOutputRoute = voiceOutputRoute
-        )
-        glassesManager.sendRawMessage(ttsStateMsg.toJson())
+        glassesManager.sendRawMessage(currentTtsState().toJson())
     }
 
     fun toggleWatchTts(): Pair<Boolean, String> {
         val enabled = !ttsSettingsManager.isEnabled.value
+        if (enabled && !ttsSettingsManager.isConfigured(voiceRecognitionManager.getOpenAIApiKey())) {
+            sendTtsStateToGlasses()
+            return false to "${currentTtsProviderLabel()} not configured"
+        }
         ttsSettingsManager.setEnabled(enabled)
         if (!enabled) {
             ttsPlaybackManager.stop()
         }
-        val ttsStateMsg = TtsState(
-            enabled = enabled,
-            voiceName = ttsSettingsManager.selectedVoiceName.value,
-            voiceOutputRoute = voiceOutputRoute
-        )
-        glassesManager.sendRawMessage(ttsStateMsg.toJson())
+        glassesManager.sendRawMessage(currentTtsState(enabled = enabled).toJson())
         return true to "TTS ${if (enabled) "ON" else "OFF"}"
+    }
+
+    fun cycleTtsProvider(): Pair<Boolean, String> {
+        val nextProvider = if (currentTtsProvider() == TtsSettingsManager.PROVIDER_OPENAI) {
+            TtsSettingsManager.PROVIDER_ELEVENLABS
+        } else {
+            TtsSettingsManager.PROVIDER_OPENAI
+        }
+        ttsSettingsManager.setProvider(nextProvider)
+        val providerLabel = ttsSettingsManager.providerLabel(nextProvider)
+        val configured = ttsSettingsManager.isConfigured(voiceRecognitionManager.getOpenAIApiKey())
+        if (ttsSettingsManager.isEnabled.value && !configured) {
+            ttsSettingsManager.setEnabled(false)
+            ttsPlaybackManager.stop()
+        }
+        sendTtsStateToGlasses()
+        publishWatchStatus()
+        return true to if (configured) "TTS $providerLabel" else "TTS $providerLabel (OFF)"
     }
 
     fun toggleWatchStt(): Pair<Boolean, String> {
@@ -1663,6 +1696,10 @@ fun MainScreen() {
                 val (ok, message) = toggleWatchTts()
                 acknowledgeWatchCommand(commandId, action, ok, message)
             }
+            WatchCommandActions.TTS_PROVIDER_NEXT -> {
+                val (ok, message) = cycleTtsProvider()
+                acknowledgeWatchCommand(commandId, action, ok, message)
+            }
             WatchCommandActions.STT_TOGGLE -> {
                 val (ok, message) = toggleWatchStt()
                 acknowledgeWatchCommand(commandId, action, ok, message)
@@ -1937,12 +1974,7 @@ fun MainScreen() {
                         val currentMessages = openClawClient.chatMessages.value
                         glassesManager.sendRawMessage(buildChatHistoryJson(currentMessages))
                         // Send TTS state
-                        val ttsStateMsg = TtsState(
-                            enabled = ttsSettingsManager.isEnabled.value,
-                            voiceName = ttsSettingsManager.selectedVoiceName.value,
-                            voiceOutputRoute = voiceOutputRoute
-                        )
-                        glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                        glassesManager.sendRawMessage(currentTtsState().toJson())
                         openClawClient.requestModels()
                         glassesManager.sendRawMessage(openClawClient.modelOptionsUpdate().toJson())
                         sendCodexCliSnapshotToGlasses()
@@ -1950,18 +1982,24 @@ fun MainScreen() {
                     "tts_toggle" -> {
                         val enabled = json.optBoolean("enabled", false)
                         android.util.Log.d("MainScreen", "TTS toggle from glasses: $enabled")
-                        ttsSettingsManager.setEnabled(enabled)
-                        // Send updated state back to glasses
-                        val ttsStateMsg = TtsState(
-                            enabled = enabled,
-                            voiceName = ttsSettingsManager.selectedVoiceName.value,
-                            voiceOutputRoute = voiceOutputRoute
-                        )
-                        glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                        if (enabled && !ttsSettingsManager.isConfigured(voiceRecognitionManager.getOpenAIApiKey())) {
+                            glassesManager.sendRawMessage(currentTtsState().toJson())
+                        } else {
+                            ttsSettingsManager.setEnabled(enabled)
+                            if (!enabled) {
+                                ttsPlaybackManager.stop()
+                            }
+                            // Send updated state back to glasses
+                            glassesManager.sendRawMessage(currentTtsState(enabled = enabled).toJson())
+                        }
                     }
                     "tts_output_next" -> {
                         val (ok, message) = cycleWatchVoiceOutput()
                         android.util.Log.d("MainScreen", "TTS output next from glasses: ok=$ok, message=$message")
+                    }
+                    "tts_provider_next" -> {
+                        val (ok, message) = cycleTtsProvider()
+                        android.util.Log.d("MainScreen", "TTS provider next from glasses: ok=$ok, message=$message")
                     }
                     "take_photo" -> {
                         android.util.Log.d("MainScreen", "Glasses requested photo capture")

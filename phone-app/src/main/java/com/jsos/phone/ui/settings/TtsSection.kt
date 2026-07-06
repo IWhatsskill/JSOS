@@ -44,10 +44,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -62,37 +62,46 @@ import com.jsos.phone.tts.ElevenLabsClient
 import com.jsos.phone.tts.TtsSettingsManager
 import com.jsos.phone.ui.theme.JsosPalette
 import com.jsos.phone.tts.Voice
-import kotlinx.coroutines.launch
+import com.jsos.phone.voice.VoiceRecognitionManager
 
 @Composable
 fun TtsSection(
     ttsSettingsManager: TtsSettingsManager,
     elevenLabsClient: ElevenLabsClient,
+    voiceRecognitionManager: VoiceRecognitionManager? = null,
     modifier: Modifier = Modifier,
 ) {
     val apiKey by ttsSettingsManager.apiKey.collectAsState()
+    val provider by ttsSettingsManager.provider.collectAsState()
     val selectedVoiceId by ttsSettingsManager.selectedVoiceId.collectAsState()
     val selectedVoiceName by ttsSettingsManager.selectedVoiceName.collectAsState()
+    val openAiModel by ttsSettingsManager.openAiModel.collectAsState()
+    val openAiVoice by ttsSettingsManager.openAiVoice.collectAsState()
     val isEnabled by ttsSettingsManager.isEnabled.collectAsState()
     val speed by ttsSettingsManager.speed.collectAsState()
 
     var localApiKey by remember(apiKey) { mutableStateOf(apiKey) }
     var showApiKey by remember { mutableStateOf(false) }
     var showVoiceSheet by remember { mutableStateOf(false) }
+    var showOpenAiModelSheet by remember { mutableStateOf(false) }
+    var showOpenAiVoiceSheet by remember { mutableStateOf(false) }
 
     var voices by remember { mutableStateOf<List<Voice>>(emptyList()) }
     var isLoadingVoices by remember { mutableStateOf(false) }
     var voicesError by remember { mutableStateOf<String?>(null) }
 
-    val scope = rememberCoroutineScope()
-
+    val isOpenAiProvider = provider == TtsSettingsManager.PROVIDER_OPENAI
     val hasApiKey = localApiKey.isNotBlank()
     val hasVoice = selectedVoiceId != null
-    val isConfigured = hasApiKey && hasVoice && isEnabled
+    val hasOpenAiApiKey = voiceRecognitionManager?.getOpenAIApiKey().orEmpty().isNotBlank()
+    val openAiVoices = ttsSettingsManager.openAiVoicesForModel(openAiModel)
+    val providerConfigured = if (isOpenAiProvider) hasOpenAiApiKey else hasApiKey && hasVoice
+    val isConfigured = providerConfigured && isEnabled
+    val activeVoiceName = if (isOpenAiProvider) openAiVoice else selectedVoiceName
 
     // Fetch voices when API key changes and is valid
-    LaunchedEffect(apiKey) {
-        if (apiKey.isNotBlank()) {
+    LaunchedEffect(apiKey, provider) {
+        if (!isOpenAiProvider && apiKey.isNotBlank()) {
             isLoadingVoices = true
             voicesError = null
             elevenLabsClient.getVoices(apiKey)
@@ -106,6 +115,8 @@ fun TtsSection(
                 }
         } else {
             voices = emptyList()
+            isLoadingVoices = false
+            voicesError = null
         }
     }
 
@@ -148,7 +159,12 @@ fun TtsSection(
                                         append("Active")
                                     }
                                     withStyle(SpanStyle(color = JsosPalette.Cyan)) {
-                                        append(" - ${selectedVoiceName ?: "Unknown"}")
+                                        append(" - ${ttsSettingsManager.providerLabel(provider)}")
+                                    }
+                                    activeVoiceName?.let { voice ->
+                                        withStyle(SpanStyle(color = JsosPalette.Cyan)) {
+                                            append(" / $voice")
+                                        }
                                     }
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -157,8 +173,9 @@ fun TtsSection(
                         } else {
                             Text(
                                 when {
-                                    !hasApiKey -> "API key required"
-                                    !hasVoice -> "Select a voice"
+                                    isOpenAiProvider && !hasOpenAiApiKey -> "OpenAI key required"
+                                    !isOpenAiProvider && !hasApiKey -> "ElevenLabs key required"
+                                    !isOpenAiProvider && !hasVoice -> "Select a voice"
                                     else -> "Disabled"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
@@ -172,144 +189,147 @@ fun TtsSection(
                         onCheckedChange = { enabled ->
                             ttsSettingsManager.setEnabled(enabled)
                         },
-                        enabled = hasApiKey && hasVoice,
+                        enabled = providerConfigured,
                         colors = jsosSwitchColors(),
                     )
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                // API Key input field
-                OutlinedTextField(
-                    value = localApiKey,
-                    onValueChange = { newKey ->
-                        localApiKey = newKey
-                        ttsSettingsManager.setApiKey(newKey)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("ElevenLabs API Key") },
-                    placeholder = { Text("xi-...") },
-                    singleLine = true,
-                    colors = jsosTextFieldColors(),
-                    visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    trailingIcon = {
-                        Row {
-                            IconButton(onClick = { showApiKey = !showApiKey }) {
-                                Icon(
-                                    if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showApiKey) "Hide API key" else "Show API key",
-                                    tint = JsosPalette.Cyan,
-                                )
-                            }
-                            if (localApiKey.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    localApiKey = ""
-                                    ttsSettingsManager.setApiKey("")
-                                }) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    ProviderOption(
+                        label = "ElevenLabs",
+                        selected = !isOpenAiProvider,
+                        onClick = { ttsSettingsManager.setProvider(TtsSettingsManager.PROVIDER_ELEVENLABS) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    ProviderOption(
+                        label = "OpenAI",
+                        selected = isOpenAiProvider,
+                        onClick = { ttsSettingsManager.setProvider(TtsSettingsManager.PROVIDER_OPENAI) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                if (isOpenAiProvider) {
+                    SettingRow(
+                        title = "OpenAI API Key",
+                        value = if (hasOpenAiApiKey) "Saved in Voice settings" else "Add key in Voice settings",
+                        valueColor = if (hasOpenAiApiKey) JsosPalette.Green else JsosPalette.Muted,
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    SettingRow(
+                        title = "Model",
+                        value = openAiModel,
+                        onClick = { showOpenAiModelSheet = true },
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    SettingRow(
+                        title = "Voice",
+                        value = openAiVoice,
+                        onClick = { showOpenAiVoiceSheet = true },
+                    )
+                } else {
+                    // API Key input field
+                    OutlinedTextField(
+                        value = localApiKey,
+                        onValueChange = { newKey ->
+                            localApiKey = newKey
+                            ttsSettingsManager.setApiKey(newKey)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("ElevenLabs API Key") },
+                        placeholder = { Text("xi-...") },
+                        singleLine = true,
+                        colors = jsosTextFieldColors(),
+                        visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = { showApiKey = !showApiKey }) {
                                     Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Clear API key",
+                                        if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (showApiKey) "Hide API key" else "Show API key",
                                         tint = JsosPalette.Cyan,
                                     )
                                 }
+                                if (localApiKey.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        localApiKey = ""
+                                        ttsSettingsManager.setApiKey("")
+                                    }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Clear API key",
+                                            tint = JsosPalette.Cyan,
+                                        )
+                                    }
+                                }
                             }
-                        }
-                    },
-                    supportingText = {
-                        when {
-                            voicesError != null -> Text(
-                                "Invalid API key",
-                                color = JsosPalette.Red,
-                            )
-                            hasApiKey -> Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = JsosPalette.Green,
+                        },
+                        supportingText = {
+                            when {
+                                voicesError != null -> Text(
+                                    "Invalid API key",
+                                    color = JsosPalette.Red,
                                 )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    "API key saved",
-                                    color = JsosPalette.Cyan,
-                                    fontSize = 11.sp,
+                                hasApiKey -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = JsosPalette.Green,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "API key saved",
+                                        color = JsosPalette.Cyan,
+                                        fontSize = 11.sp,
+                                    )
+                                }
+                                else -> Text(
+                                    "Required for ElevenLabs voice synthesis",
+                                    color = JsosPalette.Muted,
                                 )
                             }
-                            else -> Text(
-                                "Required for ElevenLabs voice synthesis",
-                                color = JsosPalette.Muted,
-                            )
-                        }
-                    },
-                )
+                        },
+                    )
 
-                // Voice selector (only show when API key is set)
-                if (hasApiKey) {
-                    Spacer(Modifier.height(12.dp))
+                    // Voice selector (only show when API key is set)
+                    if (hasApiKey) {
+                        Spacer(Modifier.height(12.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = JsosPalette.CardDark.copy(alpha = 0.58f),
-                        border = jsosPanelBorder(alpha = 0.26f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !isLoadingVoices && voices.isNotEmpty()) {
-                                showVoiceSheet = true
+                        SettingRow(
+                            title = "Voice",
+                            value = when {
+                                isLoadingVoices -> "Loading voices..."
+                                voicesError != null -> "Error loading voices"
+                                selectedVoiceName != null -> selectedVoiceName!!
+                                voices.isNotEmpty() -> "Select a voice"
+                                else -> "No voices available"
                             },
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Voice",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = JsosPalette.Cyan,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                Text(
-                                    when {
-                                        isLoadingVoices -> "Loading voices..."
-                                        voicesError != null -> "Error loading voices"
-                                        selectedVoiceName != null -> selectedVoiceName!!
-                                        voices.isNotEmpty() -> "Select a voice"
-                                        else -> "No voices available"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = JsosPalette.Text,
-                                    fontFamily = FontFamily.Monospace,
-                                )
-                            }
-                            if (isLoadingVoices) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = JsosPalette.Cyan,
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = JsosPalette.Cyan.copy(alpha = 0.72f),
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
-                        }
+                            enabled = !isLoadingVoices && voices.isNotEmpty(),
+                            loading = isLoadingVoices,
+                            onClick = { showVoiceSheet = true },
+                        )
                     }
                 }
 
-                // Speed slider (only show when API key is set)
-                if (hasApiKey) {
+                // Speed slider
+                if (providerConfigured) {
                     Spacer(Modifier.height(12.dp))
 
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -354,14 +374,6 @@ fun TtsSection(
                         }
                     }
                 }
-
-                // Info text
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "ElevenLabs provides high-quality AI voice synthesis to read assistant responses aloud.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = JsosPalette.Muted,
-                )
             }
         }
     }
@@ -377,6 +389,191 @@ fun TtsSection(
             },
             onDismiss = { showVoiceSheet = false },
         )
+    }
+
+    if (showOpenAiModelSheet) {
+        TextOptionBottomSheet(
+            title = "Select OpenAI TTS Model",
+            options = TtsSettingsManager.OPENAI_MODELS,
+            selected = openAiModel,
+            onSelect = { model ->
+                ttsSettingsManager.setOpenAiModel(model)
+                showOpenAiModelSheet = false
+            },
+            onDismiss = { showOpenAiModelSheet = false },
+        )
+    }
+
+    if (showOpenAiVoiceSheet) {
+        TextOptionBottomSheet(
+            title = "Select OpenAI Voice",
+            options = openAiVoices,
+            selected = openAiVoice,
+            onSelect = { voice ->
+                ttsSettingsManager.setOpenAiVoice(voice)
+                showOpenAiVoiceSheet = false
+            },
+            onDismiss = { showOpenAiVoiceSheet = false },
+        )
+    }
+}
+
+@Composable
+private fun ProviderOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) JsosPalette.Cyan.copy(alpha = 0.18f) else JsosPalette.CardDark.copy(alpha = 0.58f),
+        border = jsosPanelBorder(alpha = if (selected) 0.58f else 0.26f),
+        modifier = modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = if (selected) JsosPalette.Green else JsosPalette.Muted,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (selected) JsosPalette.Green else JsosPalette.Text,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingRow(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = JsosPalette.Text,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = JsosPalette.CardDark.copy(alpha = 0.58f),
+        border = jsosPanelBorder(alpha = 0.26f),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled && onClick != null) {
+                onClick?.invoke()
+            },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = JsosPalette.Cyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    value,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = valueColor,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = JsosPalette.Cyan,
+                )
+            } else if (onClick != null) {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = JsosPalette.Cyan.copy(alpha = 0.72f),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TextOptionBottomSheet(
+    title: String,
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = JsosPalette.ScreenMid,
+        contentColor = JsosPalette.Text,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = JsosPalette.Cyan,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            HorizontalDivider(thickness = 0.5.dp, color = JsosPalette.BorderSubtle)
+            Spacer(Modifier.height(8.dp))
+        }
+
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = 16.dp),
+        ) {
+            items(options) { option ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(option) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        if (option == selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = if (option == selected) JsosPalette.Green else JsosPalette.Muted,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        option,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                        color = if (option == selected) JsosPalette.Green else JsosPalette.Text,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(32.dp)) }
+        }
     }
 }
 

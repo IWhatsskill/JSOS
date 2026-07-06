@@ -655,6 +655,8 @@ data class TtsState(
     @SerializedName("type") val type: String = "tts_state",
     @SerializedName("enabled") val enabled: Boolean,
     @SerializedName("voiceName") val voiceName: String? = null,
+    @SerializedName("provider") val provider: String = "elevenlabs",
+    @SerializedName("providerLabel") val providerLabel: String = "ElevenLabs",
     @SerializedName("voiceOutputRoute") val voiceOutputRoute: String = WatchVoiceOutputRoutes.DEFAULT
 ) {
     fun toJson(): String = gson.toJson(this)

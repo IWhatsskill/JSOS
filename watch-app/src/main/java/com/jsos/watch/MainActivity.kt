@@ -145,6 +145,7 @@ class MainActivity : ComponentActivity() {
                 onToggleTts = bridge::toggleTts,
                 onToggleStt = bridge::toggleStt,
                 onNextVoiceOutput = bridge::nextVoiceOutput,
+                onNextTtsProvider = bridge::nextTtsProvider,
                 onStartWatchMic = startWatchMic,
                 onStopWatchMic = speechController::stop,
                 onSendAssistantCommand = bridge::sendAssistantCommand,
@@ -180,6 +181,7 @@ private fun WatchApp(
     onToggleTts: () -> Unit,
     onToggleStt: () -> Unit,
     onNextVoiceOutput: () -> Unit,
+    onNextTtsProvider: () -> Unit,
     onStartWatchMic: () -> Unit,
     onStopWatchMic: () -> Unit,
     onSendAssistantCommand: (String) -> Unit,
@@ -274,6 +276,7 @@ private fun WatchApp(
                                 onToggleTts = onToggleTts,
                                 onToggleStt = onToggleStt,
                                 onNextVoiceOutput = onNextVoiceOutput,
+                                onNextTtsProvider = onNextTtsProvider,
                                 onStartWatchMic = onStartWatchMic,
                                 onStopWatchMic = onStopWatchMic,
                                 onToggleLiveTalk = onToggleLiveTalk,
@@ -342,6 +345,7 @@ private fun StatusPage(state: WatchUiState) {
         }
         StatusPanel {
             StatusPanelLine("LIVE", state.liveTalkState, if (state.liveTalkState == "IDLE") TextPrimary else OnlineGreen)
+            StatusPanelLine("TTS", if (state.ttsEnabled) ttsProviderShortLabel(state.ttsProviderLabel) else "OFF", if (state.ttsEnabled) OnlineGreen else TextPrimary)
             StatusPanelLine("OUTPUT", voiceOutputLabel(state.voiceOutputRoute), if (state.voiceOutputRoute == WatchVoiceOutputRoutes.OFF) ErrorRed else TextPrimary)
             StatusPanelLine("AUDIO", state.watchAudioStatus, if (state.watchAudioStatus.contains("READY", ignoreCase = true)) OnlineGreen else ErrorRed)
         }
@@ -855,6 +859,7 @@ private fun VoicePage(
     onToggleTts: () -> Unit,
     onToggleStt: () -> Unit,
     onNextVoiceOutput: () -> Unit,
+    onNextTtsProvider: () -> Unit,
     onStartWatchMic: () -> Unit,
     onStopWatchMic: () -> Unit,
     onToggleLiveTalk: () -> Unit,
@@ -869,7 +874,7 @@ private fun VoicePage(
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         SectionLabel("VOICE")
-        TinyStatusLine("TTS: ${onOff(state.ttsEnabled)}  STT: ${speechState.status}")
+        TinyStatusLine("TTS: ${if (state.ttsEnabled) ttsProviderShortLabel(state.ttsProviderLabel) else "OFF"}  STT: ${speechState.status}")
         TinyStatusLine("OUTPUT: ${voiceOutputLabel(state.voiceOutputRoute)}")
         TinyStatusLine("AUDIO: ${state.watchAudioStatus}")
         if (speechState.lastText.isNotBlank()) {
@@ -892,6 +897,12 @@ private fun VoicePage(
             color = if (state.ttsEnabled) TalkGreen else Neutral,
             enabled = enabled,
             onClick = onToggleTts
+        )
+        WideCommandButton(
+            label = "TTS SRC ${ttsProviderShortLabel(state.ttsProviderLabel)}",
+            color = Neutral,
+            enabled = enabled,
+            onClick = onNextTtsProvider
         )
         WideCommandButton(
             label = "OUTPUT ${voiceOutputLabel(state.voiceOutputRoute)}",
@@ -1239,6 +1250,13 @@ private fun onOff(value: Boolean): String = if (value) "ON" else "OFF"
 private fun yesNo(value: Boolean): String = if (value) "YES" else "NO"
 
 private fun onlineOffline(value: Boolean): String = if (value) "ONLINE" else "OFFLINE"
+
+private fun ttsProviderShortLabel(providerLabel: String): String =
+    when {
+        providerLabel.contains("OpenAI", ignoreCase = true) -> "OAI"
+        providerLabel.contains("Eleven", ignoreCase = true) -> "11L"
+        else -> providerLabel.ifBlank { "11L" }.take(4).uppercase()
+    }
 
 private fun voiceOutputLabel(route: String): String =
     when (route) {

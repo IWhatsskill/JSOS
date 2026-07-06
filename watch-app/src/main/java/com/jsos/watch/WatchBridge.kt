@@ -40,6 +40,7 @@ data class WatchUiState(
     val detail: String = "WAIT",
     val liveTalkState: String = "IDLE",
     val ttsEnabled: Boolean = false,
+    val ttsProviderLabel: String = "ElevenLabs",
     val sttEnabled: Boolean = false,
     val voiceOutputRoute: String = WatchVoiceOutputRoutes.DEFAULT,
     val watchAudioStatus: String = "AUDIO READY",
@@ -181,6 +182,10 @@ class WatchBridge(
 
     fun nextVoiceOutput() {
         sendCommand(WatchCommandActions.VOICE_OUTPUT_NEXT)
+    }
+
+    fun nextTtsProvider() {
+        sendCommand(WatchCommandActions.TTS_PROVIDER_NEXT)
     }
 
     fun requestState() {
@@ -414,6 +419,7 @@ class WatchBridge(
                     detail = statusError.ifBlank { status?.liveTalkState ?: status?.coreLabel ?: "STATUS" },
                     liveTalkState = status?.liveTalkState ?: "IDLE",
                     ttsEnabled = status?.ttsEnabled == true,
+                    ttsProviderLabel = status?.ttsProviderLabel ?: "ElevenLabs",
                     sttEnabled = status?.sttEnabled == true,
                     voiceOutputRoute = status?.voiceOutputRoute ?: WatchVoiceOutputRoutes.DEFAULT,
                     currentSession = status?.currentSession.orEmpty(),
@@ -500,6 +506,7 @@ class WatchBridge(
             WatchCommandActions.TTS_TOGGLE -> "TTS"
             WatchCommandActions.STT_TOGGLE -> "STT"
             WatchCommandActions.VOICE_OUTPUT_NEXT -> "OUT"
+            WatchCommandActions.TTS_PROVIDER_NEXT -> "TSRC"
             WatchCommandActions.REQUEST_STATE -> "STATE"
             WatchCommandActions.CHAT_MORE -> "MORE"
             WatchCommandActions.SESSION_PREVIOUS -> "SESS-"

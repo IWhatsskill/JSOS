@@ -281,7 +281,7 @@ fun SettingsScreen(
                 item {
                     ControlDeckPanel(
                         title = "RESPONSE VOICE",
-                        subtitle = "ElevenLabs TTS",
+                        subtitle = "ElevenLabs / OpenAI TTS",
                         status = "OPTIONAL",
                         icon = Icons.Default.RecordVoiceOver,
                         accent = JsosPalette.Yellow,
@@ -289,6 +289,7 @@ fun SettingsScreen(
                         TtsSection(
                             ttsSettingsManager = ttsSettingsManager,
                             elevenLabsClient = elevenLabsClient,
+                            voiceRecognitionManager = voiceRecognitionManager,
                         )
                     }
                 }

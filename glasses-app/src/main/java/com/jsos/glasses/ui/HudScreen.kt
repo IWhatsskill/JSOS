@@ -136,6 +136,7 @@ enum class MoreMenuItem(val icon: String, val label: String) {
     DISPLAY("DISP", "Display"),
     RING_TOOLS("RING", "Ring Tools"),
     VOICE("\uD83D\uDD0A", "TTS"),  // speaker icon - label is dynamic
+    VOICE_PROVIDER("SRC", "TTS Source"),
     VOICE_OUTPUT("OUT", "TTS Output"),
 }
 
@@ -287,6 +288,7 @@ data class ChatHudState(
     val voiceSendMode: VoiceSendMode = VoiceSendMode.ASK,
     // TTS state (voice responses)
     val ttsEnabled: Boolean = false,
+    val ttsProviderLabel: String = "ElevenLabs",
     val ttsOutputRoute: String = WatchVoiceOutputRoutes.DEFAULT,
     // Experimental Codex CLI terminal overlay
     val showCliTerminal: Boolean = false,
@@ -681,6 +683,7 @@ fun HudScreen(
                 currentDisplaySize = state.displaySize,
                 voiceSendMode = state.voiceSendMode,
                 ttsEnabled = state.ttsEnabled,
+                ttsProviderLabel = state.ttsProviderLabel,
                 ttsOutputRoute = state.ttsOutputRoute,
                 fontFamily = monoFontFamily
             )
@@ -2129,12 +2132,20 @@ private fun ttsOutputRouteLabel(route: String): String =
         else -> route.ifBlank { "GLASSES" }
     }
 
+private fun ttsProviderShortLabel(providerLabel: String): String =
+    when {
+        providerLabel.contains("OpenAI", ignoreCase = true) -> "OAI"
+        providerLabel.contains("Eleven", ignoreCase = true) -> "11L"
+        else -> providerLabel.ifBlank { "11L" }.take(4).uppercase()
+    }
+
 @Composable
 private fun MoreMenuOverlay(
     selectedIndex: Int,
     currentDisplaySize: HudDisplaySize,
     voiceSendMode: VoiceSendMode,
     ttsEnabled: Boolean,
+    ttsProviderLabel: String,
     ttsOutputRoute: String,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
@@ -2157,6 +2168,7 @@ private fun MoreMenuOverlay(
                     val isActive = when (item) {
                         MoreMenuItem.VOICE_SEND -> voiceSendMode == VoiceSendMode.AUTO
                         MoreMenuItem.VOICE -> ttsEnabled
+                        MoreMenuItem.VOICE_PROVIDER -> ttsProviderLabel.contains("OpenAI", ignoreCase = true)
                         MoreMenuItem.VOICE_OUTPUT -> ttsOutputRoute != WatchVoiceOutputRoutes.OFF
                         else -> false
                     }
@@ -2168,6 +2180,7 @@ private fun MoreMenuOverlay(
                         MoreMenuItem.DISPLAY -> "DISPLAY"
                         MoreMenuItem.RING_TOOLS -> "RING TOOLS"
                         MoreMenuItem.VOICE -> if (ttsEnabled) "TTS ON" else "TTS OFF"
+                        MoreMenuItem.VOICE_PROVIDER -> "SRC ${ttsProviderShortLabel(ttsProviderLabel)}"
                         MoreMenuItem.VOICE_OUTPUT -> "OUT ${ttsOutputRouteLabel(ttsOutputRoute)}"
                     }
                     val activeMark = if (isActive) "*" else " "

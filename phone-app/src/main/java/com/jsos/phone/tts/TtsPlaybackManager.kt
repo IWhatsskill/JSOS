@@ -23,8 +23,10 @@ import java.io.FileOutputStream
  */
 class TtsPlaybackManager(
     private val context: Context,
-    private val client: ElevenLabsClient,
+    private val elevenLabsClient: ElevenLabsClient,
+    private val openAiClient: OpenAITtsClient,
     private val settings: TtsSettingsManager,
+    private val openAiApiKeyProvider: () -> String = { "" },
     private val outputRouteProvider: () -> String = { WatchVoiceOutputRoutes.DEFAULT },
     private val watchAudioSender: (File) -> Unit = {},
     private val watchAudioStopper: () -> Unit = {}
@@ -37,7 +39,7 @@ class TtsPlaybackManager(
     private var currentTempFile: File? = null
 
     /**
-     * Speak the given text using ElevenLabs TTS.
+     * Speak the given text using the configured TTS provider.
      * Stops any current playback first.
      */
     fun speak(text: String) {
@@ -51,27 +53,44 @@ class TtsPlaybackManager(
             return
         }
 
-        val apiKey = settings.apiKey.value
-        val voiceId = settings.selectedVoiceId.value
+        val provider = settings.provider.value
+        val elevenLabsApiKey = settings.apiKey.value
+        val elevenLabsVoiceId = settings.selectedVoiceId.value
+        val openAiApiKey = openAiApiKeyProvider()
+        val openAiModel = settings.openAiModel.value
+        val openAiVoice = settings.openAiVoice.value
 
-        if (apiKey.isBlank()) {
-            Log.w(TAG, "No API key configured")
-            return
-        }
-
-        if (voiceId == null) {
-            Log.w(TAG, "No voice selected")
-            return
+        when (provider) {
+            TtsSettingsManager.PROVIDER_OPENAI -> {
+                if (openAiApiKey.isBlank()) {
+                    Log.w(TAG, "No OpenAI API key configured")
+                    return
+                }
+            }
+            else -> {
+                if (elevenLabsApiKey.isBlank()) {
+                    Log.w(TAG, "No ElevenLabs API key configured")
+                    return
+                }
+                if (elevenLabsVoiceId == null) {
+                    Log.w(TAG, "No ElevenLabs voice selected")
+                    return
+                }
+            }
         }
 
         val generation = beginNewPlayback()
 
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                Log.d(TAG, "Synthesizing TTS (${text.length} chars)")
+                Log.d(TAG, "Synthesizing TTS via ${settings.providerLabel(provider)} (${text.length} chars)")
 
                 val speed = settings.speed.value.toDouble()
-                val result = client.synthesize(apiKey, voiceId, text, speed)
+                val result = if (provider == TtsSettingsManager.PROVIDER_OPENAI) {
+                    openAiClient.synthesize(openAiApiKey, openAiModel, openAiVoice, text, speed)
+                } else {
+                    elevenLabsClient.synthesize(elevenLabsApiKey, elevenLabsVoiceId!!, text, speed)
+                }
 
                 result.onSuccess { inputStream ->
                     if (!isCurrentGeneration(generation)) {

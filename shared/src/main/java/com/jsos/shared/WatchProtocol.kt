@@ -75,6 +75,7 @@ object WatchCommandActions {
     const val TTS_TOGGLE = "tts_toggle"
     const val STT_TOGGLE = "stt_toggle"
     const val VOICE_OUTPUT_NEXT = "voice_output_next"
+    const val TTS_PROVIDER_NEXT = "tts_provider_next"
 }
 
 data class WatchPing(
@@ -113,6 +114,8 @@ data class WatchCoreStatus(
     @SerializedName("gatewayOnline") val gatewayOnline: Boolean = false,
     @SerializedName("liveTalkState") val liveTalkState: String = "IDLE",
     @SerializedName("ttsEnabled") val ttsEnabled: Boolean = false,
+    @SerializedName("ttsProvider") val ttsProvider: String = "elevenlabs",
+    @SerializedName("ttsProviderLabel") val ttsProviderLabel: String = "ElevenLabs",
     @SerializedName("sttEnabled") val sttEnabled: Boolean = false,
     @SerializedName("voiceOutputRoute") val voiceOutputRoute: String = WatchVoiceOutputRoutes.DEFAULT,
     @SerializedName("currentSession") val currentSession: String = "",
