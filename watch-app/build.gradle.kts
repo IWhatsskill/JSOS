@@ -41,8 +41,8 @@ android {
         applicationId = "com.jsos.watch"
         minSdk = 28
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.3-codex-new-delete"
+        versionCode = 4
+        versionName = "0.4-openai-tts"
     }
 
     compileOptions {

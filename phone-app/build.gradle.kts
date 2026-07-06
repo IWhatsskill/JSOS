@@ -51,8 +51,8 @@ android {
         applicationId = "com.jsos.phone"
         minSdk = 28  // Required by CXR-M SDK
         targetSdk = 34
-        versionCode = 209
-        versionName = "2.0.9-codex-new-delete"
+        versionCode = 210
+        versionName = "2.0.10-openai-tts"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
