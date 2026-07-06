@@ -668,7 +668,7 @@ class OpenClawClient(
                     )
                 } else {
                     publishModelOptions(
-                        parsed.options,
+                        mergeOpenAiFallbackOptions(parsed.options),
                         currentModelRef = parsed.currentModelRef,
                         currentModelLabel = parsed.currentModelLabel
                     )
@@ -1223,18 +1223,26 @@ private fun parseGatewayModelOptions(payload: JsonObject?): ParsedModelOptions {
 
     for (element in models) {
         val model = element.takeIf { it.isJsonObject }?.asJsonObject ?: continue
-        val provider = model.stringOrNull("provider") ?: continue
-        val id = model.stringOrNull("id") ?: continue
+        val explicitRef = model.stringOrNull("key")
+            ?: model.stringOrNull("ref")
+            ?: model.stringOrNull("model")?.takeIf { it.contains("/") }
+        val provider = model.stringOrNull("provider")
+            ?: explicitRef?.substringBefore("/")?.takeIf { it.isNotBlank() }
+            ?: continue
+        val id = model.stringOrNull("id")
+            ?: explicitRef?.substringAfter("/")?.takeIf { it.isNotBlank() }
+            ?: model.stringOrNull("model")?.takeIf { !it.contains("/") }
+            ?: continue
         val available = model.get("available")
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }
             ?.asBoolean
             ?: true
-        if (!available) continue
+        if (!available || model.booleanOrFalse("missing")) continue
 
         val ref = "$provider/$id"
         if (!seen.add(ref)) continue
 
-        val name = model.stringOrNull("name")
+        val name = model.stringOrNull("name") ?: model.stringOrNull("label")
         val label = name ?: id
         options += LlmModelOption(
             label = label,
@@ -1252,6 +1260,22 @@ private fun parseGatewayModelOptions(payload: JsonObject?): ParsedModelOptions {
         currentModelRef = payload.currentModelRef() ?: flaggedCurrentRef,
         currentModelLabel = payload.currentModelLabel() ?: flaggedCurrentLabel
     )
+}
+
+private fun mergeOpenAiFallbackOptions(options: List<LlmModelOption>): List<LlmModelOption> {
+    val seen = linkedSetOf<String>()
+    val merged = mutableListOf<LlmModelOption>()
+    val openAiFallbackOptions = LLM_MODEL_OPTIONS.filter {
+        it.modelRef().startsWith("openai/", ignoreCase = true)
+    }
+    for (option in options + openAiFallbackOptions) {
+        val ref = option.modelRef().trim()
+        if (ref.isBlank()) continue
+        if (seen.add(ref.lowercase())) {
+            merged += option
+        }
+    }
+    return merged
 }
 
 private fun resolveCurrentModel(
@@ -1275,7 +1299,18 @@ private fun resolveCurrentModel(
 
 private fun JsonObject?.currentModelRef(): String? {
     if (this == null) return null
-    val fields = listOf("currentModel", "current_model", "current", "activeModel", "active", "selectedModel", "model")
+    val fields = listOf(
+        "currentModelRef",
+        "current_model_ref",
+        "modelRef",
+        "currentModel",
+        "current_model",
+        "current",
+        "activeModel",
+        "active",
+        "selectedModel",
+        "model"
+    )
     for (field in fields) {
         val parsed = get(field).modelPointer()
         if (parsed?.first != null) return parsed.first
@@ -1307,7 +1342,11 @@ private fun com.google.gson.JsonElement?.modelPointer(): Pair<String?, String?>?
     if (!isJsonObject) return null
     val obj = asJsonObject
     val provider = obj.stringOrNull("provider")
-    val idOrModel = obj.stringOrNull("id") ?: obj.stringOrNull("model") ?: obj.stringOrNull("name")
+    val idOrModel = obj.stringOrNull("key")
+        ?: obj.stringOrNull("ref")
+        ?: obj.stringOrNull("id")
+        ?: obj.stringOrNull("model")
+        ?: obj.stringOrNull("name")
     val ref = when {
         provider != null && idOrModel != null && !idOrModel.contains("/") -> "$provider/$idOrModel"
         idOrModel != null && idOrModel.contains("/") -> idOrModel
