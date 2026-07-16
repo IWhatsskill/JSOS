@@ -35,14 +35,18 @@ fun releaseSigningStoreFile(path: String): File {
 
 android {
     namespace = "com.jsos.watch"
-    compileSdk = 34
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
         applicationId = "com.jsos.watch"
         minSdk = 28
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.4-openai-tts"
+        versionCode = 5
+        versionName = "0.5-watch-ui"
     }
 
     compileOptions {
@@ -92,9 +96,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.wear.compose:compose-foundation:1.6.2")
+    implementation("androidx.wear.compose:compose-material3:1.6.2")
     implementation("com.google.android.gms:play-services-wearable:18.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

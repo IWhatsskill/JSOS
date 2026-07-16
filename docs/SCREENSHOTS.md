@@ -18,12 +18,13 @@ Before adding new screenshots, check that they do not expose private hosts, API 
 </p>
 
 <p align="center">
-  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch chat page" width="15%"></a>
-  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status page" width="15%"></a>
-  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch core control page" width="15%"></a>
-  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model page" width="15%"></a>
-  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex page" width="15%"></a>
-  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice page" width="15%"></a>
+  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch Assistant chat overview" width="13%"></a>
+  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status overview" width="13%"></a>
+  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch controls overview" width="13%"></a>
+  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model overview" width="13%"></a>
+  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex overview" width="13%"></a>
+  <a href="images/jsos-watch-codex-control.png"><img src="images/jsos-watch-codex-control.png" alt="JSOS Watch Codex control overview" width="13%"></a>
+  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice overview" width="13%"></a>
 </p>
 
 <p align="center">
@@ -36,12 +37,13 @@ Before adding new screenshots, check that they do not expose private hosts, API 
 ## Additional Watch Screenshots
 
 <p align="center">
-  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch chat page" width="15%"></a>
-  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status page" width="15%"></a>
-  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch core control page" width="15%"></a>
-  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model page" width="15%"></a>
-  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex page" width="15%"></a>
-  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice page" width="15%"></a>
+  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch Assistant chat overview" width="13%"></a>
+  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status overview" width="13%"></a>
+  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch controls overview" width="13%"></a>
+  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model overview" width="13%"></a>
+  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex overview" width="13%"></a>
+  <a href="images/jsos-watch-codex-control.png"><img src="images/jsos-watch-codex-control.png" alt="JSOS Watch Codex control overview" width="13%"></a>
+  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice overview" width="13%"></a>
 </p>
 
 ## Additional Core Screenshots
