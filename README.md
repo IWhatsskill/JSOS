@@ -160,6 +160,9 @@ optional.
 ./gradlew :phone-app:assembleDebug :glasses-app:assembleDebug :watch-app:assembleDebug
 ```
 
+For secure build and release practices, see
+[docs/SECURITY.md](docs/SECURITY.md).
+
 ## Preview status
 
 JSOS is an active development preview. The experience can vary with Rokid
