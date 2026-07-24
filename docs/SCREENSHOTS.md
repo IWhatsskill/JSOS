@@ -4,34 +4,18 @@ This page shows public-safe JSOS screenshots and visual assets.
 
 Before adding new screenshots, check that they do not expose private hosts, API keys, tokens, session keys, account data, serial numbers, MAC addresses, or device names.
 
-## Main README Preview Assets
+## Main README Assets
 
 <p align="center">
-  <a href="images/jsos-social-preview.png"><img src="images/jsos-social-preview.png" alt="JSOS social preview" width="100%"></a>
+  <a href="images/jsos-hero-top.png"><img src="images/jsos-hero-top.png" alt="JSOS smart-glasses HUD hero" width="100%"></a>
 </p>
 
 <p align="center">
-  <a href="images/jsos-core-home.jpeg"><img src="images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="23%"></a>
-  <a href="images/jsos-core-session-chat.jpeg"><img src="images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="23%"></a>
-  <a href="images/jsos-core-voice.jpeg"><img src="images/jsos-core-voice.jpeg" alt="JSOS Core voice settings" width="23%"></a>
-  <a href="images/jsos-core-diagnostics.jpeg"><img src="images/jsos-core-diagnostics.jpeg" alt="JSOS Core control cockpit menu" width="23%"></a>
+  <a href="images/jsos-originals-showcase.png"><img src="images/jsos-originals-showcase.png" alt="Original JSOS Core, Rokid HUD, and Wear OS interface showcase" width="100%"></a>
 </p>
 
 <p align="center">
-  <a href="images/jsos-watch-chat.png"><img src="images/jsos-watch-chat.png" alt="JSOS Watch Assistant chat overview" width="13%"></a>
-  <a href="images/jsos-watch-status.png"><img src="images/jsos-watch-status.png" alt="JSOS Watch status overview" width="13%"></a>
-  <a href="images/jsos-watch-core.png"><img src="images/jsos-watch-core.png" alt="JSOS Watch controls overview" width="13%"></a>
-  <a href="images/jsos-watch-session-model.png"><img src="images/jsos-watch-session-model.png" alt="JSOS Watch session and model overview" width="13%"></a>
-  <a href="images/jsos-watch-codex.png"><img src="images/jsos-watch-codex.png" alt="JSOS Watch Codex overview" width="13%"></a>
-  <a href="images/jsos-watch-codex-control.png"><img src="images/jsos-watch-codex-control.png" alt="JSOS Watch Codex control overview" width="13%"></a>
-  <a href="images/jsos-watch-voice.png"><img src="images/jsos-watch-voice.png" alt="JSOS Watch voice overview" width="13%"></a>
-</p>
-
-<p align="center">
-  <a href="images/jsos-hud-home.jpeg"><img src="images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="23%"></a>
-  <a href="images/jsos-hud-bottom-menu.jpeg"><img src="images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="23%"></a>
-  <a href="images/jsos-hud-ar-tools.jpeg"><img src="images/jsos-hud-ar-tools.jpeg" alt="JSOS HUD AR tools panel captured through Rokid glasses" width="23%"></a>
-  <a href="images/jsos-codex-hud-home.jpeg"><img src="images/jsos-codex-hud-home.jpeg" alt="JSOS Admin Codex HUD captured through Rokid glasses" width="23%"></a>
+  <a href="images/jsos-openclaw-system-concept.svg"><img src="images/jsos-openclaw-system-concept.svg" alt="JSOS spatial interface built for OpenClaw" width="100%"></a>
 </p>
 
 ## Additional Watch Screenshots

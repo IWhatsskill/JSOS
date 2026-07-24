@@ -39,6 +39,10 @@ reach.
 
 <p align="center"><sub>Original JSOS interface captures. Private Core labels are masked; the HUD panels are demo device photography.</sub></p>
 
+The Rokid HUD uses a deliberately restrained monochrome presentation for
+visibility in the optical display. Phone and Watch use cyan for structure;
+green remains reserved for active, ready, paired, and online states.
+
 ## Built for OpenClaw
 
 OpenClaw remains the assistant and control plane: gateway, sessions, voice, and
@@ -63,16 +67,6 @@ wrist experience.
   managed hosts.
 - **Three coordinated surfaces** — Core remains the source of truth while HUD and
   Watch expose the controls that matter in the moment.
-
-## Real-device HUD
-
-<p align="center">
-  <img src="docs/images/jsos-hud-ar-tools.jpeg" alt="JSOS AR tools on Rokid glasses" width="52%">
-</p>
-
-The Rokid HUD uses a deliberately restrained monochrome presentation for
-visibility in the optical display. Phone and Watch use cyan for structure;
-green remains reserved for active, ready, paired, and online states.
 
 ## Quick start
 
