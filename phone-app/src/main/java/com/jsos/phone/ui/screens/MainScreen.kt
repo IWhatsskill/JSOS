@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -105,6 +106,14 @@ import com.jsos.phone.talk.LiveTalkState
 import com.jsos.phone.talk.OpenClawTalkManager
 import com.jsos.phone.ui.settings.SettingsScreen
 import com.jsos.phone.ui.settings.SettingsTarget
+import com.jsos.phone.ui.components.conversation.JsosConversationBodyStyle
+import com.jsos.phone.ui.components.conversation.JsosConversationBubble
+import com.jsos.phone.ui.components.conversation.JsosConversationHeader
+import com.jsos.phone.ui.components.conversation.JsosConversationPanel
+import com.jsos.phone.ui.components.conversation.JsosConversationScaffold
+import com.jsos.phone.ui.components.conversation.JsosConversationSide
+import com.jsos.phone.ui.components.conversation.jsosConversationPeerAccent
+import com.jsos.phone.ui.theme.JsosConversationTokens
 import com.jsos.phone.ui.theme.JsosPalette
 import com.jsos.phone.tts.ElevenLabsClient
 import com.jsos.phone.tts.OpenAITtsClient
@@ -2969,78 +2978,363 @@ private fun ChatDeck(
     chatMessages: List<ChatMessage>,
     listState: androidx.compose.foundation.lazy.LazyListState,
 ) {
-    val speakerLabel = sessions.firstOrNull { it.key == currentSessionKey }?.coreDisplayLabel()?.title
+    val currentSession = sessions.firstOrNull { it.key == currentSessionKey }
+    val speakerLabel = currentSession?.coreDisplayLabel()?.title
         ?: currentSessionKey?.let { stableSessionDisplayName(it) }
         ?: "JSOS"
+    val speakerAccent = jsosConversationPeerAccent(
+        listOfNotNull(
+            currentSession?.agentId,
+            currentSession?.label,
+            currentSession?.displayName,
+            currentSession?.derivedTitle,
+            currentSession?.key,
+            speakerLabel,
+        ).joinToString(" "),
+    )
+    val statusLabel = when (openClawState) {
+        is OpenClawClient.ConnectionState.Connected -> when (agentActivity) {
+            OpenClawClient.AgentActivityState.Ready -> "READY"
+            OpenClawClient.AgentActivityState.Thinking -> "THINKING"
+            OpenClawClient.AgentActivityState.Writing -> "WRITING"
+        }
+        is OpenClawClient.ConnectionState.Connecting -> "LINKING"
+        is OpenClawClient.ConnectionState.Authenticating -> "AUTH"
+        is OpenClawClient.ConnectionState.PairingRequired -> "PAIR"
+        is OpenClawClient.ConnectionState.Error -> "ERROR"
+        is OpenClawClient.ConnectionState.Disconnected -> "OFFLINE"
+    }
+    val statusColor = when (openClawState) {
+        is OpenClawClient.ConnectionState.Connected -> when (agentActivity) {
+            OpenClawClient.AgentActivityState.Ready -> JsosPalette.Green
+            OpenClawClient.AgentActivityState.Thinking -> JsosPalette.Yellow
+            OpenClawClient.AgentActivityState.Writing -> JsosPalette.Cyan
+        }
+        is OpenClawClient.ConnectionState.Connecting,
+        is OpenClawClient.ConnectionState.Authenticating -> JsosPalette.Yellow
+        is OpenClawClient.ConnectionState.PairingRequired -> JsosPalette.Orange
+        is OpenClawClient.ConnectionState.Error -> JsosPalette.Red
+        is OpenClawClient.ConnectionState.Disconnected -> JsosPalette.Muted
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (openClawState is OpenClawClient.ConnectionState.Connected) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SessionSelector(
+    JsosConversationScaffold {
+        JsosConversationHeader(
+            title = "Core Chat",
+            subtitle = speakerLabel,
+            statusLabel = statusLabel,
+            statusColor = statusColor,
+        ) {
+            if (openClawState is OpenClawClient.ConnectionState.Connected) {
+                CoreChatPickerBar(
                     sessions = sessions,
                     hiddenSessions = hiddenSessions,
                     currentSessionKey = currentSessionKey,
-                    unreadSessionKeys = unreadSessions,
-                    expanded = showSessionPicker,
-                    onToggle = onToggleSessionPicker,
-                    onSelect = onSelectSession,
+                    unreadSessions = unreadSessions,
+                    showSessionPicker = showSessionPicker,
+                    onToggleSessionPicker = onToggleSessionPicker,
+                    onSelectSession = onSelectSession,
                     onHideSession = onHideSession,
                     onShowSession = onShowSession,
-                    onDismiss = onDismissSessionPicker,
-                    agentActivity = agentActivity,
-                )
-                ModelSelector(
+                    onDismissSessionPicker = onDismissSessionPicker,
                     options = modelOptions,
                     selectedLabel = selectedModelLabel,
-                    expanded = showModelPicker,
-                    enabled = modelPickerEnabled,
-                    onToggle = onToggleModelPicker,
-                    onSelect = onSelectModel,
-                    onDismiss = onDismissModelPicker,
+                    showModelPicker = showModelPicker,
+                    modelPickerEnabled = modelPickerEnabled,
+                    onToggleModelPicker = onToggleModelPicker,
+                    onSelectModel = onSelectModel,
+                    onDismissModelPicker = onDismissModelPicker,
+                )
+            } else {
+                Text(
+                    text = "Connect OpenClaw to load sessions and models.",
+                    color = JsosPalette.Muted,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
                 )
             }
         }
 
-        Box(
+        JsosConversationPanel(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(0.dp),
         ) {
             if (chatMessages.isEmpty()) {
                 Text(
-                    "Awaiting JSOS stream...",
+                    "CHAT EMPTY",
                     color = JsosPalette.Disabled,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.align(Alignment.Center)
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Center),
                 )
             } else {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(JsosConversationTokens.PanelPadding),
+                    verticalArrangement = Arrangement.spacedBy(JsosConversationTokens.MessageSpacing),
                 ) {
-                    item {
-                        Text(
-                            "LIVE FEED",
-                            color = JsosPalette.Cyan,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+                    items(chatMessages, key = { it.id }) { msg ->
+                        ChatMessageRow(
+                            msg = msg,
+                            speakerLabel = speakerLabel,
+                            speakerAccent = speakerAccent,
                         )
                     }
-                    items(chatMessages) { msg ->
-                        ChatMessageRow(msg, speakerLabel)
+                }
+            }
+        }
+    }
+}
+
+private enum class CoreChatPickerMenu {
+    SESSION,
+    MODEL,
+}
+
+@Composable
+private fun CoreChatPickerBar(
+    sessions: List<SessionInfo>,
+    hiddenSessions: List<SessionInfo>,
+    currentSessionKey: String?,
+    unreadSessions: Set<String>,
+    showSessionPicker: Boolean,
+    onToggleSessionPicker: () -> Unit,
+    onSelectSession: (SessionInfo) -> Unit,
+    onHideSession: (SessionInfo) -> Unit,
+    onShowSession: (SessionInfo) -> Unit,
+    onDismissSessionPicker: () -> Unit,
+    options: List<LlmModelOption>,
+    selectedLabel: String,
+    showModelPicker: Boolean,
+    modelPickerEnabled: Boolean,
+    onToggleModelPicker: () -> Unit,
+    onSelectModel: (LlmModelOption) -> Unit,
+    onDismissModelPicker: () -> Unit,
+) {
+    var hiddenExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(showSessionPicker) {
+        if (!showSessionPicker) hiddenExpanded = false
+    }
+    val activeMenu = when {
+        showSessionPicker -> CoreChatPickerMenu.SESSION
+        showModelPicker -> CoreChatPickerMenu.MODEL
+        else -> null
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CoreCompactActionButton(
+                label = "SESSION \u25BE",
+                onClick = {
+                    if (showModelPicker) onDismissModelPicker()
+                    onToggleSessionPicker()
+                },
+                selected = showSessionPicker,
+                modifier = Modifier.weight(1f),
+            )
+            CoreCompactActionButton(
+                label = "MODEL \u25BE",
+                onClick = {
+                    if (showSessionPicker) onDismissSessionPicker()
+                    onToggleModelPicker()
+                },
+                enabled = modelPickerEnabled,
+                selected = showModelPicker,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        DropdownMenu(
+            expanded = activeMenu != null,
+            onDismissRequest = {
+                when (activeMenu) {
+                    CoreChatPickerMenu.SESSION -> onDismissSessionPicker()
+                    CoreChatPickerMenu.MODEL -> onDismissModelPicker()
+                    null -> Unit
+                }
+            },
+            modifier = Modifier
+                .width(maxWidth)
+                .heightIn(max = 320.dp),
+        ) {
+            when (activeMenu) {
+                CoreChatPickerMenu.SESSION -> {
+                    if (sessions.isEmpty() && hiddenSessions.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Loading sessions...", color = JsosPalette.Muted) },
+                            onClick = {},
+                            enabled = false,
+                        )
+                    } else {
+                        if (sessions.isNotEmpty()) {
+                            DropdownMenuHeader("VISIBLE")
+                        }
+                        sessions.forEach { session ->
+                            val isCurrent = session.key == currentSessionKey
+                            val hasUnread = session.key in unreadSessions
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isCurrent) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = "Current",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = JsosPalette.Cyan,
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                        } else if (hasUnread) {
+                                            Icon(
+                                                Icons.Default.Circle,
+                                                contentDescription = "New messages",
+                                                modifier = Modifier.size(10.dp),
+                                                tint = JsosPalette.Green,
+                                            )
+                                            Spacer(Modifier.width(11.dp))
+                                        }
+                                        SessionDropdownLabel(
+                                            session = session,
+                                            titleColor = when {
+                                                isCurrent -> JsosPalette.Cyan
+                                                hasUnread -> JsosPalette.Green
+                                                else -> JsosPalette.Text
+                                            },
+                                        )
+                                    }
+                                },
+                                onClick = { onSelectSession(session) },
+                                trailingIcon = {
+                                    if (!isCurrent) {
+                                        IconButton(
+                                            onClick = { onHideSession(session) },
+                                            modifier = Modifier.size(32.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Default.VisibilityOff,
+                                                contentDescription = "Hide session",
+                                                modifier = Modifier.size(17.dp),
+                                                tint = JsosPalette.Muted,
+                                            )
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        if (hiddenSessions.isNotEmpty()) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (hiddenExpanded) {
+                                            "HIDE HIDDEN"
+                                        } else {
+                                            "SHOW HIDDEN (${hiddenSessions.size})"
+                                        },
+                                        color = JsosPalette.Cyan,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                },
+                                onClick = { hiddenExpanded = !hiddenExpanded },
+                                trailingIcon = {
+                                    Icon(
+                                        if (hiddenExpanded) {
+                                            Icons.Default.ExpandLess
+                                        } else {
+                                            Icons.Default.ExpandMore
+                                        },
+                                        contentDescription = if (hiddenExpanded) {
+                                            "Hide hidden sessions"
+                                        } else {
+                                            "Show hidden sessions"
+                                        },
+                                        tint = JsosPalette.Cyan,
+                                    )
+                                },
+                            )
+                            if (hiddenExpanded) {
+                                DropdownMenuHeader("HIDDEN")
+                                hiddenSessions.forEach { session ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            SessionDropdownLabel(
+                                                session = session,
+                                                titleColor = JsosPalette.Muted,
+                                            )
+                                        },
+                                        onClick = { onShowSession(session) },
+                                        trailingIcon = {
+                                            IconButton(
+                                                onClick = { onShowSession(session) },
+                                                modifier = Modifier.size(32.dp),
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Visibility,
+                                                    contentDescription = "Show session",
+                                                    modifier = Modifier.size(17.dp),
+                                                    tint = JsosPalette.Cyan,
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
+
+                CoreChatPickerMenu.MODEL -> {
+                    if (options.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("No models", color = JsosPalette.Muted) },
+                            onClick = {},
+                            enabled = false,
+                        )
+                    } else {
+                        DropdownMenuHeader(selectedLabel)
+                        options.forEach { option ->
+                            val isCurrent = option.label == selectedLabel
+                            DropdownMenuItem(
+                                text = {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = option.label,
+                                            color = if (isCurrent) JsosPalette.Cyan else JsosPalette.Text,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = option.description,
+                                            color = JsosPalette.Muted,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                },
+                                onClick = { onSelectModel(option) },
+                                trailingIcon = if (isCurrent) {
+                                    {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = "Current",
+                                            tint = JsosPalette.Cyan,
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                }
+
+                null -> Unit
             }
         }
     }
@@ -3758,22 +4052,17 @@ private fun CodexCliDeck(
         listState.animateScrollToItem(lineBlocks.size)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 10.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        DashboardModuleCard(
-            icon = Icons.Default.Code,
+    JsosConversationScaffold {
+        JsosConversationHeader(
             title = "Codex CLI",
-            accent = accent,
-            rows = listOf(
-                "State" to status.name,
-                "Workspace" to "Admin",
-                "Session" to currentSessionLabel,
-                "Action" to if (connected) "SEND" else "CONNECT",
-            ),
+            subtitle = "Admin \u2022 $currentSessionLabel",
+            statusLabel = when (status) {
+                CodexCliBridgeClient.State.CONNECTED -> "READY"
+                CodexCliBridgeClient.State.CONNECTING -> "CONNECTING"
+                CodexCliBridgeClient.State.ERROR -> "ERROR"
+                CodexCliBridgeClient.State.DISCONNECTED -> "OFFLINE"
+            },
+            statusColor = accent,
         )
 
         AnimatedVisibility(visible = showSessionPicker) {
@@ -3861,69 +4150,58 @@ private fun CodexCliDeck(
             }
         }
 
-        Surface(
+        JsosConversationPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            shape = RoundedCornerShape(24.dp),
-            color = JsosPalette.Card,
-            border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
+            contentPadding = PaddingValues(0.dp),
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(JsosConversationTokens.PanelPadding),
+                verticalArrangement = Arrangement.spacedBy(JsosConversationTokens.MessageSpacing),
             ) {
                 items(lineBlocks) { block ->
                     when (block.type) {
-                        CodexCliLineType.PROMPT -> Text(
+                        CodexCliLineType.PROMPT -> JsosConversationBubble(
+                            label = "YOU",
                             text = block.text,
-                            color = JsosPalette.Cyan,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp,
-                            lineHeight = 17.sp,
+                            side = JsosConversationSide.USER,
+                            accentColor = JsosPalette.Cyan,
+                            bodyStyle = JsosConversationBodyStyle.MONOSPACE,
+                            bodyFontWeight = FontWeight.Normal,
                         )
 
-                        CodexCliLineType.RESPONSE -> Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            color = JsosPalette.CardAlt,
-                            border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.28f)),
-                        ) {
-                            Text(
-                                text = block.text,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                color = JsosPalette.Text,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                            )
-                        }
-
-                        CodexCliLineType.ERROR -> Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            color = Color(0xFF1B0C10).copy(alpha = 0.86f),
-                            border = BorderStroke(1.dp, Color(0xFFFF5F6D).copy(alpha = 0.82f)),
-                        ) {
-                            Text(
-                                text = block.text,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                color = Color(0xFFFF5F6D),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                            )
-                        }
-
-                        CodexCliLineType.SYSTEM -> Text(
+                        CodexCliLineType.RESPONSE -> JsosConversationBubble(
+                            label = "CODEX",
                             text = block.text,
-                            color = JsosPalette.Muted,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp,
+                            side = JsosConversationSide.PEER,
+                            accentColor = jsosConversationPeerAccent("codex"),
+                            bodyStyle = JsosConversationBodyStyle.MONOSPACE,
+                            bodyFontWeight = FontWeight.Normal,
+                        )
+
+                        CodexCliLineType.ERROR -> JsosConversationBubble(
+                            label = "ERROR",
+                            text = block.text,
+                            side = JsosConversationSide.SYSTEM,
+                            accentColor = JsosPalette.Red,
+                            bodyStyle = JsosConversationBodyStyle.MONOSPACE,
+                            bodyColor = JsosPalette.Red,
+                            bodyFontWeight = FontWeight.Normal,
+                            isError = true,
+                        )
+
+                        CodexCliLineType.SYSTEM -> JsosConversationBubble(
+                            label = "SYSTEM",
+                            text = block.text,
+                            side = JsosConversationSide.SYSTEM,
+                            accentColor = JsosPalette.Muted,
+                            bodyStyle = JsosConversationBodyStyle.MONOSPACE,
+                            bodyColor = JsosPalette.MutedStrong,
+                            bodyFontWeight = FontWeight.Normal,
                         )
                     }
                 }
@@ -4587,40 +4865,38 @@ private fun TabHint(text: String) {
 }
 
 @Composable
-fun ChatMessageRow(msg: ChatMessage, speakerLabel: String = "JSOS") {
+fun ChatMessageRow(
+    msg: ChatMessage,
+    speakerLabel: String = "JSOS",
+    speakerAccent: Color = JsosPalette.Cyan,
+) {
     val isUser = msg.role == "user"
     val lines = msg.content.lines()
     val isSystemOnly = lines.any { isSystemFeedLine(it) } && lines.none { it.isNotBlank() && !isSystemFeedLine(it) }
+    val side = when {
+        isSystemOnly -> JsosConversationSide.SYSTEM
+        isUser -> JsosConversationSide.USER
+        else -> JsosConversationSide.PEER
+    }
     val accent = when {
         isSystemOnly -> JsosPalette.Muted
-        else -> JsosPalette.Cyan
+        isUser -> JsosPalette.Cyan
+        else -> speakerAccent
     }
     val label = when {
         isSystemOnly -> "SYSTEM"
         isUser -> "YOU"
         else -> speakerLabel
     }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = if (isSystemOnly) 3.dp else 4.dp),
-        color = if (isSystemOnly) JsosPalette.CardDark.copy(alpha = 0.68f) else JsosPalette.Card,
-        border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = if (isSystemOnly) 0.18f else 0.28f)),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = if (isSystemOnly) 7.dp else 10.dp)
-        ) {
-            Text(
-                text = label,
-                color = accent,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(3.dp))
+
+    JsosConversationBubble(
+        label = label,
+        text = msg.content,
+        side = side,
+        accentColor = accent,
+        bodyFontWeight = FontWeight.Normal,
+        bodyContent = {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             lines.forEach { line ->
                 val systemLine = isSystemFeedLine(line)
                 Text(
@@ -4632,8 +4908,9 @@ fun ChatMessageRow(msg: ChatMessage, speakerLabel: String = "JSOS") {
                     fontWeight = if (systemLine) FontWeight.Normal else FontWeight.Medium,
                 )
             }
-        }
-    }
+            }
+        },
+    )
 }
 
 private fun formatLinkDuration(durationMs: Long): String {
