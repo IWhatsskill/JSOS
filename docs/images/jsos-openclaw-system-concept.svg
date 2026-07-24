@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
-  <title id="title">JSOS built for OpenClaw</title>
-  <desc id="desc">A dark cyan system illustration showing OpenClaw as the assistant and JSOS as its spatial interface across Android, Rokid glasses, and Wear OS.</desc>
+  <title id="title">JSOS built for OpenClaw and Codex</title>
+  <desc id="desc">A dark cyan system illustration showing OpenClaw as the assistant and JSOS as its spatial interface for vibe coding on the go across Android, Rokid glasses, Wear OS, and Codex.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#061015"/>
@@ -57,22 +57,25 @@
 
     <text x="0" y="148" fill="url(#cyan)" font-family="Arial, sans-serif" font-size="108" font-weight="800" letter-spacing="5">JSOS</text>
     <text x="4" y="200" fill="#edf9fb" font-family="Arial, sans-serif" font-size="29" font-weight="700">OpenClaw, beyond the screen.</text>
-    <text x="4" y="240" fill="#93aab4" font-family="Arial, sans-serif" font-size="19">Phone control. Rokid HUD. Wear OS.</text>
+    <text x="4" y="238" fill="#5ddff5" font-family="Arial, sans-serif" font-size="20" font-weight="800" letter-spacing="1.6">VIBE CODE ON THE GO</text>
+    <text x="4" y="272" fill="#93aab4" font-family="Arial, sans-serif" font-size="19">Phone control. Rokid HUD. Wear OS.</text>
 
-    <g transform="translate(4 278)">
+    <g transform="translate(4 306)">
       <rect width="106" height="30" rx="15" fill="#0c2027" stroke="#2bbcd5" stroke-opacity=".38"/>
       <text x="18" y="20" fill="#ccecf2" font-family="monospace" font-size="11" font-weight="700">VOICE FIRST</text>
       <rect x="118" width="124" height="30" rx="15" fill="#0c2027" stroke="#2bbcd5" stroke-opacity=".38"/>
       <text x="136" y="20" fill="#ccecf2" font-family="monospace" font-size="11" font-weight="700">LIVE CONTEXT</text>
       <rect x="254" width="126" height="30" rx="15" fill="#0c2027" stroke="#2bbcd5" stroke-opacity=".38"/>
       <text x="272" y="20" fill="#ccecf2" font-family="monospace" font-size="11" font-weight="700">SESSION AWARE</text>
+      <rect x="392" width="72" height="30" rx="15" fill="#0c2027" stroke="#5ddff5" stroke-opacity=".7"/>
+      <text x="408" y="20" fill="#b7f3ff" font-family="monospace" font-size="11" font-weight="700">CODEX</text>
     </g>
 
-    <line x1="4" y1="344" x2="432" y2="344" stroke="#2bbcd5" stroke-opacity=".32"/>
-    <text x="4" y="386" fill="#d9edf2" font-family="Arial, sans-serif" font-size="18" font-weight="700">OpenClaw is the assistant.</text>
-    <text x="4" y="417" fill="#8fa7b0" font-family="Arial, sans-serif" font-size="17">JSOS is the spatial interface.</text>
+    <line x1="4" y1="372" x2="468" y2="372" stroke="#2bbcd5" stroke-opacity=".32"/>
+    <text x="4" y="414" fill="#d9edf2" font-family="Arial, sans-serif" font-size="18" font-weight="700">OpenClaw is the assistant.</text>
+    <text x="4" y="445" fill="#8fa7b0" font-family="Arial, sans-serif" font-size="17">JSOS is the spatial interface.</text>
 
-    <g transform="translate(4 456)">
+    <g transform="translate(4 484)">
       <circle cx="7" cy="7" r="7" fill="#58e46b" fill-opacity=".16" stroke="#58e46b" stroke-opacity=".45"/>
       <circle cx="7" cy="7" r="3" fill="#58e46b"/>
       <text x="26" y="12" fill="#8ea4ad" font-family="monospace" font-size="11">GATEWAY CONNECTED</text>
