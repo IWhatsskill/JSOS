@@ -33,11 +33,10 @@ Before adding new screenshots, check that they do not expose private hosts, API 
 ## Additional Core Screenshots
 
 <p align="center">
-  <a href="images/jsos-core-system-link.jpeg"><img src="images/jsos-core-system-link.jpeg" alt="JSOS Core OpenClaw system link settings" width="19%"></a>
-  <a href="images/jsos-core-hud-link.png"><img src="images/jsos-core-hud-link.png" alt="JSOS Core HUD link settings with redacted device name" width="19%"></a>
-  <a href="images/jsos-core-hud-deployment.jpeg"><img src="images/jsos-core-hud-deployment.jpeg" alt="JSOS Core HUD deployment settings" width="19%"></a>
-  <a href="images/jsos-core-voice-matrix.jpeg"><img src="images/jsos-core-voice-matrix.jpeg" alt="JSOS Core OpenAI voice matrix settings with redacted API key" width="19%"></a>
-  <a href="images/jsos-core-response-voice.jpeg"><img src="images/jsos-core-response-voice.jpeg" alt="JSOS Core response voice settings with redacted API key" width="19%"></a>
+  <a href="images/jsos-core-home.jpeg"><img src="images/jsos-core-home.jpeg" alt="JSOS Core control room" width="23%"></a>
+  <a href="images/jsos-core-session-chat.jpeg"><img src="images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat" width="23%"></a>
+  <a href="images/jsos-core-voice.jpeg"><img src="images/jsos-core-voice.jpeg" alt="JSOS Core voice controls" width="23%"></a>
+  <a href="images/jsos-core-diagnostics.jpeg"><img src="images/jsos-core-diagnostics.jpeg" alt="JSOS Core navigation and diagnostics" width="23%"></a>
 </p>
 
 ## Additional HUD Screenshots
