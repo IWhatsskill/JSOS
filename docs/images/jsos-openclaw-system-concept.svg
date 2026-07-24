@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">JSOS built for OpenClaw</title>
+  <desc id="desc">A dark cyan system illustration showing OpenClaw as the assistant and JSOS as its spatial interface across Android, Rokid glasses, and Wear OS.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#061015"/>
+      <stop offset=".54" stop-color="#09171d"/>
+      <stop offset="1" stop-color="#050d11"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7eeeff"/>
+      <stop offset="1" stop-color="#22bdd9"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#10242c"/>
+      <stop offset="1" stop-color="#091419"/>
+    </linearGradient>
+    <linearGradient id="openclawLobster" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff4d4d"/>
+      <stop offset="100%" stop-color="#991b1b"/>
+    </linearGradient>
+    <radialGradient id="hubGlow">
+      <stop offset="0" stop-color="#40d8f1" stop-opacity=".32"/>
+      <stop offset=".55" stop-color="#22bdd9" stop-opacity=".09"/>
+      <stop offset="1" stop-color="#22bdd9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ambient">
+      <stop offset="0" stop-color="#58e46b" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#58e46b" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="38" height="38" patternUnits="userSpaceOnUse">
+      <path d="M38 0H0V38" fill="none" stroke="#78dff2" stroke-opacity=".045"/>
+    </pattern>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity=".5"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="640" rx="28" fill="url(#grid)"/>
+  <circle cx="842" cy="268" r="330" fill="url(#hubGlow)"/>
+  <circle cx="1162" cy="470" r="230" fill="url(#ambient)"/>
+  <path d="M0 550C216 470 382 596 610 543C831 492 1044 453 1280 520V640H0Z" fill="#071419" opacity=".92"/>
+
+  <!-- Left narrative -->
+  <g transform="translate(70 70)">
+    <rect width="174" height="34" rx="17" fill="#22bdd9" fill-opacity=".1" stroke="#3bd2eb" stroke-opacity=".46"/>
+    <circle cx="19" cy="17" r="5" fill="#58e46b"/>
+    <text x="33" y="22" fill="#b7f3ff" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.3">BUILT FOR OPENCLAW</text>
+
+    <text x="0" y="148" fill="url(#cyan)" font-family="Arial, sans-serif" font-size="108" font-weight="800" letter-spacing="5">JSOS</text>
+    <text x="4" y="200" fill="#edf9fb" font-family="Arial, sans-serif" font-size="29" font-weight="700">OpenClaw, beyond the screen.</text>
+    <text x="4" y="240" fill="#93aab4" font-family="Arial, sans-serif" font-size="19">Phone control. Rokid HUD. Wear OS.</text>
+
+    <g transform="translate(4 278)">
+      <rect width="106" height="30" rx="15" fill="#0c2027" stroke="#2bbcd5" stroke-opacity=".38"/>
+      <text x="18" y="20" fill="#ccecf2" font-family="monospace" font-size="11" font-weight="700">VOICE FIRST</text>
+      <rect x="118" width="124" height="30" rx="15" fill="#0c2027" stroke="#2bbcd5" stroke-opacity=".38"/>
+      <text x="136" y="20" fill="#ccecf2" font-family="monospace" font-size="11" font-weight="700">LIVE CONTEXT</text>
+      <rect x="254" width="126" height="30" rx="15" fill="#0c2027" stroke="#2bbcd5" stroke-opacity=".38"/>
+      <text x="272" y="20" fill="#ccecf2" font-family="monospace" font-size="11" font-weight="700">SESSION AWARE</text>
+    </g>
+
+    <line x1="4" y1="344" x2="432" y2="344" stroke="#2bbcd5" stroke-opacity=".32"/>
+    <text x="4" y="386" fill="#d9edf2" font-family="Arial, sans-serif" font-size="18" font-weight="700">OpenClaw is the assistant.</text>
+    <text x="4" y="417" fill="#8fa7b0" font-family="Arial, sans-serif" font-size="17">JSOS is the spatial interface.</text>
+
+    <g transform="translate(4 456)">
+      <circle cx="7" cy="7" r="7" fill="#58e46b" fill-opacity=".16" stroke="#58e46b" stroke-opacity=".45"/>
+      <circle cx="7" cy="7" r="3" fill="#58e46b"/>
+      <text x="26" y="12" fill="#8ea4ad" font-family="monospace" font-size="11">GATEWAY CONNECTED</text>
+    </g>
+  </g>
+
+  <!-- Connection topology -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M728 245C785 186 838 168 904 176" stroke="#3bd2eb" stroke-opacity=".3" stroke-width="12"/>
+    <path d="M728 245C785 186 838 168 904 176" stroke="#65e8ff" stroke-width="2.4" filter="url(#glow)"/>
+    <path d="M728 275C790 322 823 362 846 410" stroke="#3bd2eb" stroke-opacity=".28" stroke-width="11"/>
+    <path d="M728 275C790 322 823 362 846 410" stroke="#65e8ff" stroke-width="2.4" filter="url(#glow)"/>
+    <path d="M733 257C875 260 1034 340 1120 421" stroke="#3bd2eb" stroke-opacity=".25" stroke-width="10"/>
+    <path d="M733 257C875 260 1034 340 1120 421" stroke="#65e8ff" stroke-width="2.2" filter="url(#glow)"/>
+  </g>
+
+  <!-- OpenClaw assistant hub -->
+  <g transform="translate(640 172)" filter="url(#shadow)">
+    <circle cx="88" cy="88" r="115" fill="url(#hubGlow)"/>
+    <circle cx="88" cy="88" r="76" fill="#09191f" stroke="#55dff5" stroke-opacity=".75" stroke-width="2.5"/>
+    <circle cx="88" cy="88" r="62" fill="#0b2027" stroke="#234854" stroke-width="1.5"/>
+
+    <!--
+      Official OpenClaw mascot paths from:
+      openclaw/openclaw apps/linux/src-tauri/icons/icon.svg
+      upstream blob 35415f310fadf2bb70f98b9776ce8badc4603041
+    -->
+    <g transform="translate(35 35) scale(.88)">
+      <path d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z" fill="url(#openclawLobster)"/>
+      <path d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z" fill="url(#openclawLobster)"/>
+      <path d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z" fill="url(#openclawLobster)"/>
+      <path d="M45 15 Q35 5 30 8" fill="none" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
+      <path d="M75 15 Q85 5 90 8" fill="none" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="45" cy="35" r="6" fill="#050810"/>
+      <circle cx="75" cy="35" r="6" fill="#050810"/>
+      <circle cx="46" cy="34" r="2.5" fill="#00e5cc"/>
+      <circle cx="76" cy="34" r="2.5" fill="#00e5cc"/>
+    </g>
+
+    <text x="88" y="178" text-anchor="middle" fill="#e8f9fc" font-family="Arial, sans-serif" font-size="17" font-weight="800" letter-spacing="1.5">OPENCLAW</text>
+    <text x="88" y="199" text-anchor="middle" fill="#74a4af" font-family="monospace" font-size="10" letter-spacing=".8">ASSISTANT + GATEWAY</text>
+  </g>
+
+  <!-- Android Core -->
+  <g transform="translate(902 84)" filter="url(#shadow)">
+    <rect width="212" height="322" rx="34" fill="#0a1418" stroke="#58d9ef" stroke-opacity=".72" stroke-width="2.5"/>
+    <rect x="14" y="34" width="184" height="268" rx="22" fill="url(#panel)" stroke="#1e4652"/>
+    <rect x="76" y="16" width="60" height="6" rx="3" fill="#27434b"/>
+    <text x="34" y="67" fill="#5ddff5" font-family="monospace" font-size="12" font-weight="700">JSOS CORE</text>
+    <circle cx="177" cy="61" r="4.5" fill="#58e46b"/>
+
+    <rect x="29" y="86" width="154" height="49" rx="12" fill="#0b2027" stroke="#31bdd6" stroke-opacity=".3"/>
+    <text x="43" y="106" fill="#78929c" font-family="monospace" font-size="9">OPENCLAW</text>
+    <text x="43" y="124" fill="#58e46b" font-family="monospace" font-size="12" font-weight="700">CONNECTED</text>
+
+    <rect x="29" y="148" width="154" height="82" rx="12" fill="#0b2027" stroke="#31bdd6" stroke-opacity=".3"/>
+    <text x="43" y="170" fill="#78929c" font-family="monospace" font-size="9">ACTIVE SESSION</text>
+    <text x="43" y="194" fill="#e5f7fa" font-family="Arial, sans-serif" font-size="14" font-weight="700">Main</text>
+    <rect x="43" y="204" width="76" height="14" rx="7" fill="#2abbd4" fill-opacity=".14"/>
+    <text x="53" y="214" fill="#73dff2" font-family="monospace" font-size="7.5">VOICE READY</text>
+
+    <rect x="29" y="243" width="72" height="39" rx="10" fill="#0b2027" stroke="#31bdd6" stroke-opacity=".3"/>
+    <text x="44" y="267" fill="#b9d9df" font-family="monospace" font-size="9">HUD</text>
+    <rect x="111" y="243" width="72" height="39" rx="10" fill="#0b2027" stroke="#31bdd6" stroke-opacity=".3"/>
+    <text x="124" y="267" fill="#b9d9df" font-family="monospace" font-size="9">WATCH</text>
+  </g>
+
+  <!-- Rokid HUD -->
+  <g transform="translate(755 354)" filter="url(#glow)">
+    <path d="M0 68c28-38 72-57 128-57h44c44 0 77 14 102 39 25-25 58-39 102-39h43c56 0 100 19 128 57" fill="none" stroke="#66e9ff" stroke-width="6"/>
+    <rect x="66" y="49" width="170" height="95" rx="32" fill="#071317" fill-opacity=".86" stroke="#67eaff" stroke-width="2.6"/>
+    <rect x="312" y="49" width="170" height="95" rx="32" fill="#071317" fill-opacity=".86" stroke="#67eaff" stroke-width="2.6"/>
+    <path d="M236 78c24-20 52-20 76 0" fill="none" stroke="#67eaff" stroke-width="3.4"/>
+    <rect x="96" y="70" width="110" height="54" rx="9" fill="#071c13" stroke="#58e46b" stroke-opacity=".75"/>
+    <text x="112" y="91" fill="#58e46b" font-family="monospace" font-size="9.5" font-weight="700">OPENCLAW LIVE</text>
+    <text x="112" y="108" fill="#9cefb4" font-family="monospace" font-size="8">VOICE + CONTEXT</text>
+  </g>
+
+  <!-- Wear OS -->
+  <g transform="translate(1110 384)" filter="url(#shadow)">
+    <rect x="34" y="-18" width="58" height="36" rx="10" fill="#17272d"/>
+    <rect x="34" y="158" width="58" height="36" rx="10" fill="#17272d"/>
+    <rect width="126" height="176" rx="40" fill="#091419" stroke="#57d9ef" stroke-opacity=".72" stroke-width="2.5"/>
+    <rect x="14" y="20" width="98" height="136" rx="29" fill="#0d2026" stroke="#2a7888" stroke-opacity=".45"/>
+    <text x="31" y="48" fill="#5bdff6" font-family="monospace" font-size="9">JSOS WATCH</text>
+    <circle cx="33" cy="74" r="5" fill="#58e46b"/>
+    <text x="44" y="78" fill="#e3f5f8" font-family="Arial, sans-serif" font-size="10" font-weight="700">CONNECTED</text>
+    <rect x="25" y="96" width="76" height="26" rx="13" fill="#26bdd7" fill-opacity=".14" stroke="#30bdd6" stroke-opacity=".4"/>
+    <text x="48" y="113" fill="#8fe8f8" font-family="monospace" font-size="8.5">TALK</text>
+  </g>
+
+  <!-- protocol labels -->
+  <g fill="#78919a" font-family="monospace" font-size="9" letter-spacing=".7">
+    <text x="804" y="173">WEBSOCKET</text>
+    <text x="784" y="369">ROKID CXR</text>
+    <text x="1009" y="338">WEAR DATA</text>
+  </g>
+
+  <g fill="#58e46b">
+    <circle cx="840" cy="171" r="3.5"/>
+    <circle cx="801" cy="361" r="3.5"/>
+    <circle cx="1042" cy="350" r="3.5"/>
+  </g>
+
+  <text x="70" y="602" fill="#69818a" font-family="Arial, sans-serif" font-size="13">Visual system concept &#183; OpenClaw integration &#183; unified JSOS interface</text>
+</svg>

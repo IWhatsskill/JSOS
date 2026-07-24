@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/jsos-readme-hero-concept.svg" alt="JSOS visual identity concept" width="100%">
+  <img src="docs/images/jsos-hero-top.png" alt="JSOS smart-glasses HUD hero" width="100%">
 </p>
 
 <h1 align="center">JSOS</h1>
@@ -33,27 +33,23 @@ reach.
 
 ## One system. Three surfaces.
 
-<table>
-  <tr>
-    <td width="33%" align="center">
-      <img src="docs/images/jsos-core-concept.svg" alt="JSOS Core interface concept" width="100%"><br>
-      <strong>JSOS Core</strong><br>
-      Gateway, sessions, models, voice, media, and device control.
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/images/jsos-hud-concept.svg" alt="JSOS HUD interface concept" width="100%"><br>
-      <strong>JSOS HUD</strong><br>
-      A high-contrast, voice-first view built for Rokid glasses.
-    </td>
-    <td width="33%" align="center">
-      <img src="docs/images/jsos-watch-concept.svg" alt="JSOS Watch interface concept" width="100%"><br>
-      <strong>JSOS Watch</strong><br>
-      Status, chat, voice, sessions, and Codex controls on the wrist.
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/jsos-originals-showcase.png" alt="Original JSOS Core, Rokid HUD, and Wear OS interface showcase" width="100%">
+</p>
 
-<p align="center"><sub>The three interface panels are visual concepts for the unified JSOS design language. The real-device HUD below is current device photography.</sub></p>
+<p align="center"><sub>Original JSOS interface captures. Private Core labels are masked; the HUD panels are demo device photography.</sub></p>
+
+## Built for OpenClaw
+
+OpenClaw remains the assistant and control plane: gateway, sessions, voice, and
+live context. JSOS turns that foundation into a coordinated phone, glasses, and
+wrist experience.
+
+<p align="center">
+  <img src="docs/images/jsos-openclaw-system-concept.svg" alt="JSOS spatial interface built for OpenClaw" width="100%">
+</p>
+
+<p align="center"><sub>Official OpenClaw mascot from <a href="https://github.com/openclaw/openclaw">openclaw/openclaw</a>; JSOS system composition.</sub></p>
 
 ## Built for movement, not another mirrored chat window
 
