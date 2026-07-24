@@ -160,11 +160,9 @@ optional.
 ./gradlew :phone-app:assembleDebug :glasses-app:assembleDebug :watch-app:assembleDebug
 ```
 
-Release signing remains local-only. Never commit keystores, signing properties,
-runtime credentials, private screenshots, transcripts, or generated APKs.
-
 ## Preview status
 
-Rokid behavior depends on device firmware, the proprietary Rokid CXR SDK, and
-Hi Rokid availability. Validate voice, watch, HUD, and optional Codex flows
-against the exact devices and gateway version you plan to use.
+JSOS is an active development preview. The experience can vary with Rokid
+firmware, the proprietary CXR SDK, Hi Rokid, and the connected OpenClaw or
+Codex workflow. Follow the setup guide and test with the devices and gateway
+version you plan to use.
