@@ -121,14 +121,3 @@ runtime credentials, private screenshots, transcripts, or generated APKs.
 Rokid behavior depends on device firmware, the proprietary Rokid CXR SDK, and
 Hi Rokid availability. Validate voice, watch, HUD, and optional bridge flows
 against the exact devices and gateway version you plan to use.
-
-## Attribution and license
-
-JSOS is based on the upstream
-[Clawsses](https://github.com/dweddepohl/clawsses) Android glasses project.
-Original upstream copyright remains with Pohlster BV and the original
-contributors. JSOS modifications are by Whatsskill, 2026.
-
-This project is distributed under the
-[GNU Affero General Public License v3](LICENSE). See [COPYRIGHT](COPYRIGHT) for
-the complete attribution and third-party notices.

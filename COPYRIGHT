@@ -1,29 +1,36 @@
 JSOS - Spatial Operating System for Smart Glasses
 JSOS Core / JSOS HUD for OpenClaw and Rokid glasses
 
-COPYRIGHT AND MODIFICATION NOTICE
+COPYRIGHT, ATTRIBUTION, AND MODIFICATION NOTICE
 
-JSOS is Whatsskill's modified fork and rebrand of the upstream Clawsses Android glasses project:
+UPSTREAM FOUNDATION: CLAWSSES
+
+JSOS is Whatsskill's modified fork and rebrand of the upstream Clawsses
+Android glasses project:
 https://github.com/dweddepohl/clawsses
 
-Original copyright:
-Copyright (C) 2026 Pohlster BV and original contributors.
+Clawsses Copyright (C) 2026 Pohlster BV.
+License: GNU Affero General Public License version 3 (AGPL-3.0)
+License text: https://github.com/dweddepohl/clawsses/blob/main/LICENSE
 
-JSOS modifications:
-Modified by Whatsskill, 2026.
-GitHub: https://github.com/IWhatsskill
+All upstream copyright, authorship, and license notices remain with Pohlster
+BV and the respective upstream contributors. JSOS does not claim ownership of
+their work.
+
+JSOS MODIFICATIONS
+
+JSOS modifications Copyright (C) 2026 Whatsskill.
+Maintainer: https://github.com/IWhatsskill
 
 The JSOS names identify Whatsskill's modified version:
 - JSOS - Spatial Operating System for Smart Glasses
 - JSOS Core
 - JSOS HUD
 
-No upstream endorsement or affiliation is implied unless stated separately.
-
 Major JSOS modifications include:
 - Project, package, app-label, theme, preference, and launcher-icon rebrand to JSOS / JSOS Core / JSOS HUD.
 - Complete visual redesign of JSOS Core and JSOS HUD for everyday smart-glasses use.
-- OpenClaw Gateway protocol version 4 support.
+- OpenClaw Gateway protocol version 4 and 5 support.
 - Rokid glasses HUD ghosting mitigation with tested safe-zone placement.
 - Redesigned JSOS HUD layout, display modes, menu behavior, status line, and voice/live indicators.
 - Reading-first HUD behavior where the bottom menu stays hidden while content is being read and appears only when needed.
@@ -31,13 +38,17 @@ Major JSOS modifications include:
 - ElevenLabs TTS routing adjustments for glasses audio playback.
 - Rokid AI scene overlay suppression during voice input.
 - Separate JSOS Core and JSOS HUD install flow for daily JSOS/OpenClaw use; JSOS Core can hand JSOS HUD installation to Hi Rokid / CXR-L when Hi Rokid is installed and already connected to the glasses.
-- JSOS HUD options for triggering Rokid AR picture and mixed-recording scene commands from the glasses app, based on Anezium's OverlayRec reference with permission.
+- JSOS HUD options for triggering Rokid AR picture and mixed-recording scene
+  commands from the glasses app, implemented after reviewing Anezium's public
+  OverlayRec reference with permission from Anezium.
 
-LICENSE
+JSOS LICENSE (AGPL-3.0)
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License version 3 as
-published by the Free Software Foundation.
+Except for separately identified third-party material, this modified work is
+free software: you can redistribute it and/or modify it under the terms of
+the GNU Affero General Public License version 3 as published by the Free
+Software Foundation. The complete controlling license text is in the
+repository root file LICENSE.
 
 When upstream-derived or core files are changed:
 - Keep existing copyright and license notices intact.
@@ -50,16 +61,18 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
+AGPL-3.0 information: https://www.gnu.org/licenses/agpl-3.0.html
 
 COMMERCIAL / CLOSED-SOURCE USE
 
 The upstream Clawsses project states that commercial use in closed-source
 products requires a separate commercial license from the upstream rights
 holder. This JSOS fork does not grant such a license.
+Upstream notice: https://github.com/dweddepohl/clawsses#license
 
 THIRD-PARTY COMPONENTS
+
+ROKID CXR SDK
 
 This software uses the Rokid CXR SDK, which is proprietary software provided
 by Rokid Corporation under its own license terms. The CXR SDK is not covered
@@ -72,10 +85,64 @@ and native libraries already supplied by `com.rokid.cxr:client-m:1.2.1`.
 See `phone-app/libs/README.md` for the artifact details. Rokid SDKs, APIs,
 trademarks, and documentation remain governed by Rokid's own terms.
 
-JSOS also references Anezium's public OverlayRec work for Rokid AR picture
-and mixed-recording scene command behavior. The full OverlayRec app is not
-bundled here; JSOS includes a small JSOS HUD command helper for the tested
-glasses-side scene triggers with permission from the author.
+OPENCLAW AND PETER STEINBERGER
+
+OpenClaw was created by Peter Steinberger (@steipete).
+Project: https://github.com/openclaw/openclaw
+Official credits:
+https://github.com/openclaw/openclaw/blob/main/docs/reference/credits.md
+
+OpenClaw Copyright (c) 2026 OpenClaw Foundation.
+License: MIT
+License text: https://github.com/openclaw/openclaw/blob/main/LICENSE
+
+JSOS interoperates with OpenClaw through its gateway protocol. OpenClaw itself
+is not bundled with JSOS.
+
+The visual system concept at
+docs/images/jsos-openclaw-system-concept.svg includes adapted OpenClaw mascot
+vector paths from:
+https://github.com/openclaw/openclaw/blob/main/apps/linux/src-tauri/icons/icon.svg
+
+The following MIT notice applies to that incorporated OpenClaw material:
+
+MIT License
+
+Copyright (c) 2026 OpenClaw Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+ANEZIUM / OVERLAYREC
+
+OverlayRec by Anezium
+Project: https://github.com/Anezium/OverlayRec
+License: GNU General Public License version 3 (GPL-3.0)
+License text: https://github.com/Anezium/OverlayRec/blob/main/LICENSE
+
+JSOS references OverlayRec's documented Rokid AR picture and mixed-recording
+scene-command behavior. The full OverlayRec app, its source code, and its
+assets are not bundled here. JSOS contains its own small HUD command helper,
+implemented after reviewing the public OverlayRec reference with permission
+from Anezium. OverlayRec's copyright and contributor rights remain with
+Anezium and the respective contributors.
+
+OTHER OPEN-SOURCE DEPENDENCIES
 
 Open-source dependencies include:
 
@@ -88,7 +155,9 @@ Open-source dependencies include:
 
 For Apache 2.0 components, see https://www.apache.org/licenses/LICENSE-2.0
 
-Protocol reference:
+NO IMPLIED ENDORSEMENT
 
-- OpenClaw - Copyright Peter Steinberger (MIT License)
-  https://github.com/openclaw/openclaw
+No endorsement, sponsorship, partnership, or affiliation by Pohlster BV,
+OpenClaw, the OpenClaw Foundation, Peter Steinberger, Anezium, Rokid
+Corporation, or their respective contributors is implied unless stated
+separately.
