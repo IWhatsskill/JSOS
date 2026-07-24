@@ -1,205 +1,144 @@
-# JSOS
+<p align="center">
+  <img src="docs/images/jsos-readme-hero-concept.svg" alt="JSOS visual identity concept" width="100%">
+</p>
 
-**Smart Glasses HUD + Wear OS Watch Companion for OpenClaw**
-
-Turn Rokid glasses and a Wear OS watch into a live OpenClaw cockpit.
-
-JSOS is an Android-based HUD stack for **Rokid glasses**, **JSOS Core**, and a local or private **OpenClaw Gateway**. It brings sessions, voice, chat, Codex CLI workflows, camera handoff, HUD controls, and a lightweight watch companion into one phone-led flow.
-
-This is a development preview for builders and testers, not a finished consumer product.
+<h1 align="center">JSOS</h1>
 
 <p align="center">
-  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.33-watch-ui"><strong>Download preview APKs</strong></a>
-  &nbsp;|&nbsp;
-  <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch showcase video</strong></a>
-  &nbsp;|&nbsp;
-  <a href="docs/SCREENSHOTS.md"><strong>Screenshots</strong></a>
-  &nbsp;|&nbsp;
-  <a href="#quick-start"><strong>Quick start</strong></a>
-  &nbsp;|&nbsp;
-  <a href="#docs-map"><strong>Docs map</strong></a>
+  <strong>A voice-first spatial cockpit for OpenClaw on Android, Rokid glasses, and Wear OS.</strong>
 </p>
 
 <p align="center">
-  <img src="docs/images/jsos-hero-top.png" alt="JSOS smart-glasses HUD hero preview" width="100%">
+  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.33-watch-ui"><strong>Download preview</strong></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch the demo</strong></a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="docs/INSTALL.md"><strong>Setup guide</strong></a>
 </p>
 
 <p align="center">
-  <img src="docs/images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="31%">
-  <img src="docs/images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="31%">
-  <img src="docs/images/jsos-hud-ar-tools.jpeg" alt="JSOS HUD AR tools panel captured through Rokid glasses" width="31%">
+  <img alt="Android" src="https://img.shields.io/badge/Android-Core-18b7d4?style=flat-square&logo=android&logoColor=white">
+  <img alt="Wear OS" src="https://img.shields.io/badge/Wear_OS-Companion-18b7d4?style=flat-square&logo=wearos&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Jetpack_Compose-7f52ff?style=flat-square&logo=kotlin&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-AGPL--3.0-62d894?style=flat-square">
 </p>
 
-## Why JSOS Exists
+> [!IMPORTANT]
+> JSOS is a development preview for builders and testers. It is not a finished consumer product.
 
-JSOS exists to make local AI on smart glasses feel like an everyday HUD workflow: glanceable, voice-first, session-aware, and controlled from the phone, glasses, or watch without turning the glasses into a mirrored chat window.
+JSOS turns a phone, Rokid glasses, and an optional Wear OS watch into one
+session-aware interface for OpenClaw. Core owns the connection and credentials;
+the HUD keeps information glanceable; the watch keeps essential controls within
+reach.
 
-## What JSOS Includes
+## One system. Three surfaces.
 
-| Part | Runs on | Purpose |
-| --- | --- | --- |
-| **JSOS Core** | Android phone | Connects to OpenClaw, manages sessions/models, stores local runtime settings, handles STT, realtime voice, optional ElevenLabs TTS, camera handoff, Rokid pairing, HUD deployment, glasses brightness, and the optional Admin Codex bridge client. |
-| **JSOS HUD** | Rokid glasses | Renders the green monochrome HUD with assistant output, session/voice state, STT, realtime voice, optional ElevenLabs TTS, OPTIONS, COMMANDS, SESSIONS, AR tools, Codex views, photo/image preview, and touchpad navigation. |
-| **JSOS Watch** | Wear OS watch | Optional companion for Core status, chat, STT/TTS controls, experimental realtime audio output, session/model switching, and Codex CLI resume/write/stop/clear from the wrist. |
-| **Admin Codex bridge** | User-managed private host | Optional self-hosted bridge for showing Codex-style output inside JSOS Core and JSOS HUD. The bridge service, credentials, and server setup are not included in this repository. |
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="docs/images/jsos-core-concept.svg" alt="JSOS Core interface concept" width="100%"><br>
+      <strong>JSOS Core</strong><br>
+      Gateway, sessions, models, voice, media, and device control.
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/images/jsos-hud-concept.svg" alt="JSOS HUD interface concept" width="100%"><br>
+      <strong>JSOS HUD</strong><br>
+      A high-contrast, voice-first view built for Rokid glasses.
+    </td>
+    <td width="33%" align="center">
+      <img src="docs/images/jsos-watch-concept.svg" alt="JSOS Watch interface concept" width="100%"><br>
+      <strong>JSOS Watch</strong><br>
+      Status, chat, voice, sessions, and Codex controls on the wrist.
+    </td>
+  </tr>
+</table>
 
-## Visual Overview
+<p align="center"><sub>The three interface panels are visual concepts for the unified JSOS design language. The real-device HUD below is current device photography.</sub></p>
 
-The full public-safe screenshot set is listed in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
+## Built for movement, not another mirrored chat window
 
-### JSOS Core
+- **Glanceable by design** — live state and assistant output stay readable without
+  turning the glasses into a dense phone screen.
+- **Voice first** — speech input, realtime voice, and optional TTS work across the
+  phone-led flow.
+- **Session aware** — switch OpenClaw sessions and models without losing the
+  current context.
+- **Local by default** — runtime credentials remain on the user's devices and
+  managed hosts.
+- **Three coordinated surfaces** — Core remains the source of truth while HUD and
+  Watch expose the controls that matter in the moment.
+
+## Real-device HUD
 
 <p align="center">
-  <img src="docs/images/jsos-core-home.jpeg" alt="JSOS Core home dashboard" width="23%">
-  <img src="docs/images/jsos-core-session-chat.jpeg" alt="JSOS Core session chat view" width="23%">
-  <img src="docs/images/jsos-core-voice.jpeg" alt="JSOS Core voice settings" width="23%">
-  <img src="docs/images/jsos-core-diagnostics.jpeg" alt="JSOS Core control cockpit menu" width="23%">
+  <img src="docs/images/jsos-hud-ar-tools.jpeg" alt="JSOS AR tools on Rokid glasses" width="52%">
 </p>
 
-### JSOS Watch
+The Rokid HUD uses a deliberately restrained monochrome presentation for
+visibility in the optical display. Phone and Watch use cyan for structure;
+green remains reserved for active, ready, paired, and online states.
 
-<p align="center">
-  <img src="docs/images/jsos-watch-chat.png" alt="JSOS Watch Assistant chat overview" width="13%">
-  <img src="docs/images/jsos-watch-status.png" alt="JSOS Watch status overview" width="13%">
-  <img src="docs/images/jsos-watch-core.png" alt="JSOS Watch controls overview" width="13%">
-  <img src="docs/images/jsos-watch-session-model.png" alt="JSOS Watch session and model overview" width="13%">
-  <img src="docs/images/jsos-watch-codex.png" alt="JSOS Watch Codex overview" width="13%">
-  <img src="docs/images/jsos-watch-codex-control.png" alt="JSOS Watch Codex control overview" width="13%">
-  <img src="docs/images/jsos-watch-voice.png" alt="JSOS Watch voice overview" width="13%">
-</p>
+## Quick start
 
-### JSOS HUD
+1. Download JSOS Core, JSOS HUD, and the optional JSOS Watch APK from the
+   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.33-watch-ui).
+2. Install JSOS Core on the Android phone and configure the OpenClaw Gateway.
+3. Pair the Rokid glasses through Hi Rokid.
+4. Deploy and launch JSOS HUD on the glasses.
+5. Optionally install JSOS Watch on a paired Wear OS device.
 
-<p align="center">
-  <img src="docs/images/jsos-hud-home.jpeg" alt="JSOS HUD home view captured through Rokid glasses" width="23%">
-  <img src="docs/images/jsos-hud-bottom-menu.jpeg" alt="JSOS HUD bottom menu captured through Rokid glasses" width="23%">
-  <img src="docs/images/jsos-hud-ar-tools.jpeg" alt="JSOS HUD AR tools panel captured through Rokid glasses" width="23%">
-  <img src="docs/images/jsos-codex-hud-home.jpeg" alt="JSOS Admin Codex HUD captured through Rokid glasses" width="23%">
-</p>
-
-## Quick Start
-
-1. Download the latest JSOS Core, JSOS HUD, and optional JSOS Watch APKs from the [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.33-watch-ui).
-2. Allow Android to install APKs from the app used to open the downloaded files.
-3. Install JSOS Core on the phone.
-4. Open JSOS Core and configure OpenClaw Gateway host, port, token, and required runtime credentials.
-5. Pair the Rokid glasses through Hi Rokid and connect them from JSOS Core.
-6. Install the separate JSOS HUD APK on the glasses through JSOS Core HUD Deployment, or manually through Hi Rokid / APK Manager.
-7. Launch JSOS HUD on the glasses and connect to the phone-side JSOS Core session flow.
-8. Optional: install JSOS Watch on a Wear OS device and pair it with the same phone for wrist controls.
-
-### Upgrade Note
-
-This release was signed with a new public JSOS signing certificate.
-
-If you already have an older JSOS version installed, Android may refuse to install these APKs as an update. In that case, uninstall the old JSOS Core, JSOS HUD, or JSOS Watch apps first, then install the new APKs from this release.
-
-## Preview Status
-
-JSOS is a development preview. Rokid behavior depends on the proprietary Rokid CXR SDK, device firmware, and Hi Rokid availability. OpenClaw Live Talk, watch companion flows, and the optional Admin Codex bridge should be tested against the exact gateway, device, and bridge versions you plan to use.
-
-Runtime OpenClaw, Rokid, OpenAI, ElevenLabs, and bridge credentials are configured locally and are not shipped in this repository. JSOS Watch is a companion surface only: it talks to JSOS Core through the Wear OS Data Layer, does not store credentials, and does not connect directly to OpenClaw.
+For requirements, signing notes, and the complete connection flow, see
+[docs/INSTALL.md](docs/INSTALL.md).
 
 ## Architecture
 
-| Component | Link | Responsibilities |
-| --- | --- | --- |
-| OpenClaw Gateway | WebSocket to JSOS Core | AI sessions, chat streaming, tool execution, pairing/device approval. |
-| JSOS Core | WebSocket to OpenClaw; Bluetooth CXR to JSOS HUD | Phone-side bridge, voice input, TTS playback, wake management, runtime setup, HUD deployment. |
-| JSOS HUD | Bluetooth CXR messages from JSOS Core; local R08 BLE/HID/accessibility; local Rokid scene commands | Glasses HUD, gestures, session output, camera requests, AR picture/record triggers, session picker. |
-| JSOS Watch | Wear OS Data Layer to JSOS Core | Companion controls and status mirror. Core remains the source of truth for credentials, sessions, models, gateway state, HUD state, and Codex bridge actions. |
-| Optional Admin Codex bridge | WebSocket from JSOS Core to a user-managed private bridge | Experimental Codex-style output in JSOS HUD/Core, separate from OpenClaw agents. |
+```mermaid
+flowchart LR
+    OC["OpenClaw Gateway"] -->|WebSocket| CORE["JSOS Core<br/>Android"]
+    CORE -->|Rokid CXR| HUD["JSOS HUD<br/>Rokid glasses"]
+    CORE -->|Wear Data Layer| WATCH["JSOS Watch<br/>Wear OS"]
+    CORE -. optional .-> CODEX["Admin Codex bridge<br/>user-managed host"]
+```
 
-### Wear OS Companion Preview
+JSOS Core owns credentials, sessions, models, and runtime state. HUD and Watch
+receive only the state and actions required for their companion role.
 
-`watch-app/` is a small Wear OS companion for JSOS Core. It shows Core/HUD/Gateway status, mirrors the current chat, switches sessions/models, controls voice flows, routes watch STT/TTS and experimental realtime audio output, and can resume/write/stop/clear Codex CLI sessions.
+## Documentation
 
-The watch talks to the phone through the Wear OS Data Layer. JSOS Core remains the source of truth for credentials, sessions, models, gateway state, HUD state, and optional Codex bridge state.
+| Guide | Purpose |
+| --- | --- |
+| [Install](docs/INSTALL.md) | Requirements, configuration, build, and connect flow |
+| [Architecture](docs/ARCHITECTURE.md) | Components, protocols, and ownership |
+| [HUD](docs/HUD.md) | Display model, controls, voice, camera, and R08 input |
+| [Screenshots](docs/SCREENSHOTS.md) | Public-safe visual gallery |
+| [Security](docs/SECURITY.md) | Credentials, signing, logs, and release safety |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Pairing, connection, install, voice, and TTS |
 
-## Build From Source
+## Build from source
 
-Requirements:
-
-- Android Studio or a working Android Gradle environment with JDK 17.
-- Android SDK and platform tools.
-- Rokid glasses for real-device testing.
-- Rokid CXR SDK access and credentials.
-- A running OpenClaw Gateway reachable from the phone.
-
-Debug builds are the normal local development path:
+Requirements: JDK 17, Android SDK, Android Studio or Gradle, Rokid CXR SDK
+access, and a reachable OpenClaw Gateway.
 
 ```bash
 ./gradlew :phone-app:assembleDebug :glasses-app:assembleDebug :watch-app:assembleDebug
 ```
 
-On Windows PowerShell:
+Release signing remains local-only. Never commit keystores, signing properties,
+runtime credentials, private screenshots, transcripts, or generated APKs.
 
-```powershell
-.\gradlew.bat :phone-app:assembleDebug :glasses-app:assembleDebug :watch-app:assembleDebug
-```
+## Preview status
 
-Expected debug outputs:
+Rokid behavior depends on device firmware, the proprietary Rokid CXR SDK, and
+Hi Rokid availability. Validate voice, watch, HUD, and optional bridge flows
+against the exact devices and gateway version you plan to use.
 
-```text
-phone-app/build/outputs/apk/debug/phone-app-debug.apk
-glasses-app/build/outputs/apk/debug/glasses-app-debug.apk
-watch-app/build/outputs/apk/debug/watch-app-debug.apk
-```
+## Attribution and license
 
-Release signing is local-only. Keep `jsos-release.properties`, keystores such as `*.jks`, credentials, and generated APKs private. Do not commit them.
+JSOS is based on the upstream
+[Clawsses](https://github.com/dweddepohl/clawsses) Android glasses project.
+Original upstream copyright remains with Pohlster BV and the original
+contributors. JSOS modifications are by Whatsskill, 2026.
 
-## Repository Layout
-
-| Path | Purpose |
-| --- | --- |
-| `phone-app/` | JSOS Core Android phone app. Bridges OpenClaw, Rokid CXR, voice, TTS, sessions, camera handoff, and HUD deployment. |
-| `glasses-app/` | JSOS HUD Android glasses app. Renders the HUD, handles gestures, direct R08 ring control, sessions, staged input, voice state, camera requests, and Rokid AR picture/record triggers. |
-| `watch-app/` | Optional Wear OS companion app for JSOS Core controls, status, chat snapshot, Codex resume, watch mic, and watch TTS playback preview. |
-| `shared/` | Shared JSON protocol models used between phone, glasses, watch, and OpenClaw-facing code. |
-| `docs/` | Public notes, setup details, Rokid references, screenshots, and long-form project documentation. |
-| `gradle/` | Gradle wrapper files. |
-| `LICENSE` | GNU AGPL license text. |
-| `COPYRIGHT` | Fork, attribution, modification, and third-party notices. |
-
-## Docs Map
-
-| Document | What it covers |
-| --- | --- |
-| [docs/INSTALL.md](docs/INSTALL.md) | Requirements, local configuration, OpenClaw setup, build commands, release signing, and connect flow. |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Phone app, glasses app, shared protocol, OpenClaw gateway protocol, phone-glasses messages, and emulator testing. |
-| [docs/HUD.md](docs/HUD.md) | HUD display model, controls, voice modes, camera/AR tools, direct R08 ring mappings, wake, and TTS behavior. |
-| [docs/CODEX-BRIDGE.md](docs/CODEX-BRIDGE.md) | Public-safe notes for the optional private Admin Codex bridge client. |
-| [docs/SECURITY.md](docs/SECURITY.md) | Credentials, signing files, network exposure, logs, screenshots, and release artifact safety. |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Connection, pairing, install, voice, TTS, wake, and emulator debug troubleshooting. |
-| [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | Public-safe screenshot list and visual asset notes. |
-| [docs/ROKID.md](docs/ROKID.md) | Rokid integration notes. |
-| [docs/ROKID_APK_INSTALLATION.md](docs/ROKID_APK_INSTALLATION.md) | Hi Rokid / APK installation notes. |
-| [docs/rokid-sdk/README.md](docs/rokid-sdk/README.md) | Public Rokid phone-side SDK reference notes included for development context. |
-| [docs/rokid-sdk-glasses/README.md](docs/rokid-sdk-glasses/README.md) | Public Rokid glasses-side SDK reference notes included for development context. |
-| [COPYRIGHT](COPYRIGHT) | Fork attribution, modification notices, and third-party notices. |
-| [LICENSE](LICENSE) | GNU AGPL-3.0 license text. |
-
-## Security Notes
-
-Keep local signing files, runtime credentials, transcripts, device identifiers, private logs, and private screenshots out of public commits and release assets.
-
-See [docs/SECURITY.md](docs/SECURITY.md) for the full public-safe checklist.
-
-## Attribution And License
-
-JSOS is based on the upstream [Clawsses](https://github.com/dweddepohl/clawsses) Android glasses project.
-
-Original upstream copyright remains with Pohlster BV and the original contributors. JSOS modifications are by Whatsskill, 2026.
-
-This project is distributed under the GNU Affero General Public License, version 3. See [LICENSE](LICENSE) and [COPYRIGHT](COPYRIGHT).
-
-The Rokid CXR SDK is proprietary software from Rokid and is licensed separately by Rokid. It is not covered by the AGPL license of this repository and must be obtained under Rokid's own terms. JSOS includes a small CXR-L compatibility AAR derived from Rokid's public Maven `client-l:1.0.1` artifact for the Hi Rokid deployment flow; see [phone-app/libs/README.md](phone-app/libs/README.md).
-
-## Thanks
-
-Thanks to:
-
-- [dweddepohl](https://github.com/dweddepohl)
-- [OpenClaw](https://github.com/openclaw/openclaw)
-- [Anezium](https://github.com/Anezium)
-- [Rokid](https://github.com/rokid)
+This project is distributed under the
+[GNU Affero General Public License v3](LICENSE). See [COPYRIGHT](COPYRIGHT) for
+the complete attribution and third-party notices.

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-label="JSOS HUD interface concept">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#152c35"/><stop offset=".56" stop-color="#0d1b20"/><stop offset="1" stop-color="#07100c"/>
+    </linearGradient>
+    <linearGradient id="land" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0a1814"/><stop offset="1" stop-color="#10261d"/>
+    </linearGradient>
+    <filter id="g"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="720" height="480" rx="26" fill="url(#sky)"/>
+  <circle cx="570" cy="88" r="34" fill="#abcdd2" opacity=".16"/>
+  <path d="M0 324L104 226 190 304 302 185 405 303 522 215 720 328V480H0Z" fill="url(#land)"/>
+  <path d="M0 364C170 315 309 396 451 348s197-41 269-18v150H0Z" fill="#08130f"/>
+  <g filter="url(#g)" font-family="monospace">
+    <rect x="118" y="86" width="484" height="294" rx="22" fill="#001b0a" fill-opacity=".28" stroke="#42ff88" stroke-width="2"/>
+    <text x="144" y="120" fill="#7bffa9" font-size="13">LINK</text>
+    <text x="310" y="120" fill="#7bffa9" font-size="13" font-weight="700">JSOS HUD</text>
+    <text x="516" y="120" fill="#7bffa9" font-size="13">READY</text>
+    <line x1="144" y1="139" x2="576" y2="139" stroke="#42ff88" stroke-opacity=".55"/>
+    <text x="146" y="175" fill="#93ffb7" font-size="12">ASSISTANT</text>
+    <rect x="144" y="192" width="432" height="86" rx="12" fill="#001b0a" fill-opacity=".34" stroke="#42ff88" stroke-opacity=".8"/>
+    <text x="164" y="223" fill="#b4ffca" font-size="15">Your next session is ready.</text>
+    <text x="164" y="250" fill="#83f8a6" font-size="13">Voice, context, and tools are online.</text>
+    <rect x="144" y="302" width="92" height="46" rx="11" fill="#002b12" fill-opacity=".55" stroke="#42ff88"/>
+    <rect x="250" y="302" width="92" height="46" rx="11" fill="#002b12" fill-opacity=".55" stroke="#42ff88"/>
+    <rect x="356" y="302" width="92" height="46" rx="11" fill="#002b12" fill-opacity=".55" stroke="#42ff88"/>
+    <rect x="462" y="302" width="114" height="46" rx="11" fill="#0a3a1d" fill-opacity=".65" stroke="#42ff88"/>
+    <text x="174" y="331" fill="#9effbc" font-size="12">CAM</text>
+    <text x="275" y="331" fill="#9effbc" font-size="12">CHAT</text>
+    <text x="386" y="331" fill="#9effbc" font-size="12">MIC</text>
+    <text x="494" y="331" fill="#d2ffdf" font-size="12">SEND</text>
+  </g>
+  <text x="26" y="450" fill="#5f7d72" font-family="Arial, sans-serif" font-size="13">HIGH-CONTRAST OPTICAL CONCEPT · SAFE-ZONE UNCHANGED</text>
+</svg>

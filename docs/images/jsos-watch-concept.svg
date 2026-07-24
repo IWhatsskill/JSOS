@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-label="JSOS Watch interface concept">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#081217"/><stop offset="1" stop-color="#10252c"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#18b7d4" stop-opacity=".28"/><stop offset="1" stop-color="#18b7d4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="480" rx="26" fill="url(#bg)"/>
+  <circle cx="360" cy="240" r="232" fill="url(#glow)"/>
+  <rect x="283" y="0" width="154" height="92" rx="34" fill="#111b20"/>
+  <rect x="283" y="388" width="154" height="92" rx="34" fill="#111b20"/>
+  <circle cx="360" cy="240" r="177" fill="#0a1115" stroke="#5edcf4" stroke-opacity=".62" stroke-width="4"/>
+  <circle cx="360" cy="240" r="158" fill="#0e2026" stroke="#173c46" stroke-width="2"/>
+  <text x="360" y="132" text-anchor="middle" fill="#58d6ff" font-family="monospace" font-size="16" font-weight="700">JSOS WATCH</text>
+  <circle cx="289" cy="166" r="7" fill="#62d894"/>
+  <text x="307" y="172" fill="#dff7fb" font-family="Arial, sans-serif" font-size="17" font-weight="700">Connected</text>
+  <text x="360" y="212" text-anchor="middle" fill="#7f99a2" font-family="monospace" font-size="11">ACTIVE SESSION</text>
+  <text x="360" y="241" text-anchor="middle" fill="#effcff" font-family="Arial, sans-serif" font-size="19" font-weight="700">OpenClaw · Main</text>
+  <rect x="275" y="271" width="170" height="48" rx="24" fill="#18b7d4" fill-opacity=".16" stroke="#18b7d4" stroke-opacity=".58"/>
+  <text x="360" y="301" text-anchor="middle" fill="#8ce9fa" font-family="monospace" font-size="14" font-weight="700">TALK</text>
+  <text x="360" y="347" text-anchor="middle" fill="#6f8992" font-family="Arial, sans-serif" font-size="13">Status · voice · sessions</text>
+  <text x="24" y="451" fill="#5f7881" font-family="Arial, sans-serif" font-size="13">DARK OLED CONCEPT · CONNECTED DEMO STATE</text>
+</svg>

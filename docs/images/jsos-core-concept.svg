@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-label="JSOS Core interface concept">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#081217"/><stop offset="1" stop-color="#10252c"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#66dff6" stroke-opacity=".045"/>
+    </pattern>
+  </defs>
+  <rect width="720" height="480" rx="26" fill="url(#bg)"/>
+  <rect width="720" height="480" rx="26" fill="url(#grid)"/>
+  <rect x="90" y="34" width="540" height="412" rx="32" fill="#0b1418" stroke="#5edcf4" stroke-opacity=".55" stroke-width="2"/>
+  <text x="124" y="80" fill="#58d6ff" font-family="monospace" font-size="23" font-weight="700">JSOS CORE</text>
+  <text x="124" y="108" fill="#79929b" font-family="Arial, sans-serif" font-size="15">Spatial control deck</text>
+  <circle cx="586" cy="74" r="7" fill="#62d894"/>
+  <text x="507" y="103" fill="#62d894" font-family="monospace" font-size="12">SYSTEM READY</text>
+  <g font-family="monospace">
+    <rect x="120" y="132" width="144" height="75" rx="18" fill="#0e2026" stroke="#18b7d4" stroke-opacity=".35"/>
+    <text x="139" y="160" fill="#78919a" font-size="11">GATEWAY</text>
+    <text x="139" y="188" fill="#62d894" font-size="18" font-weight="700">ONLINE</text>
+    <rect x="288" y="132" width="144" height="75" rx="18" fill="#0e2026" stroke="#18b7d4" stroke-opacity=".35"/>
+    <text x="307" y="160" fill="#78919a" font-size="11">GLASSES</text>
+    <text x="307" y="188" fill="#62d894" font-size="18" font-weight="700">PAIRED</text>
+    <rect x="456" y="132" width="144" height="75" rx="18" fill="#0e2026" stroke="#18b7d4" stroke-opacity=".35"/>
+    <text x="475" y="160" fill="#78919a" font-size="11">VOICE</text>
+    <text x="475" y="188" fill="#58d6ff" font-size="18" font-weight="700">READY</text>
+  </g>
+  <rect x="120" y="232" width="480" height="126" rx="22" fill="#0e2026" stroke="#18b7d4" stroke-opacity=".35"/>
+  <text x="146" y="267" fill="#79929b" font-family="monospace" font-size="12">ACTIVE SESSION</text>
+  <text x="146" y="301" fill="#e2f6fa" font-family="Arial, sans-serif" font-size="24" font-weight="700">OpenClaw · Main</text>
+  <text x="146" y="333" fill="#8da7af" font-family="Arial, sans-serif" font-size="15">Session-aware chat, models, voice, and media</text>
+  <rect x="120" y="380" width="92" height="38" rx="19" fill="#18b7d4" fill-opacity=".16" stroke="#18b7d4" stroke-opacity=".5"/>
+  <rect x="224" y="380" width="92" height="38" rx="19" fill="#0e2026" stroke="#18b7d4" stroke-opacity=".35"/>
+  <rect x="328" y="380" width="92" height="38" rx="19" fill="#0e2026" stroke="#18b7d4" stroke-opacity=".35"/>
+  <text x="148" y="404" fill="#71e3f9" font-family="monospace" font-size="12">HOME</text>
+  <text x="254" y="404" fill="#78919a" font-family="monospace" font-size="12">CHAT</text>
+  <text x="353" y="404" fill="#78919a" font-family="monospace" font-size="12">VOICE</text>
+  <text x="480" y="404" fill="#57717a" font-family="monospace" font-size="11">CONCEPT</text>
+</svg>
