@@ -32,17 +32,6 @@ object AgentWakeRouter {
         val aliases: List<String>,
     )
 
-    private val agents = listOf(
-        AgentAliases("Main", listOf("main", "assistant", "primary")),
-        AgentAliases("WhatsApp", listOf("whatsapp", "whatsepp", "whatsap", "whats app", "what's app")),
-        AgentAliases("GPT-5", listOf("gpt five", "gpt 5", "gpt")),
-        AgentAliases("Codex Lab", listOf("codex lab", "codex")),
-        AgentAliases("Coding Lab", listOf("coding lab", "coding")),
-        AgentAliases("Qwen", listOf("qwen", "queen")),
-        AgentAliases("CLI Lab", listOf("cli lab", "cli", "command line")),
-        AgentAliases("General", listOf("general", "genelal", "generel", "generell")),
-    )
-
     private val clearActiveCommands = setOf("stop", "stopp", "stop session", "session stop")
     private val sleepCommands = setOf("wake off", "agent wake off", "wake mode off", "ruhe", "pause")
 
@@ -54,7 +43,7 @@ object AgentWakeRouter {
         if (normalized in sleepCommands) return Decision(Action.Sleep)
         if (normalized in clearActiveCommands) return Decision(Action.ClearActive)
 
-        val leadingAgent = findLeadingAgent(normalized)
+        val leadingAgent = findLeadingAgent(normalized, agentsFor(sessions))
         if (leadingAgent != null) {
             val (agent, aliasWordCount) = leadingAgent
             val session = sessions.firstOrNull { it.name.equals(agent.label, ignoreCase = true) }
@@ -79,7 +68,27 @@ object AgentWakeRouter {
         }
     }
 
-    private fun findLeadingAgent(normalizedText: String): Pair<AgentAliases, Int>? {
+    private fun agentsFor(sessions: List<SessionInfo>): List<AgentAliases> {
+        return sessions
+            .map { it.name.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.ROOT) }
+            .map { label ->
+                val aliases = buildList {
+                    add(label)
+                    when (label.lowercase(Locale.ROOT)) {
+                        "main" -> addAll(listOf("assistant", "primary"))
+                        "whatsapp" -> addAll(listOf("whatsepp", "whatsap", "whats app", "what's app"))
+                    }
+                }
+                AgentAliases(label = label, aliases = aliases.distinct())
+            }
+    }
+
+    private fun findLeadingAgent(
+        normalizedText: String,
+        agents: List<AgentAliases>
+    ): Pair<AgentAliases, Int>? {
         val words = normalizedText.split(' ').filter { it.isNotBlank() }
         for (agent in agents) {
             val sortedAliases = agent.aliases.sortedByDescending { normalize(it).length }

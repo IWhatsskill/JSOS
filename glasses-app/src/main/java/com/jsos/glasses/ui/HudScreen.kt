@@ -242,6 +242,7 @@ data class ChatHudState(
     val menuBarPage: Int = 0,
     val hudPosition: HudPosition = HudPosition.FULL,
     val displaySize: HudDisplaySize = HudDisplaySize.NORMAL,
+    val showOwnMessages: Boolean = false,
     val focusedArea: ChatFocusArea = ChatFocusArea.CONTENT,
     val voiceState: VoiceInputState = VoiceInputState.Idle,
     val voiceText: String = "",
@@ -347,6 +348,7 @@ data class MoreSubMenuOption(
     val label: String,
     val description: String,
     val displaySize: HudDisplaySize? = null,
+    val userMessagesToggle: Boolean = false,
     val arAction: String? = null,
     val ringAction: String? = null
 )
@@ -423,9 +425,16 @@ val RING_TOOL_OPTIONS = listOf(
     MoreSubMenuOption("REFRESH", "Update status", ringAction = "refresh")
 )
 
-fun moreSubMenuOptions(type: MoreSubMenuType): List<MoreSubMenuOption> = when (type) {
+fun moreSubMenuOptions(
+    type: MoreSubMenuType,
+    showOwnMessages: Boolean = false
+): List<MoreSubMenuOption> = when (type) {
     MoreSubMenuType.AR -> AR_TOOL_OPTIONS
-    MoreSubMenuType.DISPLAY -> DISPLAY_OPTIONS
+    MoreSubMenuType.DISPLAY -> DISPLAY_OPTIONS + MoreSubMenuOption(
+        label = "YOU ${if (showOwnMessages) "ON" else "OFF"}",
+        description = if (showOwnMessages) "Hide your messages" else "Show your messages",
+        userMessagesToggle = true
+    )
     MoreSubMenuType.RING -> RING_TOOL_OPTIONS
 }
 
@@ -465,8 +474,10 @@ fun HudScreen(
 
     // Auto-scroll when position or trigger changes. The HUD chat only renders
     // JSOS messages, so map the backing message index to the visible list.
-    LaunchedEffect(state.scrollPosition, state.scrollTrigger) {
-        val visibleMessages = state.messages.withIndex().filter { it.value.role != "user" }
+    LaunchedEffect(state.scrollPosition, state.scrollTrigger, state.showOwnMessages) {
+        val visibleMessages = state.messages.withIndex().filter {
+            state.showOwnMessages || it.value.role != "user"
+        }
         val historyOffset = if (!state.hasMoreHistory && visibleMessages.isNotEmpty()) 1 else 0
         val thinkingOffset = if (state.agentState == AgentState.THINKING) 1 else 0
         val totalItems = historyOffset + visibleMessages.size + thinkingOffset
@@ -594,7 +605,8 @@ fun HudScreen(
                     ttsEnabled = state.ttsEnabled,
                     fontFamily = monoFontFamily,
                     fontSize = fontSize,
-                    alpha = 1f
+                    alpha = 1f,
+                    showDivider = false
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -608,6 +620,7 @@ fun HudScreen(
                     fontSize = fontSize,
                     fontFamily = monoFontFamily,
                     alpha = contentAlpha,
+                    showOwnMessages = state.showOwnMessages,
                     hasMoreHistory = state.hasMoreHistory,
                     newPrependCount = state.newPrependCount,
                     modifier = Modifier.weight(1f)
@@ -699,6 +712,7 @@ fun HudScreen(
                 menuType = state.moreSubMenuType,
                 selectedIndex = state.selectedMoreSubIndex,
                 currentDisplaySize = state.displaySize,
+                showOwnMessages = state.showOwnMessages,
                 ringServiceEnabled = state.ringServiceEnabled,
                 ringInputConnected = state.ringInputConnected,
                 ringBonded = state.ringBonded,
@@ -746,6 +760,7 @@ fun HudScreen(
         ) {
             CliTerminalOverlay(
                 lines = state.cliLines,
+                showOwnMessages = state.showOwnMessages,
                 status = state.cliStatus,
                 detail = state.cliDetail,
                 isConnected = state.isConnected,
@@ -833,11 +848,14 @@ private fun ChatContentArea(
     fontSize: androidx.compose.ui.unit.TextUnit,
     fontFamily: FontFamily,
     alpha: Float,
+    showOwnMessages: Boolean,
     hasMoreHistory: Boolean = true,
     newPrependCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
-    val visibleMessages = messages.withIndex().filter { it.value.role != "user" }
+    val visibleMessages = messages.withIndex().filter {
+        showOwnMessages || it.value.role != "user"
+    }
     val lastVisibleOriginalIndex = visibleMessages.lastOrNull()?.index ?: -1
 
     // Auto-scroll to reveal the thinking indicator when it appears.
@@ -875,7 +893,7 @@ private fun ChatContentArea(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 // "Beginning of conversation" marker (static, no displacement issues)
                 if (!hasMoreHistory && visibleMessages.isNotEmpty()) {
@@ -942,7 +960,6 @@ private fun ChatMessageItem(
     val isUser = message.role == "user"
     val isStreaming = message.isStreaming
     val speaker = if (isUser) "YOU" else speakerLabel
-    val speakerColor = if (isUser) HudColors.cyan else HudColors.green
 
     // Blinking cursor for streaming
     val cursorVisible = if (isStreaming) {
@@ -957,75 +974,66 @@ private fun ChatMessageItem(
     } else {
         false
     }
-    val messageShape = RoundedCornerShape(4.dp)
+    val messageShape = RoundedCornerShape(5.dp)
+    val outlineAlpha = if (isCurrent || isStreaming) 0.82f else 0.42f
+    val textAlpha = if (isCurrent || isStreaming) 1f else 0.82f
+    val displayText = if (message.content.isEmpty() && isStreaming) {
+        if (cursorVisible) "\u2588" else " "
+    } else if (isStreaming && cursorVisible) {
+        "${message.content}\u2588"
+    } else {
+        message.content
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 2.dp, vertical = 2.dp)
+            .padding(horizontal = 2.dp, vertical = 1.dp)
     ) {
         if (message.thumbnails.isNotEmpty()) {
             PhotoThumbnailRow(
                 thumbnails = message.thumbnails,
-                modifier = Modifier.padding(start = 44.dp, bottom = 2.dp)
+                modifier = Modifier
+                    .align(if (isUser) Alignment.End else Alignment.Start)
+                    .padding(bottom = 2.dp)
             )
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (isUser) {
-                        Modifier
-                    } else if (isCurrent) {
-                        Modifier.border(
-                            width = 1.dp,
-                            color = HudColors.green,
-                            shape = messageShape
-                        )
-                    } else {
-                        Modifier.drawBehind {
-                            drawLine(
-                                color = HudColors.green,
-                                start = Offset(0f, 0f),
-                                end = Offset(0f, size.height),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        }
-                    }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(0.94f)
+                    .align(if (isUser) Alignment.CenterEnd else Alignment.CenterStart)
+                    .border(
+                        width = 0.4.dp,
+                        color = HudColors.green.copy(alpha = outlineAlpha),
+                        shape = messageShape
+                    )
+                    .padding(horizontal = 5.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = speaker,
+                    color = HudColors.green.copy(alpha = textAlpha),
+                    fontSize = fontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.sp,
+                    modifier = Modifier.widthIn(min = 44.dp, max = 92.dp)
                 )
-                .padding(horizontal = 4.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Text(
-                text = speaker,
-                color = speakerColor,
-                fontSize = fontSize,
-                fontFamily = fontFamily,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.sp,
-                modifier = Modifier.widthIn(min = 44.dp, max = 92.dp)
-            )
 
-            val displayText = if (message.content.isEmpty() && isStreaming) {
-                if (cursorVisible) "\u2588" else " "
-            } else if (isStreaming && cursorVisible) {
-                "${message.content}\u2588"
-            } else {
-                message.content
+                Text(
+                    text = displayText,
+                    color = HudColors.green.copy(alpha = textAlpha),
+                    fontSize = fontSize,
+                    fontFamily = fontFamily,
+                    lineHeight = fontSize,
+                    letterSpacing = 0.sp,
+                    textAlign = TextAlign.Start,
+                    softWrap = true,
+                    modifier = Modifier.weight(1f)
+                )
             }
-
-            Text(
-                text = displayText,
-                color = if (isUser) HudColors.primaryText else HudColors.green,
-                fontSize = fontSize,
-                fontFamily = fontFamily,
-                lineHeight = fontSize,
-                letterSpacing = 0.sp,
-                textAlign = TextAlign.Start,
-                softWrap = true,
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }
@@ -1117,6 +1125,17 @@ private fun PhotoThumbnailRow(
 // VOICE STATUS STRIP
 // ============================================================================
 
+private enum class HudPulseMode {
+    READY,
+    THINK,
+    LIVE,
+    DONE,
+    VOICE,
+    ERROR,
+    LOAD,
+    WAKE
+}
+
 @Composable
 private fun VoiceStatusStrip(
     isConnected: Boolean,
@@ -1132,10 +1151,12 @@ private fun VoiceStatusStrip(
     currentTime: String,
     currentModelLabel: String = "",
     currentModelRef: String? = null,
+    connectionTagOverride: String? = null,
     ttsEnabled: Boolean,
     fontFamily: FontFamily,
     fontSize: androidx.compose.ui.unit.TextUnit,
     alpha: Float,
+    showDivider: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val stripFontSize = (fontSize.value - 4).coerceAtLeast(7f).sp
@@ -1143,6 +1164,39 @@ private fun VoiceStatusStrip(
             voiceState is VoiceInputState.Recognizing ||
             voiceState is VoiceInputState.Processing
     val isLive = agentState == AgentState.STREAMING
+    val hasPulseError = voiceState is VoiceInputState.Error ||
+            connectionTagOverride == "[ERR]" ||
+            (!isConnected && connectionTagOverride == null)
+    var previousAgentState by remember { mutableStateOf(agentState) }
+    var showDone by remember { mutableStateOf(false) }
+    val doneAlpha = remember { Animatable(0.55f) }
+
+    LaunchedEffect(agentState, hasPulseError) {
+        val completed = !hasPulseError &&
+                agentState == AgentState.IDLE &&
+                previousAgentState != AgentState.IDLE
+        previousAgentState = agentState
+        when {
+            hasPulseError -> {
+                showDone = false
+                doneAlpha.snapTo(0.55f)
+            }
+            completed -> {
+                showDone = true
+                doneAlpha.snapTo(1f)
+                doneAlpha.animateTo(
+                    targetValue = 0.42f,
+                    animationSpec = tween(900)
+                )
+                showDone = false
+            }
+            agentState != AgentState.IDLE -> {
+                showDone = false
+                doneAlpha.snapTo(0.55f)
+            }
+        }
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "voicePulse")
     val animatedAlpha by infiniteTransition.animateFloat(
         initialValue = 0.35f,
@@ -1156,7 +1210,12 @@ private fun VoiceStatusStrip(
         animationSpec = infiniteRepeatable(animation = tween(650)),
         label = "voiceWavePhase"
     )
-    val pulseAlpha = if (isVoiceActive || isLive) animatedAlpha else 0.55f
+    val thinkPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(animation = tween(1800)),
+        label = "thinkPulsePhase"
+    )
     val mode = when (voiceState) {
         is VoiceInputState.Listening -> voiceState.mode
         is VoiceInputState.Recognizing -> voiceState.mode
@@ -1175,20 +1234,53 @@ private fun VoiceStatusStrip(
         is VoiceInputState.Error -> "ERROR"
         VoiceInputState.Idle -> "READY"
     }
-    val topLabel = when {
-        isLive -> "LIVE"
-        agentState == AgentState.THINKING -> "THINK"
-        isLoadingMoreHistory -> "LOAD"
-        showWakeNotification -> wakeReason?.replace('_', ' ')?.uppercase() ?: "WAKE"
-        else -> stateLabel
+    val pulseMode = when {
+        hasPulseError -> HudPulseMode.ERROR
+        isVoiceActive -> HudPulseMode.VOICE
+        isLive -> HudPulseMode.LIVE
+        agentState == AgentState.THINKING -> HudPulseMode.THINK
+        isLoadingMoreHistory -> HudPulseMode.LOAD
+        showWakeNotification -> HudPulseMode.WAKE
+        showDone -> HudPulseMode.DONE
+        else -> HudPulseMode.READY
+    }
+    val topLabel = when (pulseMode) {
+        HudPulseMode.ERROR -> "ERROR"
+        HudPulseMode.VOICE -> stateLabel
+        HudPulseMode.LIVE -> "LIVE"
+        HudPulseMode.THINK -> "THINK"
+        HudPulseMode.LOAD -> "LOAD"
+        HudPulseMode.WAKE -> wakeReason?.replace('_', ' ')?.uppercase() ?: "WAKE"
+        HudPulseMode.DONE -> "DONE"
+        HudPulseMode.READY -> "READY"
     }
     val accentColor = when (voiceState) {
         is VoiceInputState.Error -> HudColors.error
         is VoiceInputState.Processing -> HudColors.cyan
         is VoiceInputState.Recognizing -> HudColors.yellow
-        else -> if (isLive) HudColors.cyan else HudColors.green
+        else -> when (pulseMode) {
+            HudPulseMode.ERROR -> HudColors.error
+            HudPulseMode.LIVE -> HudColors.cyan
+            else -> HudColors.green
+        }
     }
-    val statusTag = when {
+    val pulseAlpha = when (pulseMode) {
+        HudPulseMode.ERROR,
+        HudPulseMode.VOICE,
+        HudPulseMode.LIVE,
+        HudPulseMode.WAKE -> animatedAlpha
+        HudPulseMode.THINK,
+        HudPulseMode.LOAD -> 0.72f
+        HudPulseMode.DONE -> doneAlpha.value
+        HudPulseMode.READY -> 0.38f
+    }
+    val pulseRotation = when (pulseMode) {
+        HudPulseMode.LIVE -> wavePhase
+        HudPulseMode.THINK,
+        HudPulseMode.LOAD -> thinkPhase
+        else -> 0f
+    }
+    val statusTag = connectionTagOverride ?: when {
         showWakeNotification -> "[WAKE]"
         voiceState is VoiceInputState.Error -> "[ERR]"
         isVoiceActive -> "[MIC]"
@@ -1211,36 +1303,26 @@ private fun VoiceStatusStrip(
         currentTime,
         batteryLevel?.let { "${if (batteryCharging) "+" else ""}$it%" }.orEmpty()
     ).filter { it.isNotBlank() }.joinToString(" ")
-    val rightLabel = listOf(
+    val rightStatusLabel = listOf(
         statusTag,
         modelLabel,
-        sessionLabel,
-        timeBatteryLabel
+        sessionLabel
     ).filter { it.isNotBlank() }.joinToString(" | ")
     Row(
         modifier = modifier
-            .fillMaxWidth()
+            .fillMaxWidth(0.94f)
             .alpha(alpha)
             .heightIn(min = 22.dp)
-            .padding(horizontal = 0.dp, vertical = 2.dp),
+            .padding(horizontal = 2.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (isLive) {
-            VoicePulseDot(
-                color = HudColors.cyan,
-                pulseAlpha = pulseAlpha,
-                rotation = wavePhase,
-                modifier = Modifier.size(15.dp)
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-        } else if (isVoiceActive) {
-            VoicePulseDot(
-                color = accentColor,
-                pulseAlpha = pulseAlpha,
-                modifier = Modifier.size(15.dp)
-            )
-            Spacer(modifier = Modifier.width(7.dp))
-        }
+        VoicePulseDot(
+            color = accentColor,
+            pulseAlpha = pulseAlpha,
+            rotation = pulseRotation,
+            modifier = Modifier.size(15.dp)
+        )
+        Spacer(modifier = Modifier.width(5.dp))
         Text(
             text = topLabel,
             color = accentColor,
@@ -1265,33 +1347,51 @@ private fun VoiceStatusStrip(
                 modifier = Modifier.width(58.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Spacer(modifier = Modifier.weight(1f))
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
         }
-        if (ttsEnabled) {
-            Text(
-                text = "TTS",
-                color = HudColors.cyan,
-                fontSize = stripFontSize,
-                fontFamily = fontFamily,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-        if (rightLabel.isNotBlank()) {
-            Text(
-                text = rightLabel,
-                color = if (batteryLevel != null && batteryLevel <= 15) HudColors.error else HudColors.primaryText.copy(alpha = 0.86f),
-                fontSize = stripFontSize,
-                fontFamily = fontFamily,
-                maxLines = 1,
-                textAlign = TextAlign.End
-            )
+
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (ttsEnabled) {
+                Text(
+                    text = "TTS",
+                    color = HudColors.cyan,
+                    fontSize = stripFontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            if (rightStatusLabel.isNotBlank()) {
+                Text(
+                    text = rightStatusLabel,
+                    color = HudColors.primaryText.copy(alpha = 0.86f),
+                    fontSize = stripFontSize,
+                    fontFamily = fontFamily,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+            if (timeBatteryLabel.isNotBlank()) {
+                Text(
+                    text = "${if (rightStatusLabel.isNotBlank()) " | " else ""}$timeBatteryLabel",
+                    color = if (batteryLevel != null && batteryLevel <= 15) HudColors.error else HudColors.primaryText.copy(alpha = 0.86f),
+                    fontSize = stripFontSize,
+                    fontFamily = fontFamily,
+                    maxLines = 1,
+                    textAlign = TextAlign.End
+                )
+            }
         }
     }
-    HudDivider(alpha = 0.18f)
+    if (showDivider) {
+        HudDivider(alpha = 0.18f)
+    }
 }
 
 @Composable
@@ -2242,6 +2342,7 @@ private fun MoreSubMenuOverlay(
     menuType: MoreSubMenuType?,
     selectedIndex: Int,
     currentDisplaySize: HudDisplaySize,
+    showOwnMessages: Boolean,
     ringServiceEnabled: Boolean,
     ringInputConnected: Boolean,
     ringBonded: Boolean,
@@ -2253,7 +2354,7 @@ private fun MoreSubMenuOverlay(
     modifier: Modifier = Modifier
 ) {
     val type = menuType ?: MoreSubMenuType.DISPLAY
-    val options = moreSubMenuOptions(type)
+    val options = moreSubMenuOptions(type, showOwnMessages)
     val listState = rememberLazyListState()
 
     LaunchedEffect(type, selectedIndex) {
@@ -2290,7 +2391,8 @@ private fun MoreSubMenuOverlay(
         ) {
             itemsIndexed(options) { index, item ->
                 val isSelected = index == selectedIndex
-                val isActive = item.displaySize == currentDisplaySize
+                val isActive = item.displaySize == currentDisplaySize ||
+                    (item.userMessagesToggle && showOwnMessages)
                 val activeMark = if (isActive) "*" else " "
 
                 Row(
@@ -2691,7 +2793,12 @@ private fun splitCliResponseText(text: String): List<String> {
     return listOf(text.trim()).filter { it.isNotEmpty() }
 }
 
-internal fun cliVisibleBlockCount(lines: List<String>): Int = buildCliLineBlocks(lines).size
+internal fun cliVisibleBlockCount(
+    lines: List<String>,
+    showOwnMessages: Boolean = false
+): Int = buildCliLineBlocks(lines).count {
+    showOwnMessages || it.kind != CliBlockKind.INPUT
+}
 
 private fun buildCliLineBlocks(lines: List<String>): List<CliLineBlock> {
     if (lines.isEmpty()) {
@@ -2751,6 +2858,7 @@ private fun buildCliLineBlocks(lines: List<String>): List<CliLineBlock> {
 @Composable
 private fun CliTerminalOverlay(
     lines: List<String>,
+    showOwnMessages: Boolean,
     status: String,
     detail: String,
     isConnected: Boolean,
@@ -2784,8 +2892,14 @@ private fun CliTerminalOverlay(
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    val visibleBlocks = remember(lines) { buildCliLineBlocks(lines) }
-    val lastResponseIndex = visibleBlocks.indexOfLast { it.kind == CliBlockKind.RESPONSE }
+    val visibleBlocks = remember(lines, showOwnMessages) {
+        buildCliLineBlocks(lines).filter {
+            showOwnMessages || it.kind != CliBlockKind.INPUT
+        }
+    }
+    val currentBlockIndex = visibleBlocks.indexOfLast {
+        it.kind == CliBlockKind.INPUT || it.kind == CliBlockKind.RESPONSE
+    }
     val bodyFontSize = fontSize
     val hasStagedInput = showInputStaging || photos.isNotEmpty()
     val inputAlpha = focusBrightness(focusedArea == ChatFocusArea.INPUT || hasStagedInput)
@@ -2794,6 +2908,13 @@ private fun CliTerminalOverlay(
         ?.takeIf { it.isNotBlank() }
         ?.let { "CODEX ${it.take(18)}" }
         ?: "CODEX"
+    val codexConnectionTag = when (status.uppercase()) {
+        "CONNECTED" -> "[OK]"
+        "CONNECTING" -> "[LINK]"
+        "DISCONNECTED", "OFFLINE" -> "[DISC]"
+        "ERROR" -> "[ERR]"
+        else -> "[${status.uppercase().take(4).ifBlank { "OFF" }}]"
+    }
     val hudHeight = when (hudPosition) {
         HudPosition.FULL -> 1f
         HudPosition.BOTTOM_HALF -> 0.5f
@@ -2869,14 +2990,14 @@ private fun CliTerminalOverlay(
                 batteryLevel = batteryLevel,
                 batteryCharging = batteryCharging,
                 currentTime = currentTime,
+                connectionTagOverride = codexConnectionTag,
                 ttsEnabled = ttsEnabled,
                 fontFamily = fontFamily,
                 fontSize = fontSize,
-                alpha = 1f
+                alpha = 1f,
+                showDivider = false
             )
-            HudDivider(alpha = 0.18f)
-
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             LazyColumn(
                 state = listState,
@@ -2884,7 +3005,7 @@ private fun CliTerminalOverlay(
                     .fillMaxWidth()
                     .weight(1f)
                     .clipToBounds(),
-                verticalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
                 contentPadding = PaddingValues(bottom = 4.dp)
             ) {
                 itemsIndexed(
@@ -2893,7 +3014,7 @@ private fun CliTerminalOverlay(
                 ) { index, block ->
                     CliTerminalBlockItem(
                         block = block,
-                        isCurrent = block.kind == CliBlockKind.RESPONSE && index == lastResponseIndex,
+                        isCurrent = index == currentBlockIndex,
                         fontSize = bodyFontSize,
                         fontFamily = fontFamily
                     )
@@ -3227,7 +3348,7 @@ private fun CliTerminalBlockItem(
             speakerLabel = "CODEX",
             fontSize = fontSize,
             fontFamily = fontFamily,
-            isCurrent = false
+            isCurrent = isCurrent
         )
         CliBlockKind.RESPONSE -> ChatMessageItem(
             message = DisplayMessage(
@@ -3240,48 +3361,32 @@ private fun CliTerminalBlockItem(
             fontFamily = fontFamily,
             isCurrent = isCurrent
         )
-        CliBlockKind.ERROR -> {
-            val shape = RoundedCornerShape(4.dp)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, HudColors.error, shape)
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Text(
-                    text = "ERR",
-                    color = HudColors.error,
-                    fontSize = fontSize,
-                    fontFamily = fontFamily,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    modifier = Modifier.widthIn(min = 44.dp, max = 92.dp)
-                )
-                Text(
-                    text = block.text,
-                    color = HudColors.error,
-                    fontSize = fontSize,
-                    fontFamily = fontFamily,
-                    lineHeight = fontSize,
-                    letterSpacing = 0.sp,
-                    softWrap = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        CliBlockKind.SYSTEM -> Text(
-            text = block.text,
-            color = HudColors.primaryText.copy(alpha = 0.7f),
-            fontSize = (fontSize.value - 2).coerceAtLeast(8f).sp,
+        CliBlockKind.ERROR -> ChatMessageItem(
+            message = DisplayMessage(
+                id = "cli-error-${block.text.hashCode()}",
+                role = "assistant",
+                content = block.text
+            ),
+            speakerLabel = "ERR",
+            fontSize = fontSize,
             fontFamily = fontFamily,
-            lineHeight = fontSize,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+            isCurrent = true
+        )
+        CliBlockKind.SYSTEM -> ChatMessageItem(
+            message = DisplayMessage(
+                id = "cli-system-${block.text.hashCode()}",
+                role = "assistant",
+                content = block.text
+            ),
+            speakerLabel = "SYS",
+            fontSize = fontSize,
+            fontFamily = fontFamily,
+            isCurrent = false
         )
     }
-}// ============================================================================
+}
+
+// ============================================================================
 // EXIT CONFIRMATION OVERLAY
 // ============================================================================
 

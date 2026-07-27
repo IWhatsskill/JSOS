@@ -164,7 +164,8 @@ class HudActivity : ComponentActivity() {
         hudState.value = hudState.value.copy(
             hudPosition = savedPosition,
             displaySize = savedDisplaySize,
-            voiceSendMode = savedVoiceSendMode
+            voiceSendMode = savedVoiceSendMode,
+            showOwnMessages = loadShowOwnMessagesPreference()
         )
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -903,7 +904,10 @@ class HudActivity : ComponentActivity() {
                 voiceText = "",
                 cliLines = updatedLines,
                 cliAgentState = AgentState.THINKING,
-                cliScrollPosition = maxOf(0, cliVisibleBlockCount(updatedLines) - 1)
+                cliScrollPosition = maxOf(
+                    0,
+                    cliVisibleBlockCount(updatedLines, current.showOwnMessages) - 1
+                )
             )
             return
         }
@@ -1252,7 +1256,10 @@ class HudActivity : ComponentActivity() {
             cliStatus = "CONNECTING",
             cliDetail = "",
             cliLines = lines,
-            cliScrollPosition = maxOf(0, cliVisibleBlockCount(lines) - 1),
+            cliScrollPosition = maxOf(
+                0,
+                cliVisibleBlockCount(lines, current.showOwnMessages) - 1
+            ),
             cliActionIndex = CliActionItem.SEND.ordinal,
             focusedArea = ChatFocusArea.CONTENT
         )
@@ -1332,7 +1339,10 @@ class HudActivity : ComponentActivity() {
         }
 
         fun scrollCliToBottom(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
-            val maxScroll = maxOf(0, cliVisibleBlockCount(state.cliLines) - 1)
+            val maxScroll = maxOf(
+                0,
+                cliVisibleBlockCount(state.cliLines, state.showOwnMessages) - 1
+            )
             hudState.value = state.copy(
                 cliScrollPosition = maxScroll,
                 cliScrollTrigger = state.cliScrollTrigger + 1
@@ -1340,7 +1350,10 @@ class HudActivity : ComponentActivity() {
         }
 
         fun scrollCliDownOrMenu(state: com.jsos.glasses.ui.ChatHudState = hudState.value) {
-            val maxScroll = maxOf(0, cliVisibleBlockCount(state.cliLines) - 1)
+            val maxScroll = maxOf(
+                0,
+                cliVisibleBlockCount(state.cliLines, state.showOwnMessages) - 1
+            )
             if (state.cliScrollPosition >= maxScroll && state.cliIsScrolledToEnd) {
                 if (hasCliInput(state)) {
                     focusCliInput(state)
@@ -1569,7 +1582,7 @@ class HudActivity : ComponentActivity() {
     private fun handleMoreSubMenuGesture(gesture: Gesture) {
         val current = hudState.value
         val menuType = current.moreSubMenuType ?: MoreSubMenuType.DISPLAY
-        val options = moreSubMenuOptions(menuType)
+        val options = moreSubMenuOptions(menuType, current.showOwnMessages)
         if (options.isEmpty()) {
             hudState.value = current.copy(
                 showMoreSubMenu = false,
@@ -1614,6 +1627,23 @@ class HudActivity : ComponentActivity() {
 
         option.ringAction?.let { action ->
             executeRingToolAction(action)
+            return
+        }
+
+        if (option.userMessagesToggle) {
+            val showOwnMessages = !current.showOwnMessages
+            hudState.value = current.copy(
+                showOwnMessages = showOwnMessages,
+                scrollPosition = maxHudScrollPosition(current.messages, showOwnMessages),
+                scrollTrigger = current.scrollTrigger + 1,
+                cliScrollPosition = maxOf(
+                    0,
+                    cliVisibleBlockCount(current.cliLines, showOwnMessages) - 1
+                ),
+                cliScrollTrigger = current.cliScrollTrigger + 1
+            )
+            saveHudPreferences()
+            Log.d(GlassesApp.TAG, "Own HUD messages: ${if (showOwnMessages) "ON" else "OFF"}")
             return
         }
 
@@ -1765,13 +1795,20 @@ class HudActivity : ComponentActivity() {
 
     // ============== Scroll Helpers ==============
 
-    private fun visibleHudMessageIndices(messages: List<DisplayMessage>): List<Int> =
+    private fun visibleHudMessageIndices(
+        messages: List<DisplayMessage>,
+        showOwnMessages: Boolean = hudState.value.showOwnMessages
+    ): List<Int> =
         messages.withIndex()
-            .filter { it.value.role != "user" }
+            .filter { showOwnMessages || it.value.role != "user" }
             .map { it.index }
 
-    private fun maxHudScrollPosition(messages: List<DisplayMessage>): Int =
-        visibleHudMessageIndices(messages).lastOrNull() ?: maxOf(0, messages.size - 1)
+    private fun maxHudScrollPosition(
+        messages: List<DisplayMessage>,
+        showOwnMessages: Boolean = hudState.value.showOwnMessages
+    ): Int =
+        visibleHudMessageIndices(messages, showOwnMessages).lastOrNull()
+            ?: maxOf(0, messages.size - 1)
 
     private fun currentHudVisibleSlot(messages: List<DisplayMessage>, scrollPosition: Int): Int {
         val visibleIndices = visibleHudMessageIndices(messages)
@@ -2019,14 +2056,20 @@ class HudActivity : ComponentActivity() {
             AgentState.STREAMING
         }
         hudState.update { current ->
-            val previousMaxScroll = maxOf(0, cliVisibleBlockCount(current.cliLines) - 1)
+            val previousMaxScroll = maxOf(
+                0,
+                cliVisibleBlockCount(current.cliLines, current.showOwnMessages) - 1
+            )
             val merged = mergeCliOutputLines(
                 current = current.cliLines,
                 output = text,
                 replace = replace
             ).takeLast(MAX_CLI_LINES)
             if (merged.isEmpty()) return@update current
-            val nextMaxScroll = maxOf(0, cliVisibleBlockCount(merged) - 1)
+            val nextMaxScroll = maxOf(
+                0,
+                cliVisibleBlockCount(merged, current.showOwnMessages) - 1
+            )
             val shouldAutoScroll = current.focusedArea != ChatFocusArea.CONTENT ||
                 current.cliIsScrolledToEnd ||
                 current.cliScrollPosition >= previousMaxScroll - 1
@@ -2338,7 +2381,10 @@ class HudActivity : ComponentActivity() {
                             cliStatus = state,
                             cliDetail = detail,
                             cliAgentState = if (state == "ERROR" || state == "DISCONNECTED" || state == "OFFLINE") AgentState.IDLE else current.cliAgentState,
-                            cliScrollPosition = maxOf(0, cliVisibleBlockCount(current.cliLines) - 1)
+                            cliScrollPosition = maxOf(
+                                0,
+                                cliVisibleBlockCount(current.cliLines, current.showOwnMessages) - 1
+                            )
                         )
                     }
                 }
@@ -2881,6 +2927,7 @@ class HudActivity : ComponentActivity() {
                 .putString("hudPosition", state.hudPosition.name)
                 .putString("displaySize", state.displaySize.name)
                 .putString("voiceSendMode", state.voiceSendMode.name)
+                .putBoolean("showOwnMessages", state.showOwnMessages)
                 .commit()
         } catch (e: Exception) {
             Log.w(GlassesApp.TAG, "Failed to save HUD preferences", e)
@@ -2904,5 +2951,13 @@ class HudActivity : ComponentActivity() {
             Log.w(GlassesApp.TAG, "Failed to load HUD preferences, using defaults", e)
             return Triple(HudPosition.FULL, HudDisplaySize.NORMAL, VoiceSendMode.ASK)
         }
+    }
+
+    private fun loadShowOwnMessagesPreference(): Boolean = try {
+        getSharedPreferences("hud_prefs", MODE_PRIVATE)
+            .getBoolean("showOwnMessages", false)
+    } catch (e: Exception) {
+        Log.w(GlassesApp.TAG, "Failed to load own-message preference, using OFF", e)
+        false
     }
 }

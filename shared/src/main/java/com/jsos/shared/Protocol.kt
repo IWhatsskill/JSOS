@@ -271,7 +271,11 @@ fun stableSessionDisplayName(
         if (keyRoute.origin == "telegram") return "Telegram"
         if (keyRoute.agentId == "main" && keyRoute.origin == "main") return "Main"
 
-        val routedLabel = keyAgentLabel ?: explicitDisplayName ?: explicitLabel ?: rawDiscordLabel ?: explicitDerivedTitle
+        val routedLabel = explicitDisplayName
+            ?: explicitLabel
+            ?: rawDiscordLabel
+            ?: explicitDerivedTitle
+            ?: keyAgentLabel
         return when (keyRoute.origin) {
             "discord" -> routedLabel ?: key
             "main" -> routedLabel ?: key
@@ -345,12 +349,7 @@ fun sessionDisplaySortKey(name: String): String {
     val rank = when (trimmed.lowercase()) {
         "main" -> "00"
         "whatsapp" -> "01"
-        "gpt-5" -> "02"
-        "codex lab" -> "03"
-        "coding lab" -> "04"
-        "qwen" -> "05"
-        "cli lab" -> "06"
-        "general" -> "07"
+        "telegram" -> "02"
         else -> "90-${trimmed.lowercase()}"
     }
 
@@ -371,14 +370,8 @@ private fun parseAgentSessionKey(key: String): AgentSessionKey? {
     )
 }
 
-private fun String.toJsosAgentLabel(): String = when (this) {
+private fun String.toJsosAgentLabel(): String = when (lowercase()) {
     "main" -> "Main"
-    "coding-lab" -> "Coding Lab"
-    "codex-lab" -> "Codex Lab"
-    "codex-cli-lab" -> "CLI Lab"
-    "discord-general" -> "General"
-    "discord-gpt-5", "discord-gpt-5.5" -> "GPT-5"
-    "discord-qwen-397b" -> "Qwen"
     else -> toReadableAgentLabel()
 }
 

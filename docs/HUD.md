@@ -11,6 +11,8 @@ JSOS HUD targets the Rokid glasses portrait display used by this project:
 - Monospace text rendering in the HUD.
 - Four font presets: Compact, Normal, Comfortable, and Large.
 - Three HUD display modes: Full, Bottom, and Mid.
+- Conversation panels use fine monochrome outlines, dynamic height, and 94 percent of the HUD width. Assistant output is left-aligned; optional user messages are right-aligned.
+- The fixed top-left pulse slot reports `READY`, `THINK`, `LIVE`, `DONE`, voice, loading, wake, and error state without shifting the remaining header content.
 - Safe-zone placement to avoid problematic display areas and low-brightness fill artifacts.
 
 The HUD is designed to stay readable over the real world, with minimal fills, high contrast, and touchpad-first navigation.
@@ -43,7 +45,7 @@ The bottom HUD menu uses two compact pages:
 
 - `SEND ASK` / `SEND AUTO` toggles staged versus automatic voice-send behavior.
 - `AR TOOLS` opens `AR PIC`, `AR REC`, and `AR STOP`.
-- `DISPLAY` opens `COMPACT`, `NORMAL`, `COMFORT`, and `LARGE` font presets.
+- `DISPLAY` opens `COMPACT`, `NORMAL`, `COMFORT`, and `LARGE` font presets plus a persistent `YOU ON` / `YOU OFF` switch for showing or hiding the user's own conversation panels in both the normal HUD and Codex view.
 - `TTS ON` / `TTS OFF` toggles response voice state.
 
 ## Voice Input
@@ -61,6 +63,8 @@ JSOS separates normal speech-to-text from bidirectional OpenClaw Live Talk:
 Live Talk includes a client-side barge-in path for interrupting assistant output while new user speech is detected. The exact behavior still depends on the target OpenClaw Gateway version and audio route. Watch realtime playback is experimental and streams PCM audio through the Wear OS Data Layer.
 
 Current limitation: Core Agent Wake uses the phone-side voice path. The glasses voice button still uses the normal HUD voice flow, and a glasses-side Agent Wake mode without pressing the voice button is planned as separate follow-up work.
+
+Agent Wake derives its available names from the sessions returned by the configured gateway. The public client does not contain a fixed private agent-name or session-ID map.
 
 ## Camera And AR Tools
 
