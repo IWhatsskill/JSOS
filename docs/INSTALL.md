@@ -17,13 +17,20 @@ This document collects the install, local configuration, build, and signing note
 
 GitHub Releases are the normal installation path for preview users.
 
-Each release should provide:
+Each release lists its exact packaged apps. The current v2.0.35 preview
+provides:
 
 - `JSOS-Core-v<version>.apk` for the Android phone.
 - `JSOS-HUD-v<version>.apk` for the Rokid glasses.
-- `JSOS-Watch-v<version>.apk` for an optional Wear OS companion.
 
-The current public preview APKs are signed with a new public JSOS signing certificate. If Android refuses to install them as updates over an older JSOS version, uninstall the old JSOS Core, JSOS HUD, or JSOS Watch apps first, then install the new APKs from the release.
+JSOS Watch remains available in source, but is unchanged and not repackaged in
+v2.0.35. A release includes a Watch APK only when its release notes and asset
+list explicitly name one.
+
+The current public preview APKs are signed with a new public JSOS signing
+certificate. If Android refuses to install them as updates over an older JSOS
+version, uninstall the affected older JSOS Core or JSOS HUD app first, then
+install the new APK from the release.
 
 JSOS never ships private OpenClaw tokens, Rokid credentials, OpenAI keys, ElevenLabs keys, signing keys, or Admin Codex bridge credentials. These values are entered locally inside JSOS Core.
 
@@ -73,23 +80,25 @@ The first connection attempt may fail with a pairing or approval error until the
 
 ## Build From Source
 
-JSOS Core and JSOS HUD are built and installed as separate Android apps:
+JSOS Core, JSOS HUD, and the optional JSOS Watch are built and installed as
+separate Android apps:
 
 - JSOS Core is installed on the phone.
 - JSOS HUD is installed on the glasses through JSOS Core's HUD Deployment section or manually through Hi Rokid / APK Manager.
+- JSOS Watch is optionally installed on a paired Wear OS device.
 
 Debug builds are the normal local development path.
 
 From the project root:
 
 ```bash
-./gradlew :phone-app:assembleDebug :glasses-app:assembleDebug
+./gradlew :phone-app:assembleDebug :glasses-app:assembleDebug :watch-app:assembleDebug
 ```
 
 On Windows PowerShell:
 
 ```powershell
-.\gradlew.bat :phone-app:assembleDebug :glasses-app:assembleDebug
+.\gradlew.bat :phone-app:assembleDebug :glasses-app:assembleDebug :watch-app:assembleDebug
 ```
 
 Expected debug outputs:
@@ -97,6 +106,7 @@ Expected debug outputs:
 ```text
 phone-app/build/outputs/apk/debug/phone-app-debug.apk
 glasses-app/build/outputs/apk/debug/glasses-app-debug.apk
+watch-app/build/outputs/apk/debug/watch-app-debug.apk
 ```
 
 Install JSOS Core on the phone:

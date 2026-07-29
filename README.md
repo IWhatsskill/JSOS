@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.34-conversation-ui"><strong>Download the preview</strong></a>
+  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.35-hud-refresh"><strong>Download the preview</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch the demo</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -105,12 +105,15 @@ coordinated phone, glasses, and wrist experience.
 
 ## Quick start
 
-1. Download JSOS Core, JSOS HUD, and the optional JSOS Watch APK from the
-   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.34-conversation-ui).
+1. Download JSOS Core and JSOS HUD from the
+   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.35-hud-refresh).
+   JSOS Watch remains available in source, but is unchanged and not repackaged
+   in v2.0.35.
 2. Install JSOS Core on the Android phone and configure the OpenClaw Gateway.
 3. Pair the Rokid glasses through Hi Rokid.
 4. Deploy and launch JSOS HUD on the glasses.
-5. Optionally install JSOS Watch on a paired Wear OS device.
+5. Optionally build JSOS Watch from source and install it on a paired Wear OS
+   device.
 6. Connect the optional user-managed Codex workflow when you want coding
    sessions in the same spatial interface.
 
