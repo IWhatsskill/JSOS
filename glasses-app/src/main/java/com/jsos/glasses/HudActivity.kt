@@ -95,6 +95,13 @@ class HudActivity : ComponentActivity() {
         const val DEBUG_PORT = 8081
         private const val CHUNK_MESSAGE_TYPE = "chunk_part"
         private const val CHUNK_TIMEOUT_MS = 30_000L
+        private const val MAX_CHUNK_COUNT = 2_048
+        private const val MAX_CHUNK_DATA_CHARS = 300
+        private const val MAX_ENCODED_MESSAGE_CHARS = 600 * 1024
+        private const val MAX_PENDING_CHUNK_MESSAGES = 4
+        private const val MAX_PENDING_CHUNK_CHARS = MAX_ENCODED_MESSAGE_CHARS * 2
+        private const val MAX_CHUNK_ID_CHARS = 128
+        private const val MAX_CHUNK_TYPE_CHARS = 64
         private const val ROKID_AR_COMMAND_COOLDOWN_MS = 1_200L
         private const val MAX_CLI_LINES = 220
         private const val DEFAULT_CODEX_IMAGE_PROMPT =
@@ -151,10 +158,12 @@ class HudActivity : ComponentActivity() {
         val total: Int,
         val originalType: String,
         val createdAtMs: Long,
-        val chunks: MutableMap<Int, String> = mutableMapOf()
+        val chunks: MutableMap<Int, String> = mutableMapOf(),
+        var encodedChars: Int = 0
     )
 
     private val pendingChunkedMessages = mutableMapOf<String, PendingChunkedMessage>()
+    private var pendingChunkChars = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -2739,8 +2748,21 @@ class HudActivity : ComponentActivity() {
         val originalType = msg.optString("originalType", "?")
         val data = msg.optString("data", "")
 
-        if (id.isEmpty() || index !in 0 until total || total <= 0 || data.isEmpty()) {
+        if (
+            id.isEmpty() ||
+            id.length > MAX_CHUNK_ID_CHARS ||
+            originalType.length > MAX_CHUNK_TYPE_CHARS ||
+            total !in 1..MAX_CHUNK_COUNT ||
+            index !in 0 until total ||
+            data.isEmpty() ||
+            data.length > MAX_CHUNK_DATA_CHARS
+        ) {
             Log.w(GlassesApp.TAG, "Invalid chunk: id=$id index=$index total=$total originalType=$originalType")
+            return
+        }
+
+        if (id !in pendingChunkedMessages && pendingChunkedMessages.size >= MAX_PENDING_CHUNK_MESSAGES) {
+            Log.w(GlassesApp.TAG, "Dropped chunk for $id: too many pending messages")
             return
         }
 
@@ -2752,17 +2774,31 @@ class HudActivity : ComponentActivity() {
             )
         }
 
-        if (pending.total != total) {
+        if (pending.total != total || pending.originalType != originalType) {
             Log.w(GlassesApp.TAG, "Chunk total mismatch for $id: expected=${pending.total}, got=$total")
-            pendingChunkedMessages.remove(id)
+            removePendingChunkMessage(id)
+            return
+        }
+
+        val previousChars = pending.chunks[index]?.length ?: 0
+        val nextMessageChars = pending.encodedChars - previousChars + data.length
+        val nextPendingChars = pendingChunkChars - previousChars + data.length
+        if (
+            nextMessageChars > MAX_ENCODED_MESSAGE_CHARS ||
+            nextPendingChars > MAX_PENDING_CHUNK_CHARS
+        ) {
+            Log.w(GlassesApp.TAG, "Dropped oversized chunked message: id=$id type=$originalType")
+            removePendingChunkMessage(id)
             return
         }
 
         pending.chunks[index] = data
+        pending.encodedChars = nextMessageChars
+        pendingChunkChars = nextPendingChars
         Log.d(GlassesApp.TAG, "Chunk received: type=$originalType id=$id ${pending.chunks.size}/$total")
 
         if (pending.chunks.size == pending.total) {
-            val encodedBuilder = StringBuilder()
+            val encodedBuilder = StringBuilder(pending.encodedChars)
             for (i in 0 until pending.total) {
                 val part = pending.chunks[i]
                 if (part == null) {
@@ -2772,7 +2808,7 @@ class HudActivity : ComponentActivity() {
                 encodedBuilder.append(part)
             }
 
-            pendingChunkedMessages.remove(id)
+            removePendingChunkMessage(id)
 
             try {
                 val bytes = Base64.decode(encodedBuilder.toString(), Base64.NO_WRAP)
@@ -2852,9 +2888,15 @@ class HudActivity : ComponentActivity() {
             .keys
             .toList()
         expired.forEach { id ->
-            val pending = pendingChunkedMessages.remove(id)
+            val pending = removePendingChunkMessage(id)
             Log.w(GlassesApp.TAG, "Dropped expired chunked message: id=$id type=${pending?.originalType}")
         }
+    }
+
+    private fun removePendingChunkMessage(id: String): PendingChunkedMessage? {
+        val removed = pendingChunkedMessages.remove(id) ?: return null
+        pendingChunkChars = (pendingChunkChars - removed.encodedChars).coerceAtLeast(0)
+        return removed
     }
 
     /**

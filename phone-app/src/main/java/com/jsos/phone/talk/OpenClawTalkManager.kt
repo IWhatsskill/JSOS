@@ -57,6 +57,9 @@ class OpenClawTalkManager(
         private const val BARGE_IN_RMS_THRESHOLD = 2400.0
         private const val BARGE_IN_MIC_OPEN_MS = 1600L
         private const val SUPPRESS_ASSISTANT_AUDIO_AFTER_BARGE_IN_MS = 2000L
+        private const val MAX_AUDIO_CHUNK_BYTES = 64 * 1024
+        private const val MAX_AUDIO_CHUNK_BASE64_CHARS = ((MAX_AUDIO_CHUNK_BYTES + 2) / 3) * 4
+        private const val AUDIO_OUTPUT_QUEUE_CAPACITY = 32
     }
 
     private val _state = kotlinx.coroutines.flow.MutableStateFlow<LiveTalkState>(LiveTalkState.Idle)
@@ -387,7 +390,7 @@ class OpenClawTalkManager(
     }
 
     private fun startPlayback(generation: Long) {
-        val queue = Channel<ByteArray>(capacity = Channel.UNLIMITED)
+        val queue = Channel<ByteArray>(capacity = AUDIO_OUTPUT_QUEUE_CAPACITY)
         audioOutputQueue = queue
         audioPlaybackJob = scope?.launch {
             for (audio in queue) {
@@ -398,10 +401,18 @@ class OpenClawTalkManager(
     }
 
     private fun queueAudio(audioBase64: String) {
+        if (audioBase64.length > MAX_AUDIO_CHUNK_BASE64_CHARS) {
+            Log.w(TAG, "Dropped oversized output audio (${audioBase64.length} base64 chars)")
+            return
+        }
         val audio = try {
             Base64.decode(audioBase64, Base64.DEFAULT)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to decode output audio (redacted)")
+            return
+        }
+        if (audio.size > MAX_AUDIO_CHUNK_BYTES) {
+            Log.w(TAG, "Dropped oversized decoded output audio (${audio.size} bytes)")
             return
         }
         if (audio.isNotEmpty()) {

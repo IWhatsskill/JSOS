@@ -17,14 +17,14 @@ This document collects the install, local configuration, build, and signing note
 
 GitHub Releases are the normal installation path for preview users.
 
-Each release lists its exact packaged apps. The current v2.0.35 preview
+Each release lists its exact packaged apps. The current v2.0.36 preview
 provides:
 
 - `JSOS-Core-v<version>.apk` for the Android phone.
 - `JSOS-HUD-v<version>.apk` for the Rokid glasses.
 
 JSOS Watch remains available in source, but is unchanged and not repackaged in
-v2.0.35. A release includes a Watch APK only when its release notes and asset
+v2.0.36. A release includes a Watch APK only when its release notes and asset
 list explicitly name one.
 
 The current public preview APKs are signed with a new public JSOS signing

@@ -6,11 +6,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import androidx.core.content.ContextCompat
 import com.jsos.glasses.input.RingMediaKeyHandler.RingGesture
 import java.util.Locale
 
@@ -123,12 +123,12 @@ class JsosRingAccessibilityService : AccessibilityService() {
 
     private fun registerCommandReceiver() {
         if (commandReceiverRegistered) return
-        val filter = IntentFilter(ACTION_COMMAND)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(commandReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(commandReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            commandReceiver,
+            IntentFilter(ACTION_COMMAND),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         commandReceiverRegistered = true
     }
 

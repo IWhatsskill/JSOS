@@ -41,6 +41,7 @@ class GlassesConnectionManager(private val context: Context) {
         private const val CHUNK_MESSAGE_TYPE = "chunk_part"
         private const val MAX_DIRECT_MESSAGE_CHARS = 420
         private const val CHUNK_DATA_CHARS = 300
+        private const val MAX_CHUNKED_MESSAGE_BYTES = 450 * 1024
 
         // Rokid BLE Service UUID (glasses advertise with this UUID)
         val ROKID_SERVICE_UUID: UUID = UUID.fromString("00009100-0000-1000-8000-00805f9b34fb")
@@ -602,7 +603,15 @@ class GlassesConnectionManager(private val context: Context) {
     }
 
     private fun sendChunkedMessage(jsonMessage: String, originalType: String) {
-        val encoded = Base64.encodeToString(jsonMessage.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        val messageBytes = jsonMessage.toByteArray(Charsets.UTF_8)
+        if (messageBytes.size > MAX_CHUNKED_MESSAGE_BYTES) {
+            Log.w(
+                TAG,
+                "Dropping oversized message: type=$originalType bytes=${messageBytes.size} max=$MAX_CHUNKED_MESSAGE_BYTES"
+            )
+            return
+        }
+        val encoded = Base64.encodeToString(messageBytes, Base64.NO_WRAP)
         val chunks = encoded.chunked(CHUNK_DATA_CHARS)
         val chunkId = UUID.randomUUID().toString()
 
