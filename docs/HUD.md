@@ -97,6 +97,8 @@ Current mappings:
 
 The current R08 path runs directly on the glasses. Legacy phone-side Bluetooth media-ring forwarding has been removed from JSOS Core.
 
+The glasses-side controller restarts with the Accessibility Service, reconnects a bonded R08 automatically, and uses capped backoff when the radio link or required GATT service is not ready. Callback state is accepted only from the active GATT connection.
+
 ## Wake-On-Message
 
 JSOS Core can wake the glasses display when new streamed content or proactive messages arrive. The phone side wakes the hardware through the Rokid CXR-M path, sends a `wake_signal`, waits for `wake_ack`, and then delivers buffered messages. A keep-alive path helps keep the display awake during longer streamed responses.

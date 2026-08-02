@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.36-security-hardening"><strong>Download the preview</strong></a>
+  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.37-r08-fast-reconnect"><strong>Download the preview</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch the demo</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -106,9 +106,9 @@ coordinated phone, glasses, and wrist experience.
 ## Quick start
 
 1. Download JSOS Core and JSOS HUD from the
-   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.36-security-hardening).
+   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.37-r08-fast-reconnect).
    JSOS Watch remains available in source, but is unchanged and not repackaged
-   in v2.0.36.
+   in v2.0.37.
 2. Install JSOS Core on the Android phone and configure the OpenClaw Gateway.
 3. Pair the Rokid glasses through Hi Rokid.
 4. Deploy and launch JSOS HUD on the glasses.

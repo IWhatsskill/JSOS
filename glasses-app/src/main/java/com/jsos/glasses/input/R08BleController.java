@@ -42,7 +42,8 @@ public final class R08BleController {
     private static final int PACKET_SIZE = 16;
     private static final long SCAN_TIMEOUT_MS = 25_000L;
     private static final long KEEPALIVE_MS = 18_000L;
-    private static final long RECONNECT_MS = 5_000L;
+    private static final long GATT_CONNECT_TIMEOUT_MS = 18_000L;
+    private static final long[] RECONNECT_DELAYS_MS = {3_000L, 5_000L, 8_000L, 12_000L};
     private static final long SETUP_RETRY_1_MS = 700L;
     private static final long SETUP_RETRY_2_MS = 1_800L;
 
@@ -58,13 +59,30 @@ public final class R08BleController {
     private boolean started;
     private boolean scanning;
     private boolean writing;
+    private boolean bluetoothReceiverRegistered;
+    private boolean reconnectScheduled;
+    private int reconnectAttempt;
+
+    private final Runnable reconnect = () -> {
+        reconnectScheduled = false;
+        if (!started) return;
+        reconnectAttempt++;
+        attemptConnection("retry-" + reconnectAttempt);
+    };
 
     private final Runnable scanTimeout = () -> {
         if (scanning) {
             stopScan();
             Log.i(TAG, "scan timeout");
-            scheduleReconnect();
+            scheduleReconnect("scan_timeout");
         }
+    };
+
+    private final Runnable gattConnectTimeout = () -> {
+        if (!started || gatt == null || writeCharacteristic != null) return;
+        Log.w(TAG, "gatt connect timeout afterMs=" + GATT_CONNECT_TIMEOUT_MS);
+        closeGatt();
+        scheduleReconnect("gatt_connect_timeout");
     };
 
     private final Runnable keepAlive = new Runnable() {
@@ -78,9 +96,19 @@ public final class R08BleController {
         }
     };
 
-    private final BroadcastReceiver bondReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver bluetoothReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(intent.getAction())) {
+                int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                Log.i(TAG, "adapter state=" + state);
+                if (state == BluetoothAdapter.STATE_ON && started) {
+                    cancelReconnect();
+                    reconnectAttempt = 0;
+                    attemptConnection("adapter_on");
+                }
+                return;
+            }
             if (!BluetoothDevice.ACTION_BOND_STATE_CHANGED.equals(intent.getAction())) return;
             BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             if (!isR08(device)) return;
@@ -96,6 +124,7 @@ public final class R08BleController {
             BluetoothDevice device = result.getDevice();
             if (!isR08(device)) return;
             Log.i(TAG, "found " + safeName(device));
+            cancelReconnect();
             stopScan();
             targetDevice = device;
             bondOrConnect(device);
@@ -105,7 +134,7 @@ public final class R08BleController {
         public void onScanFailed(int errorCode) {
             scanning = false;
             Log.w(TAG, "scan failed code=" + errorCode);
-            scheduleReconnect();
+            scheduleReconnect("scan_failed_" + errorCode);
         }
     };
 
@@ -113,37 +142,62 @@ public final class R08BleController {
         @Override
         public void onConnectionStateChange(BluetoothGatt bluetoothGatt, int status, int newState) {
             Log.i(TAG, "gatt state=" + newState + " status=" + status);
+            if (!started) {
+                bluetoothGatt.close();
+                return;
+            }
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                if (gatt != null && bluetoothGatt != gatt) {
+                    Log.i(TAG, "ignoring stale connected GATT callback");
+                    bluetoothGatt.disconnect();
+                    bluetoothGatt.close();
+                    return;
+                }
+                handler.removeCallbacks(gattConnectTimeout);
                 gatt = bluetoothGatt;
                 writeCharacteristic = null;
                 writes.clear();
                 writing = false;
-                bluetoothGatt.discoverServices();
+                if (!bluetoothGatt.discoverServices()) {
+                    Log.w(TAG, "service discovery did not start");
+                    scheduleReconnect("service_discovery_not_started");
+                }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                handler.removeCallbacks(gattConnectTimeout);
+                if (bluetoothGatt != gatt) {
+                    Log.i(TAG, "ignoring stale disconnected GATT callback");
+                    bluetoothGatt.close();
+                    return;
+                }
                 closeGatt();
-                scheduleReconnect();
+                scheduleReconnect("gatt_disconnected");
             }
         }
 
         @Override
         public void onServicesDiscovered(BluetoothGatt bluetoothGatt, int status) {
+            if (!started || gatt != bluetoothGatt) {
+                Log.i(TAG, "ignoring stale service discovery callback");
+                return;
+            }
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.w(TAG, "service discovery failed status=" + status);
-                scheduleReconnect();
+                scheduleReconnect("service_discovery_failed");
                 return;
             }
             BluetoothGattService service = bluetoothGatt.getService(SERVICE_UUID);
             if (service == null) {
                 Log.w(TAG, "custom service missing");
-                scheduleReconnect();
+                scheduleReconnect("service_missing");
                 return;
             }
             writeCharacteristic = service.getCharacteristic(WRITE_CHAR_UUID);
             if (writeCharacteristic == null) {
                 Log.w(TAG, "write char missing");
-                scheduleReconnect();
+                scheduleReconnect("write_characteristic_missing");
                 return;
             }
+            resetReconnectBackoff();
             Log.i(TAG, "gatt ready");
             configureStableMode("initial");
             handler.postDelayed(() -> configureStableMode("retry-1"), SETUP_RETRY_1_MS);
@@ -154,6 +208,10 @@ public final class R08BleController {
 
         @Override
         public void onCharacteristicWrite(BluetoothGatt bluetoothGatt, BluetoothGattCharacteristic characteristic, int status) {
+            if (!started || gatt != bluetoothGatt) {
+                Log.i(TAG, "ignoring stale characteristic write callback");
+                return;
+            }
             Log.i(TAG, "write status=" + status);
             writing = false;
             handler.postDelayed(R08BleController.this::drainWrites, 90);
@@ -167,39 +225,23 @@ public final class R08BleController {
     public void start() {
         if (started) return;
         started = true;
-        BluetoothManager manager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
-        adapter = manager == null ? null : manager.getAdapter();
-        if (adapter == null) {
-            Log.w(TAG, "adapter missing");
-            return;
-        }
-        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(bondReceiver, filter, Context.RECEIVER_EXPORTED);
-        } else {
-            context.registerReceiver(bondReceiver, filter);
-        }
-        BluetoothDevice bonded = findBondedR08();
-        if (bonded != null) {
-            targetDevice = bonded;
-            connect(bonded);
-        } else {
-            startScan();
-        }
+        registerBluetoothReceiver();
+        attemptConnection("start");
     }
 
     public void stop() {
         started = false;
         handler.removeCallbacksAndMessages(null);
+        reconnectScheduled = false;
+        reconnectAttempt = 0;
         stopScan();
         closeGatt();
-        try {
-            context.unregisterReceiver(bondReceiver);
-        } catch (IllegalArgumentException ignored) {
-        }
+        unregisterBluetoothReceiver();
     }
 
     public void restart() {
+        cancelReconnect();
+        reconnectAttempt = 0;
         stopScan();
         closeGatt();
         writes.clear();
@@ -208,17 +250,7 @@ public final class R08BleController {
             start();
             return;
         }
-        if (targetDevice != null) {
-            bondOrConnect(targetDevice);
-            return;
-        }
-        BluetoothDevice bonded = findBondedR08();
-        if (bonded != null) {
-            targetDevice = bonded;
-            connect(bonded);
-        } else {
-            startScan();
-        }
+        attemptConnection("manual_restart");
     }
 
     public boolean hasBondedR08() {
@@ -258,6 +290,58 @@ public final class R08BleController {
         adapter = manager == null ? null : manager.getAdapter();
     }
 
+    private void registerBluetoothReceiver() {
+        if (bluetoothReceiverRegistered) return;
+        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(bluetoothReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            context.registerReceiver(bluetoothReceiver, filter);
+        }
+        bluetoothReceiverRegistered = true;
+    }
+
+    private void unregisterBluetoothReceiver() {
+        if (!bluetoothReceiverRegistered) return;
+        try {
+            context.unregisterReceiver(bluetoothReceiver);
+        } catch (IllegalArgumentException ignored) {
+        }
+        bluetoothReceiverRegistered = false;
+    }
+
+    private void attemptConnection(String reason) {
+        if (!started) return;
+        ensureAdapter();
+        if (adapter == null) {
+            Log.w(TAG, "adapter missing reason=" + reason);
+            scheduleReconnect("adapter_missing");
+            return;
+        }
+        if (!hasConnectPermission()) {
+            Log.w(TAG, "missing connect permission reason=" + reason);
+            scheduleReconnect("connect_permission_missing");
+            return;
+        }
+        if (!adapter.isEnabled()) {
+            Log.w(TAG, "adapter disabled reason=" + reason);
+            scheduleReconnect("adapter_disabled");
+            return;
+        }
+        if (targetDevice != null) {
+            bondOrConnect(targetDevice);
+            return;
+        }
+        BluetoothDevice bonded = findBondedR08();
+        if (bonded != null) {
+            targetDevice = bonded;
+            connect(bonded);
+        } else {
+            startScan();
+        }
+    }
+
     private BluetoothDevice findBondedR08() {
         if (adapter == null) {
             return null;
@@ -281,15 +365,18 @@ public final class R08BleController {
         if (!started || scanning) return;
         if (adapter == null) {
             Log.w(TAG, "adapter missing");
+            scheduleReconnect("adapter_missing");
             return;
         }
         if (!hasScanPermission()) {
             Log.w(TAG, "missing scan permission");
+            scheduleReconnect("scan_permission_missing");
             return;
         }
         scanner = adapter.getBluetoothLeScanner();
         if (scanner == null) {
             Log.w(TAG, "scanner missing");
+            scheduleReconnect("scanner_missing");
             return;
         }
         ScanSettings settings = new ScanSettings.Builder()
@@ -315,6 +402,7 @@ public final class R08BleController {
     private void bondOrConnect(BluetoothDevice device) {
         if (!hasConnectPermission()) {
             Log.w(TAG, "missing connect permission");
+            scheduleReconnect("connect_permission_missing");
             return;
         }
         if (device.getBondState() == BluetoothDevice.BOND_NONE) {
@@ -326,14 +414,33 @@ public final class R08BleController {
     }
 
     private void connect(BluetoothDevice device) {
-        if (!started || !hasConnectPermission()) return;
+        if (!started) return;
+        if (!hasConnectPermission()) {
+            scheduleReconnect("connect_permission_missing");
+            return;
+        }
+        cancelReconnect();
         closeGatt();
         targetDevice = device;
         Log.i(TAG, "connecting " + safeName(device));
-        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+        gatt = device.connectGatt(
+                context,
+                false,
+                gattCallback,
+                BluetoothDevice.TRANSPORT_LE,
+                BluetoothDevice.PHY_LE_1M_MASK,
+                handler);
+        if (gatt == null) {
+            Log.w(TAG, "connectGatt returned null");
+            scheduleReconnect("connect_gatt_null");
+        } else {
+            handler.removeCallbacks(gattConnectTimeout);
+            handler.postDelayed(gattConnectTimeout, GATT_CONNECT_TIMEOUT_MS);
+        }
     }
 
     private void closeGatt() {
+        handler.removeCallbacks(gattConnectTimeout);
         handler.removeCallbacks(keepAlive);
         writeCharacteristic = null;
         if (gatt != null && hasConnectPermission()) {
@@ -343,12 +450,23 @@ public final class R08BleController {
         gatt = null;
     }
 
-    private void scheduleReconnect() {
-        if (!started) return;
-        handler.postDelayed(() -> {
-            if (targetDevice != null) bondOrConnect(targetDevice);
-            else startScan();
-        }, RECONNECT_MS);
+    private void scheduleReconnect(String reason) {
+        if (!started || reconnectScheduled) return;
+        int index = Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1);
+        long delayMs = RECONNECT_DELAYS_MS[index];
+        reconnectScheduled = true;
+        handler.postDelayed(reconnect, delayMs);
+        Log.i(TAG, "reconnect scheduled reason=" + reason + " delayMs=" + delayMs);
+    }
+
+    private void cancelReconnect() {
+        handler.removeCallbacks(reconnect);
+        reconnectScheduled = false;
+    }
+
+    private void resetReconnectBackoff() {
+        cancelReconnect();
+        reconnectAttempt = 0;
     }
 
     private void configureStableMode(String reason) {

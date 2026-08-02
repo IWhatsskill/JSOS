@@ -19,6 +19,8 @@ class JsosRingAccessibilityService : AccessibilityService() {
     private lateinit var keyHandler: RingMediaKeyHandler
     private lateinit var navigator: R08AccessibilityNavigator
     private var commandReceiverRegistered = false
+    private var tripleTapAction = R08RingTapAction.ROKID_AI
+    private var quadrupleTapAction = R08RingTapAction.PHOTO
 
     private val commandReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -37,6 +39,21 @@ class JsosRingAccessibilityService : AccessibilityService() {
                         ?: R08BleController(this@JsosRingAccessibilityService).forgetBondedR08()
                     Log.i(TAG, "command forget submitted=$submitted")
                 }
+                COMMAND_SYNC_ACTIONS -> {
+                    tripleTapAction = R08RingTapAction.fromId(
+                        intent.getStringExtra(EXTRA_TRIPLE_TAP_ACTION),
+                        tripleTapAction
+                    )
+                    quadrupleTapAction = R08RingTapAction.fromId(
+                        intent.getStringExtra(EXTRA_QUADRUPLE_TAP_ACTION),
+                        quadrupleTapAction
+                    )
+                    Log.i(
+                        TAG,
+                        "command actions synced triple=${tripleTapAction.id} " +
+                            "quadruple=${quadrupleTapAction.id}"
+                    )
+                }
             }
         }
     }
@@ -44,6 +61,8 @@ class JsosRingAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         navigator = R08AccessibilityNavigator(this)
+        tripleTapAction = R08RingActionSettings.tripleTap(this)
+        quadrupleTapAction = R08RingActionSettings.quadrupleTap(this)
         keyHandler = RingMediaKeyHandler(TAG) { ringGesture ->
             handleGlobalRingGesture(ringGesture)
         }
@@ -155,7 +174,7 @@ class JsosRingAccessibilityService : AccessibilityService() {
     }
 
     private fun executeMappedTapAction(tapCount: Int) {
-        val action = R08RingActionSettings.actionForTapCount(this, tapCount)
+        val action = if (tapCount >= 4) quadrupleTapAction else tripleTapAction
         val sent = R08RingActionSettings.executeGlobal(this, action)
         if (!sent) {
             Log.w(TAG, "mapped tap action failed tapCount=$tapCount action=${action.id}")
@@ -194,5 +213,8 @@ class JsosRingAccessibilityService : AccessibilityService() {
         const val EXTRA_COMMAND = "command"
         const val COMMAND_RECONNECT = "reconnect"
         const val COMMAND_FORGET = "forget"
+        const val COMMAND_SYNC_ACTIONS = "sync_actions"
+        const val EXTRA_TRIPLE_TAP_ACTION = "triple_tap_action"
+        const val EXTRA_QUADRUPLE_TAP_ACTION = "quadruple_tap_action"
     }
 }

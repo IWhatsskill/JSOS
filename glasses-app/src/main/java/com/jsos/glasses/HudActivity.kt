@@ -1111,10 +1111,12 @@ class HudActivity : ComponentActivity() {
             "pair_reconnect" -> pairOrReconnectRing()
             "tap3_next" -> {
                 val next = R08RingActionSettings.cycleTripleTap(this)
+                syncRingServiceActionSettings()
                 refreshRingSetupStatus("Tap 3: ${next.label}")
             }
             "tap4_next" -> {
                 val next = R08RingActionSettings.cycleQuadrupleTap(this)
+                syncRingServiceActionSettings()
                 refreshRingSetupStatus("Tap 4: ${next.label}")
             }
             "forget" -> forgetRing()
@@ -1166,6 +1168,25 @@ class HudActivity : ComponentActivity() {
         val intent = Intent(JsosRingAccessibilityService.ACTION_COMMAND).apply {
             setPackage(packageName)
             putExtra(JsosRingAccessibilityService.EXTRA_COMMAND, command)
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun syncRingServiceActionSettings() {
+        val intent = Intent(JsosRingAccessibilityService.ACTION_COMMAND).apply {
+            setPackage(packageName)
+            putExtra(
+                JsosRingAccessibilityService.EXTRA_COMMAND,
+                JsosRingAccessibilityService.COMMAND_SYNC_ACTIONS
+            )
+            putExtra(
+                JsosRingAccessibilityService.EXTRA_TRIPLE_TAP_ACTION,
+                R08RingActionSettings.tripleTap(this@HudActivity).id
+            )
+            putExtra(
+                JsosRingAccessibilityService.EXTRA_QUADRUPLE_TAP_ACTION,
+                R08RingActionSettings.quadrupleTap(this@HudActivity).id
+            )
         }
         sendBroadcast(intent)
     }
@@ -2959,6 +2980,8 @@ class HudActivity : ComponentActivity() {
         // CXRServiceBridge that prevents a second bridge in the same process
         // from working correctly. The CXR system service maintains the BT
         // connection independently, so the next launch can re-establish it.
+        // The R08 accessibility bridge runs in the dedicated :ring process and
+        // therefore remains alive while only the HUD/CXR process is reset.
         android.os.Process.killProcess(android.os.Process.myPid())
     }
 

@@ -41,8 +41,8 @@ android {
         applicationId = "com.jsos.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 235
-        versionName = "2.0.34-security-hardening"
+        versionCode = 236
+        versionName = "2.0.35-r08-fast-reconnect"
     }
 
     signingConfigs {
