@@ -32,6 +32,18 @@ Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in 
 
 JSOS Core does not compile Rokid CXR credentials into the APK. The phone app asks for the Rokid access key and client secret at runtime in the HUD/Rokid settings area, stores them locally, and uses them for Rokid CXR pairing, SN verification, and HUD deployment.
 
+## Optional R08 Accessibility Recovery
+
+JSOS HUD declares `WRITE_SECURE_SETTINGS` for an optional R08 recovery path,
+but Android does not grant this protected permission to an ordinary install.
+The feature becomes active only after an informed user grants it once through
+ADB. Without that grant, the helper does not modify secure settings.
+
+When enabled, the helper preserves the current Accessibility Service list,
+adds only the JSOS Ring service when missing, enables the master Accessibility
+switch, and verifies both values after writing them. Its manifest receiver is
+not exported. Revoking the permission disables future repair attempts.
+
 ## Logs And Screenshots
 
 JSOS suppresses verbose Rokid CXR SDK runtime logging before Bluetooth connection, but local device logs should still be treated as private diagnostic data.

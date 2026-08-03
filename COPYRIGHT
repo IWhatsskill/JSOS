@@ -37,6 +37,8 @@ Major JSOS modifications include:
 - OpenAI Realtime speech-to-text support with Android SpeechRecognizer fallback.
 - ElevenLabs TTS routing adjustments for glasses audio playback.
 - Rokid AI scene overlay suppression during voice input.
+- Direct R08 ring control with isolated Accessibility processing, bounded BLE
+  reconnect handling, and optional user-authorized Accessibility recovery.
 - Separate JSOS Core and JSOS HUD install flow for daily JSOS/OpenClaw use; JSOS Core can hand JSOS HUD installation to Hi Rokid / CXR-L when Hi Rokid is installed and already connected to the glasses.
 - JSOS HUD options for triggering Rokid AR picture and mixed-recording scene
   commands from the glasses app, implemented after reviewing Anezium's public

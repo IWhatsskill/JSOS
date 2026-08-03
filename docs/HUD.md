@@ -99,6 +99,23 @@ The current R08 path runs directly on the glasses. Legacy phone-side Bluetooth m
 
 The glasses-side controller restarts with the Accessibility Service, reconnects a bonded R08 automatically, and uses capped backoff when the radio link or required GATT service is not ready. Callback state is accepted only from the active GATT connection.
 
+### Optional Accessibility recovery
+
+Some Rokid firmware versions can remove or stop a third-party Accessibility
+Service after a power cycle or app update. JSOS HUD can restore only its own
+R08 service when the user deliberately grants the protected setting permission
+once through ADB:
+
+```bash
+adb shell pm grant com.jsos.glasses android.permission.WRITE_SECURE_SETTINGS
+```
+
+Without this grant, the recovery path is a strict no-op and Accessibility can
+still be enabled manually. With the grant, JSOS attempts recovery during HUD
+startup, boot, user unlock, package replacement, and Bluetooth startup. It
+preserves every other enabled Accessibility Service, adds only the JSOS Ring
+component, and verifies the setting after writing it.
+
 ## Wake-On-Message
 
 JSOS Core can wake the glasses display when new streamed content or proactive messages arrive. The phone side wakes the hardware through the Rokid CXR-M path, sends a `wake_signal`, waits for `wake_ack`, and then delivers buffered messages. A keep-alive path helps keep the display awake during longer streamed responses.

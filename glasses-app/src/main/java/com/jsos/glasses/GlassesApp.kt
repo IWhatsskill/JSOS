@@ -2,6 +2,7 @@ package com.jsos.glasses
 
 import android.app.Application
 import android.util.Log
+import com.jsos.glasses.input.R08AccessibilityRecovery
 
 class GlassesApp : Application() {
 
@@ -15,5 +16,7 @@ class GlassesApp : Application() {
         super.onCreate()
         instance = this
         Log.d(TAG, "JSOS HUD initialized")
+        val recoveryResult = R08AccessibilityRecovery.ensureEnabled(this)
+        Log.i(TAG, "R08 accessibility startup recovery=$recoveryResult")
     }
 }

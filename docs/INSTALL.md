@@ -17,14 +17,14 @@ This document collects the install, local configuration, build, and signing note
 
 GitHub Releases are the normal installation path for preview users.
 
-Each release lists its exact packaged apps. The current v2.0.37 preview
+Each release lists its exact packaged apps. The current v2.0.38 preview
 provides:
 
 - `JSOS-Core-v<version>.apk` for the Android phone.
 - `JSOS-HUD-v<version>.apk` for the Rokid glasses.
 
 JSOS Watch remains available in source, but is unchanged and not repackaged in
-v2.0.37. A release includes a Watch APK only when its release notes and asset
+v2.0.38. A release includes a Watch APK only when its release notes and asset
 list explicitly name one.
 
 The current public preview APKs are signed with a new public JSOS signing
@@ -33,6 +33,10 @@ version, uninstall the affected older JSOS Core or JSOS HUD app first, then
 install the new APK from the release.
 
 JSOS never ships private OpenClaw tokens, Rokid credentials, OpenAI keys, ElevenLabs keys, signing keys, or Admin Codex bridge credentials. These values are entered locally inside JSOS Core.
+
+Rokid firmware that repeatedly disables the R08 Accessibility Service can use
+the optional one-time recovery setup documented in [HUD](HUD.md). Without that
+explicit ADB grant, JSOS retains the normal manual Accessibility setup.
 
 ## Local Configuration
 
