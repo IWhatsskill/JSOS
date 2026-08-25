@@ -17,14 +17,14 @@ This document collects the install, local configuration, build, and signing note
 
 GitHub Releases are the normal installation path for preview users.
 
-Each release lists its exact packaged apps. The current v2.0.39 preview
+Each release lists its exact packaged apps. The current v2.0.40 preview
 provides:
 
-- `JSOS-Core-v2.0.13-hi-rokid-cxrl.apk` for the Android phone.
+- `JSOS-Core-v2.0.14-hi-rokid-ai-coexist.apk` for the Android phone.
 - `JSOS-HUD-v2.0.37-hi-rokid-cxrl.apk` for the Rokid glasses.
 
 JSOS Watch remains available in source, but is unchanged and not repackaged in
-v2.0.39. A release includes a Watch APK only when its release notes and asset
+v2.0.40. A release includes a Watch APK only when its release notes and asset
 list explicitly name one.
 
 The current public preview APKs use the established public JSOS Preview
@@ -146,7 +146,7 @@ For a fresh JSOS install, a new signing key is fine. If a device already has an 
 
 ## Connect
 
-The choices below describe the current v2.0.39 preview (JSOS Core `2.0.13`,
+The choices below describe the current v2.0.40 preview (JSOS Core `2.0.14`,
 JSOS HUD `2.0.37`).
 
 1. Start the OpenClaw Gateway and make sure the phone can reach it on the same LAN or private VPN.

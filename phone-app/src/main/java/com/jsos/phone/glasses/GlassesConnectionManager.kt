@@ -53,6 +53,15 @@ class GlassesConnectionManager(private val context: Context) {
         private const val TRANSPORT_HI_ROKID = "hi_rokid_cxr_l"
         private const val TRANSPORT_DIRECT = "direct_cxr_m"
 
+        internal fun loadPreferredTransport(context: Context): Transport {
+            val prefs = context.getSharedPreferences(TRANSPORT_PREFS, Context.MODE_PRIVATE)
+            return if (prefs.getString(TRANSPORT_KEY, TRANSPORT_DIRECT) == TRANSPORT_HI_ROKID) {
+                Transport.HI_ROKID_CXR_L
+            } else {
+                Transport.DIRECT_CXR_M
+            }
+        }
+
         // Rokid BLE Service UUID (glasses advertise with this UUID)
         val ROKID_SERVICE_UUID: UUID = UUID.fromString("00009100-0000-1000-8000-00805f9b34fb")
     }
@@ -108,13 +117,7 @@ class GlassesConnectionManager(private val context: Context) {
     private var reconnectAttempts = 0
     private var currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
     private val transportPrefs = context.getSharedPreferences(TRANSPORT_PREFS, Context.MODE_PRIVATE)
-    private var activeTransport = if (
-        transportPrefs.getString(TRANSPORT_KEY, TRANSPORT_DIRECT) == TRANSPORT_HI_ROKID
-    ) {
-        Transport.HI_ROKID_CXR_L
-    } else {
-        Transport.DIRECT_CXR_M
-    }
+    private var activeTransport = loadPreferredTransport(context)
 
     // Callback for messages from glasses (both BLE and debug modes)
     var onMessageFromGlasses: ((String) -> Unit)? = null
@@ -162,6 +165,8 @@ class GlassesConnectionManager(private val context: Context) {
             _connectionState.value = ConnectionState.Connected("Rokid Glasses")
             Log.i(TAG, "SDK already connected on init - restored Connected state (device name redacted)")
         }
+
+        RokidSdkManager.setAiEventHandlingEnabled(shouldEnableRokidAiEvents(activeTransport))
     }
 
     private fun setupSdkCallbacks() {
@@ -493,6 +498,7 @@ class GlassesConnectionManager(private val context: Context) {
         userInitiatedDisconnect = true
         activeTransport = Transport.HI_ROKID_CXR_L
         transportPrefs.edit().putString(TRANSPORT_KEY, TRANSPORT_HI_ROKID).apply()
+        RokidSdkManager.setAiEventHandlingEnabled(false)
         _connectionState.value = ConnectionState.Connecting
         RokidSdkManager.disconnect()
         HiRokidGlassesTransport.handleAuthorizationResult(resultCode, data)
@@ -504,15 +510,12 @@ class GlassesConnectionManager(private val context: Context) {
         }
         activeTransport = Transport.DIRECT_CXR_M
         transportPrefs.edit().putString(TRANSPORT_KEY, TRANSPORT_DIRECT).apply()
+        RokidSdkManager.setAiEventHandlingEnabled(true)
         userInitiatedDisconnect = false
     }
 
     private fun preferredTransport(): Transport {
-        return if (transportPrefs.getString(TRANSPORT_KEY, TRANSPORT_DIRECT) == TRANSPORT_HI_ROKID) {
-            Transport.HI_ROKID_CXR_L
-        } else {
-            Transport.DIRECT_CXR_M
-        }
+        return loadPreferredTransport(context)
     }
 
     /**
@@ -636,6 +639,7 @@ class GlassesConnectionManager(private val context: Context) {
             HiRokidGlassesTransport.disconnect()
         }
         activeTransport = Transport.DEBUG_WEBSOCKET
+        RokidSdkManager.setAiEventHandlingEnabled(false)
         Log.i(TAG, "Enabling debug mode - starting WebSocket server on port ${DebugGlassesServer.DEFAULT_PORT}")
         _debugModeEnabled.value = true
 
@@ -663,6 +667,7 @@ class GlassesConnectionManager(private val context: Context) {
         stopDebugServer()
         _debugModeEnabled.value = false
         activeTransport = preferredTransport()
+        RokidSdkManager.setAiEventHandlingEnabled(shouldEnableRokidAiEvents(activeTransport))
         _connectionState.value = ConnectionState.Disconnected
         Log.i(TAG, "Debug mode disabled")
     }
@@ -778,3 +783,6 @@ class GlassesConnectionManager(private val context: Context) {
     }
 
 }
+
+internal fun shouldEnableRokidAiEvents(transport: GlassesConnectionManager.Transport): Boolean =
+    transport == GlassesConnectionManager.Transport.DIRECT_CXR_M

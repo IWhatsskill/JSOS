@@ -86,7 +86,7 @@ object HiRokidGlassesTransport {
     fun disconnect() {
         val notify = readyNotified
         generation += 1
-        runCatching { link?.disconnect() }
+        disconnectActiveLink()
         link = null
         cxrlConnected = false
         glassBtConnected = false
@@ -121,7 +121,7 @@ object HiRokidGlassesTransport {
         }
 
         generation += 1
-        runCatching { link?.disconnect() }
+        disconnectActiveLink()
         link = null
         cxrlConnected = false
         glassBtConnected = false
@@ -136,6 +136,10 @@ object HiRokidGlassesTransport {
                 override fun onCXRLConnected(connected: Boolean) {
                     mainHandler.post {
                         if (currentGeneration != generation) return@post
+                        if (connected && !CxrLinkAiEventGuard.install(candidate)) {
+                            fail("Failed to protect native Hi Rokid assistant ownership")
+                            return@post
+                        }
                         cxrlConnected = connected
                         updateReadyState()
                     }
@@ -233,12 +237,18 @@ object HiRokidGlassesTransport {
 
     private fun fail(message: String) {
         generation += 1
-        runCatching { link?.disconnect() }
+        disconnectActiveLink()
         link = null
         cxrlConnected = false
         glassBtConnected = false
         readyNotified = false
         Log.e(TAG, message)
         mainHandler.post { onFailure?.invoke(message) }
+    }
+
+    private fun disconnectActiveLink() {
+        val activeLink = link ?: return
+        CxrLinkAiEventGuard.uninstall(activeLink)
+        runCatching { activeLink.disconnect() }
     }
 }

@@ -10,6 +10,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import com.jsos.phone.glasses.CxrLinkAiEventGuard
 import com.rokid.cxr.link.CXRLink
 import com.rokid.cxr.link.callbacks.ICXRLinkCbk
 import com.rokid.cxr.link.callbacks.IGlassAppCbk
@@ -157,7 +158,10 @@ class HiRokidHudDeploymentManager(
         uploadReadyJob = null
         timeoutJob?.cancel()
         timeoutJob = null
-        runCatching { cxrLink?.disconnect() }
+        cxrLink?.let { link ->
+            CxrLinkAiEventGuard.uninstall(link)
+            runCatching { link.disconnect() }
+        }
         pendingUpload?.delete()
         pendingUpload = null
         cxrLink = null
@@ -188,6 +192,15 @@ class HiRokidHudDeploymentManager(
                     postStatus(onStatus, "CXR-L service connected: $connected")
                     mainHandler.post {
                         if (!isCurrentAttempt(currentAttempt)) return@post
+                        if (connected && !CxrLinkAiEventGuard.install(newLink)) {
+                            failDeployment(
+                                attempt = currentAttempt,
+                                message = "Failed to protect native Hi Rokid assistant ownership.",
+                                onStatus = onStatus,
+                                onBusyChanged = onBusyChanged,
+                            )
+                            return@post
+                        }
                         cxrlConnected = connected
                         if (connected) {
                             cxrlEverConnected = true

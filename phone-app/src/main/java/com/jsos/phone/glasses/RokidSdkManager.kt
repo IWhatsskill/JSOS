@@ -7,6 +7,7 @@ import com.rokid.cxr.Caps
 import com.rokid.cxr.client.extend.CxrApi
 import com.rokid.cxr.client.extend.callbacks.BluetoothStatusCallback
 import com.rokid.cxr.client.extend.callbacks.PhotoResultCallback
+import com.rokid.cxr.client.extend.listeners.AiEventListener
 import com.rokid.cxr.client.extend.listeners.BrightnessUpdateListener
 import com.rokid.cxr.client.extend.listeners.CustomCmdListener
 import com.rokid.cxr.client.utils.ValueUtil
@@ -83,6 +84,24 @@ object RokidSdkManager {
     var onAiKeyDown: (() -> Unit)? = null
     var onAiKeyUp: (() -> Unit)? = null
     var onAiExit: (() -> Unit)? = null
+
+    private var aiEventHandlingEnabled = false
+    private val aiEventListener = object : AiEventListener {
+        override fun onAiKeyDown() {
+            Log.i(TAG, "AI key pressed on glasses (long press)")
+            onAiKeyDown?.invoke()
+        }
+
+        override fun onAiKeyUp() {
+            Log.d(TAG, "AI key released on glasses")
+            onAiKeyUp?.invoke()
+        }
+
+        override fun onAiExit() {
+            Log.d(TAG, "AI scene exited on glasses")
+            onAiExit?.invoke()
+        }
+    }
 
     // Photo capture callback
     var onPhotoResult: ((status: ValueUtil.CxrStatus?, photoBytes: ByteArray?) -> Unit)? = null
@@ -256,21 +275,9 @@ object RokidSdkManager {
                 }
             })
 
-            // Set up AI event listener for glasses long-press voice activation
-            cxrApi?.setAiEventListener(object : com.rokid.cxr.client.extend.listeners.AiEventListener {
-                override fun onAiKeyDown() {
-                    Log.i(TAG, "AI key pressed on glasses (long press)")
-                    onAiKeyDown?.invoke()
-                }
-                override fun onAiKeyUp() {
-                    Log.d(TAG, "AI key released on glasses")
-                    onAiKeyUp?.invoke()
-                }
-                override fun onAiExit() {
-                    Log.d(TAG, "AI scene exited on glasses")
-                    onAiExit?.invoke()
-                }
-            })
+            // Direct CXR-M owns the AI key only while that transport is active.
+            // Hi Rokid CXR-L must retain its native assistant ownership.
+            applyAiEventHandlingState()
 
             // Track glasses brightness changes so we can restore the user's
             // preferred level when waking the display from standby.
@@ -838,6 +845,22 @@ object RokidSdkManager {
     fun takeGlassPhotoGlobal(width: Int = 1280, height: Int = 720, quality: Int = 75): ValueUtil.CxrStatus? {
         Log.d(TAG, "Taking glass photo (global): ${width}x${height} quality=$quality")
         return cxrApi?.takeGlassPhotoGlobal(width, height, quality, photoResultCallback)
+    }
+
+    fun setAiEventHandlingEnabled(enabled: Boolean) {
+        if (aiEventHandlingEnabled == enabled && isInitialized) return
+
+        aiEventHandlingEnabled = enabled
+        if (isInitialized) {
+            applyAiEventHandlingState()
+        } else {
+            Log.d(TAG, "AI event handling queued: ${if (enabled) "enabled" else "disabled"}")
+        }
+    }
+
+    private fun applyAiEventHandlingState() {
+        cxrApi?.setAiEventListener(if (aiEventHandlingEnabled) aiEventListener else null)
+        Log.i(TAG, "AI event handling ${if (aiEventHandlingEnabled) "enabled" else "disabled"}")
     }
 
     /**
