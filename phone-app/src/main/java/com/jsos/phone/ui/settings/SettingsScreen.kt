@@ -2,6 +2,7 @@
 
 package com.jsos.phone.ui.settings
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -89,6 +90,9 @@ fun SettingsScreen(
     onWakeOnStreamChange: (Boolean) -> Unit = {},
     glassBrightness: Int = 0,
     onGlassBrightnessChange: (Int) -> Unit = {},
+    hiRokidInstalled: Boolean = false,
+    onCreateHiRokidAuthorizationIntent: () -> Intent? = { null },
+    onHiRokidAuthorizationResult: (Int, Intent?) -> Unit = { _, _ -> },
     // Voice
     voiceLanguageManager: VoiceLanguageManager,
     voiceRecognitionManager: VoiceRecognitionManager? = null,
@@ -246,6 +250,9 @@ fun SettingsScreen(
                         onWakeOnStreamChange = onWakeOnStreamChange,
                         glassBrightness = glassBrightness,
                         onGlassBrightnessChange = onGlassBrightnessChange,
+                        hiRokidInstalled = hiRokidInstalled,
+                        onCreateHiRokidAuthorizationIntent = onCreateHiRokidAuthorizationIntent,
+                        onHiRokidAuthorizationResult = onHiRokidAuthorizationResult,
                     )
                 }
             }

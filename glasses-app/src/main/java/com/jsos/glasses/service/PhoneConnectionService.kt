@@ -2,6 +2,7 @@ package com.jsos.glasses.service
 
 import android.content.Context
 import android.util.Log
+import com.jsos.shared.HiRokidTransportProtocol
 import com.jsos.glasses.debug.DebugPhoneClient
 import com.rokid.cxr.Caps
 import com.rokid.cxr.CXRServiceBridge
@@ -153,14 +154,7 @@ class PhoneConnectionService(
                     data != null && data.isNotEmpty() -> {
                         String(data, Charsets.UTF_8)
                     }
-                    caps != null && caps.size() > 0 -> {
-                        try {
-                            caps.at(0).getString()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to read string from Caps (redacted)")
-                            ""
-                        }
-                    }
+                    caps != null && caps.size() > 0 -> decodePhonePayload(caps).orEmpty()
                     else -> ""
                 }
                 if (message.isNotEmpty()) {
@@ -181,6 +175,17 @@ class PhoneConnectionService(
         // request_state probes to trigger a response from the phone, which will arrive
         // via the subscribe callback and confirm the connection is alive.
         startConnectionProbe()
+    }
+
+    private fun decodePhonePayload(caps: Caps): String? {
+        return runCatching {
+            val values = (0 until caps.size()).mapNotNull { index ->
+                runCatching { caps.at(index).getString() }.getOrNull()
+            }
+            HiRokidTransportProtocol.decodePhoneToGlasses(values)
+        }.onFailure {
+            Log.e(TAG, "Failed to decode Caps payload (redacted)")
+        }.getOrNull()
     }
 
     /**
@@ -286,7 +291,7 @@ class PhoneConnectionService(
     /**
      * Soft stop: release our bridge/client references and reset local state, but do NOT
      * call disconnectCXRDevice(). The CXR system service manages the Bluetooth connection
-     * independently — calling disconnectCXRDevice() tears it down and only the phone can
+     * independently - calling disconnectCXRDevice() tears it down and only the phone can
      * re-initiate it, so the glasses would be stuck "disconnected" on the next open.
      *
      * For debug (WebSocket) mode we do close the socket because startDebugConnection()
@@ -302,7 +307,7 @@ class PhoneConnectionService(
             debugClient?.disconnect()
             debugClient = null
         } else {
-            // Drop our reference without disconnecting BT — the system service keeps it alive.
+            // Drop our reference without disconnecting BT - the system service keeps it alive.
             cxrBridge = null
         }
 

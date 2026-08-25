@@ -17,18 +17,18 @@ This document collects the install, local configuration, build, and signing note
 
 GitHub Releases are the normal installation path for preview users.
 
-Each release lists its exact packaged apps. The current v2.0.38 preview
+Each release lists its exact packaged apps. The current v2.0.39 preview
 provides:
 
-- `JSOS-Core-v<version>.apk` for the Android phone.
-- `JSOS-HUD-v<version>.apk` for the Rokid glasses.
+- `JSOS-Core-v2.0.13-hi-rokid-cxrl.apk` for the Android phone.
+- `JSOS-HUD-v2.0.37-hi-rokid-cxrl.apk` for the Rokid glasses.
 
 JSOS Watch remains available in source, but is unchanged and not repackaged in
-v2.0.38. A release includes a Watch APK only when its release notes and asset
+v2.0.39. A release includes a Watch APK only when its release notes and asset
 list explicitly name one.
 
-The current public preview APKs are signed with a new public JSOS signing
-certificate. If Android refuses to install them as updates over an older JSOS
+The current public preview APKs use the established public JSOS Preview
+signing certificate. If Android refuses to install them as updates over an older JSOS
 version, uninstall the affected older JSOS Core or JSOS HUD app first, then
 install the new APK from the release.
 
@@ -146,9 +146,15 @@ For a fresh JSOS install, a new signing key is fine. If a device already has an 
 
 ## Connect
 
+The choices below describe the current v2.0.39 preview (JSOS Core `2.0.13`,
+JSOS HUD `2.0.37`).
+
 1. Start the OpenClaw Gateway and make sure the phone can reach it on the same LAN or private VPN.
 2. Open JSOS Core and configure the gateway host, port, and token in the System Link area.
 3. Connect to OpenClaw. If the gateway reports pairing required, approve the pending device on the gateway and reconnect.
-4. Put the Rokid glasses into their normal Bluetooth pairing mode, then scan and connect from the JSOS Core HUD Link area.
-5. Install JSOS HUD on the glasses through JSOS Core's HUD Deployment section, or manually through Hi Rokid / APK Manager.
-6. Launch JSOS HUD on the glasses. The HUD should show connection and session status once the phone bridge is connected.
+4. Pair and connect the glasses in the Global Hi Rokid app.
+5. In JSOS Core's HUD Link area, choose **Connect via Hi Rokid** and approve
+   the Global Hi Rokid authorization screen. Alternatively, choose **Direct
+   Bluetooth (CXR-M)** to scan and connect without the Hi Rokid transport.
+6. Install JSOS HUD on the glasses through JSOS Core's HUD Deployment section, or manually through Hi Rokid / APK Manager.
+7. Launch JSOS HUD on the glasses. The HUD should show connection and session status once the phone bridge is connected.

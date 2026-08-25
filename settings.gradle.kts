@@ -11,8 +11,18 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Rokid Maven repository for CXR SDKs
-        maven { url = uri("https://maven.rokid.com/repository/maven-public/") }
+        // Keep the vendor repository isolated to the Rokid CXR artifacts.
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = "Rokid"
+                    url = uri("https://maven.rokid.com/repository/maven-public/")
+                }
+            }
+            filter {
+                includeGroup("com.rokid.cxr")
+            }
+        }
     }
 }
 

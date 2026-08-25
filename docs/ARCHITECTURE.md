@@ -7,7 +7,7 @@ JSOS is split into a phone app, a glasses app, a shared protocol module, and opt
 | Component | Runs on | Responsibilities |
 | --- | --- | --- |
 | OpenClaw Gateway | User-managed host | AI sessions, chat streaming, tools, device pairing, Live Talk protocol paths. |
-| JSOS Core | Android phone | OpenClaw WebSocket client, session management, voice input, TTS routing, Rokid CXR phone connection, HUD deployment, camera handoff, wake management, runtime settings. |
+| JSOS Core | Android phone | OpenClaw WebSocket client, session management, voice input, TTS routing, direct CXR-M and Global Hi Rokid CXR-L phone connections, HUD deployment, camera handoff, wake management, runtime settings. |
 | JSOS HUD | Rokid glasses | Readable glasses UI, touchpad navigation, direct R08 ring input, session output, staged input/photos, photo requests, Rokid scene commands. |
 | `shared` module | Both Android apps | Shared JSON protocol models and transport helpers. |
 | Admin Codex bridge | User-managed private host | Optional Codex-style output in JSOS Core and JSOS HUD. The bridge service and credentials are not included in this repository. |
@@ -32,7 +32,8 @@ JSOS Core is responsible for:
 - Token authentication and Ed25519 device identity.
 - Session listing, switching, reset/new-session flow, and chat history loading.
 - Streaming chat forwarding to the HUD.
-- Rokid CXR phone-side connection and device control.
+- Direct Rokid CXR-M phone-side connection and device control.
+- Optional Global Hi Rokid CXR-L authorization and `CUSTOMAPP` transport.
 - HUD brightness preference for connected Rokid glasses.
 - Debug WebSocket bridge for emulator-style local testing.
 - OpenAI Realtime speech-to-text and Android SpeechRecognizer fallback.
@@ -77,7 +78,11 @@ Implemented Gateway request/event areas include:
 
 ## Phone-Glasses Protocol
 
-Phone-to-glasses and glasses-to-phone messages are JSON payloads sent over Rokid CXR, or over the debug WebSocket bridge in emulator/debug mode.
+Phone-to-glasses and glasses-to-phone messages are JSON payloads sent either
+directly over Rokid CXR-M, through the authorized Global Hi Rokid CXR-L
+`CUSTOMAPP` session, or over the debug WebSocket bridge in emulator/debug
+mode. The shared transport helper accepts the direct single-value frame and
+the CXR-L routed frame while keeping the JSON protocol unchanged.
 
 Common phone-to-glasses messages:
 

@@ -2520,6 +2520,7 @@ fun MainScreen() {
     // Glasses state for settings
     val debugModeEnabled by glassesManager.debugModeEnabled.collectAsState()
     val discoveredDevices by glassesManager.discoveredDevices.collectAsState()
+    val hiRokidInstalled = remember { glassesManager.isHiRokidInstalled() }
     var hasCachedSn by remember { mutableStateOf(RokidSdkManager.hasCachedSn()) }
     var cachedSn by remember { mutableStateOf(RokidSdkManager.getCachedSn()) }
     var cachedDeviceName by remember { mutableStateOf(RokidSdkManager.getCachedDeviceName()) }
@@ -2566,6 +2567,13 @@ fun MainScreen() {
             },
             onCancelReconnect = { glassesManager.cancelReconnect() },
             onRetryReconnect = { glassesManager.retryReconnectNow() },
+            hiRokidInstalled = hiRokidInstalled,
+            onCreateHiRokidAuthorizationIntent = {
+                glassesManager.createHiRokidAuthorizationIntent()
+            },
+            onHiRokidAuthorizationResult = { resultCode, data ->
+                glassesManager.connectViaHiRokid(resultCode, data)
+            },
             hasCachedSn = hasCachedSn,
             cachedSn = cachedSn,
             cachedDeviceName = cachedDeviceName,

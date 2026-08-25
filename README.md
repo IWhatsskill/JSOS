@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.38-r08-accessibility-recovery"><strong>Download the preview</strong></a>
+  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.39-hi-rokid-cxrl"><strong>Download the preview</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch the demo</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -106,9 +106,9 @@ coordinated phone, glasses, and wrist experience.
 ## Quick start
 
 1. Download JSOS Core and JSOS HUD from the
-   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.38-r08-accessibility-recovery).
+   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.39-hi-rokid-cxrl).
    JSOS Watch remains available in source, but is unchanged and not repackaged
-   in v2.0.38.
+   in v2.0.39.
 2. Install JSOS Core on the Android phone and configure the OpenClaw Gateway.
 3. Pair the Rokid glasses through Hi Rokid.
 4. Deploy and launch JSOS HUD on the glasses.
@@ -116,6 +116,10 @@ coordinated phone, glasses, and wrist experience.
    device.
 6. Connect the optional user-managed Codex workflow when you want coding
    sessions in the same spatial interface.
+
+The v2.0.39 preview (JSOS Core `2.0.13`, JSOS HUD `2.0.37`) adds an explicit
+**Connect via Hi Rokid** path over CXR-L while retaining the direct Bluetooth
+CXR-M path.
 
 For requirements, signing notes, and the complete connection flow, see
 [docs/INSTALL.md](docs/INSTALL.md).
@@ -133,7 +137,7 @@ find it too.
 ```mermaid
 flowchart LR
     OC["OpenClaw Gateway"] -->|WebSocket| CORE["JSOS Core<br/>Android"]
-    CORE -->|Rokid CXR| HUD["JSOS HUD<br/>Rokid glasses"]
+    CORE -->|CXR-M direct or Hi Rokid CXR-L| HUD["JSOS HUD<br/>Rokid glasses"]
     CORE -->|Wear Data Layer| WATCH["JSOS Watch<br/>Wear OS"]
     CORE -. optional .-> CODEX["Codex workflow<br/>user-managed host"]
 ```

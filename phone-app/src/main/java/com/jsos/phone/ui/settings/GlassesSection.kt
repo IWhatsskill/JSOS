@@ -1,5 +1,8 @@
 package com.jsos.phone.ui.settings
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -68,17 +71,25 @@ fun GlassesSection(
     onDisconnectGlasses: () -> Unit,
     onClearSn: () -> Unit,
     onCancelReconnect: () -> Unit,
-    onRetryReconnect: () -> Unit = {},
     hasCachedSn: Boolean,
     cachedSn: String?,
     cachedDeviceName: String?,
+    modifier: Modifier = Modifier,
+    onRetryReconnect: () -> Unit = {},
     wakeOnStreamEnabled: Boolean = true,
     onWakeOnStreamChange: (Boolean) -> Unit = {},
     glassBrightness: Int = 0,
     onGlassBrightnessChange: (Int) -> Unit = {},
-    modifier: Modifier = Modifier,
+    hiRokidInstalled: Boolean = false,
+    onCreateHiRokidAuthorizationIntent: () -> Intent? = { null },
+    onHiRokidAuthorizationResult: (Int, Intent?) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
+    val hiRokidAuthorizationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        onHiRokidAuthorizationResult(result.resultCode, result.data)
+    }
     val credentialStore = remember(context) { RokidCredentialStore(context) }
     var credentialsConfigured by remember(credentialStore) {
         mutableStateOf(credentialStore.isConfigured())
@@ -112,7 +123,15 @@ fun GlassesSection(
 
             when (state) {
                 is GlassesConnectionManager.ConnectionState.Disconnected ->
-                    DisconnectedContent(onStartScanning)
+                    DisconnectedContent(
+                        hiRokidInstalled = hiRokidInstalled,
+                        onConnectViaHiRokid = {
+                            onCreateHiRokidAuthorizationIntent()?.let {
+                                hiRokidAuthorizationLauncher.launch(it)
+                            }
+                        },
+                        onScanDirect = onStartScanning,
+                    )
 
                 is GlassesConnectionManager.ConnectionState.Scanning ->
                     ScanningContent(discoveredDevices, onStopScanning, onConnectDevice)
@@ -131,6 +150,7 @@ fun GlassesSection(
                 is GlassesConnectionManager.ConnectionState.Connected ->
                     ConnectedContent(
                         deviceName = state.deviceName,
+                        transport = state.transport,
                         hasCachedSn = hasCachedSn,
                         cachedSn = cachedSn,
                         cachedDeviceName = cachedDeviceName,
@@ -301,23 +321,45 @@ private fun DebugModeContent(state: GlassesConnectionManager.ConnectionState) {
 }
 
 @Composable
-private fun DisconnectedContent(onScan: () -> Unit) {
+private fun DisconnectedContent(
+    hiRokidInstalled: Boolean,
+    onConnectViaHiRokid: () -> Unit,
+    onScanDirect: () -> Unit,
+) {
     StatusRow(
         color = JsosPalette.Disabled,
         title = "Not connected",
-        subtitle = "Tap Scan to find nearby glasses",
+        subtitle = if (hiRokidInstalled) {
+            "Connect through Hi Rokid or use direct Bluetooth"
+        } else {
+            "Install Hi Rokid or use direct Bluetooth"
+        },
     )
 
     Spacer(Modifier.height(16.dp))
 
     Button(
-        onClick = onScan,
+        onClick = onConnectViaHiRokid,
+        enabled = hiRokidInstalled,
         modifier = Modifier.fillMaxWidth(),
         colors = jsosPrimaryButtonColors(),
     ) {
+        Icon(Icons.AutoMirrored.Filled.BluetoothSearching, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Connect via Hi Rokid")
+    }
+
+    Spacer(Modifier.height(8.dp))
+
+    OutlinedButton(
+        onClick = onScanDirect,
+        modifier = Modifier.fillMaxWidth(),
+        border = jsosPanelBorder(alpha = 0.55f),
+        colors = jsosOutlinedButtonColors(),
+    ) {
         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text("Scan for Glasses")
+        Text("Direct Bluetooth (CXR-M)")
     }
 }
 
@@ -465,6 +507,7 @@ private fun ReconnectingContent(attempt: Int, nextRetryMs: Long, onCancel: () ->
 @Composable
 private fun ConnectedContent(
     deviceName: String,
+    transport: GlassesConnectionManager.Transport,
     hasCachedSn: Boolean,
     cachedSn: String?,
     cachedDeviceName: String?,
@@ -484,9 +527,10 @@ private fun ConnectedContent(
     )
 
     // Wake on stream toggle
-    Spacer(Modifier.height(16.dp))
+    if (transport == GlassesConnectionManager.Transport.DIRECT_CXR_M) {
+        Spacer(Modifier.height(16.dp))
 
-    Surface(
+        Surface(
         shape = RoundedCornerShape(12.dp),
         color = JsosPalette.CardDark.copy(alpha = 0.72f),
         border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.34f)),
@@ -530,8 +574,8 @@ private fun ConnectedContent(
         color = JsosPalette.CardDark.copy(alpha = 0.72f),
         border = BorderStroke(1.dp, JsosPalette.Cyan.copy(alpha = 0.34f)),
         modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
             val sanitizedBrightness = glassBrightness.coerceIn(
                 RokidSdkManager.GLASS_BRIGHTNESS_MIN,
                 RokidSdkManager.GLASS_BRIGHTNESS_MAX,
@@ -573,10 +617,11 @@ private fun ConnectedContent(
                 color = JsosPalette.Muted,
                 fontFamily = FontFamily.Monospace,
             )
+            }
         }
     }
     // Paired device card
-    if (hasCachedSn) {
+    if (hasCachedSn && transport == GlassesConnectionManager.Transport.DIRECT_CXR_M) {
         Spacer(Modifier.height(16.dp))
 
         Surface(

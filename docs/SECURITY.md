@@ -32,6 +32,11 @@ Runtime OpenClaw, OpenAI, ElevenLabs, and device-identity secrets are stored in 
 
 JSOS Core does not compile Rokid CXR credentials into the APK. The phone app asks for the Rokid access key and client secret at runtime in the HUD/Rokid settings area, stores them locally, and uses them for Rokid CXR pairing, SN verification, and HUD deployment.
 
+For CXR-L, the Global Hi Rokid app returns a short-lived authorization token.
+JSOS keeps that token in process memory, passes it only to the explicit Global
+Hi Rokid media-stream service together with JSOS Core's actual package name,
+and does not log or publish it.
+
 ## Optional R08 Accessibility Recovery
 
 JSOS HUD declares `WRITE_SECURE_SETTINGS` for an optional R08 recovery path,

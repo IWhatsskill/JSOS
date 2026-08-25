@@ -51,8 +51,8 @@ android {
         applicationId = "com.jsos.phone"
         minSdk = 28  // Required by CXR-M SDK
         targetSdk = 34
-        versionCode = 212
-        versionName = "2.0.12-security-hardening"
+        versionCode = 213
+        versionName = "2.0.13-hi-rokid-cxrl"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.*
 import android.content.Context
+import android.content.Intent
 import android.os.ParcelUuid
 import android.util.Base64
 import android.util.Log
@@ -17,7 +18,7 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * Manages connection to Rokid Glasses using CXR-M SDK
+ * Manages connection to Rokid Glasses using direct CXR-M or Hi Rokid CXR-L.
  * Supports debug mode for emulator testing via WebSocket
  *
  * Connection flow:
@@ -27,6 +28,11 @@ import java.util.UUID
  * 4. Keep the Bluetooth/CXR-M bridge alive for message and hardware control.
  */
 class GlassesConnectionManager(private val context: Context) {
+    enum class Transport {
+        DIRECT_CXR_M,
+        HI_ROKID_CXR_L,
+        DEBUG_WEBSOCKET,
+    }
 
     companion object {
         private const val TAG = "GlassesConnection"
@@ -42,6 +48,10 @@ class GlassesConnectionManager(private val context: Context) {
         private const val MAX_DIRECT_MESSAGE_CHARS = 420
         private const val CHUNK_DATA_CHARS = 300
         private const val MAX_CHUNKED_MESSAGE_BYTES = 450 * 1024
+        private const val TRANSPORT_PREFS = "jsos_glasses_transport"
+        private const val TRANSPORT_KEY = "preferred_transport"
+        private const val TRANSPORT_HI_ROKID = "hi_rokid_cxr_l"
+        private const val TRANSPORT_DIRECT = "direct_cxr_m"
 
         // Rokid BLE Service UUID (glasses advertise with this UUID)
         val ROKID_SERVICE_UUID: UUID = UUID.fromString("00009100-0000-1000-8000-00805f9b34fb")
@@ -61,7 +71,10 @@ class GlassesConnectionManager(private val context: Context) {
         object Disconnected : ConnectionState()
         object Scanning : ConnectionState()
         object Connecting : ConnectionState()
-        data class Connected(val deviceName: String) : ConnectionState()
+        data class Connected(
+            val deviceName: String,
+            val transport: Transport = Transport.DIRECT_CXR_M,
+        ) : ConnectionState()
         data class Error(val message: String) : ConnectionState()
         /** Paired but temporarily disconnected; auto-reconnecting in background */
         data class Reconnecting(val attempt: Int, val nextRetryMs: Long) : ConnectionState()
@@ -94,6 +107,14 @@ class GlassesConnectionManager(private val context: Context) {
     private var userInitiatedDisconnect = false
     private var reconnectAttempts = 0
     private var currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
+    private val transportPrefs = context.getSharedPreferences(TRANSPORT_PREFS, Context.MODE_PRIVATE)
+    private var activeTransport = if (
+        transportPrefs.getString(TRANSPORT_KEY, TRANSPORT_DIRECT) == TRANSPORT_HI_ROKID
+    ) {
+        Transport.HI_ROKID_CXR_L
+    } else {
+        Transport.DIRECT_CXR_M
+    }
 
     // Callback for messages from glasses (both BLE and debug modes)
     var onMessageFromGlasses: ((String) -> Unit)? = null
@@ -106,7 +127,7 @@ class GlassesConnectionManager(private val context: Context) {
     val wakeSignalManager = WakeSignalManager(
         sendToGlasses = { message -> sendRawMessageDirect(message) },
         wakeHardwareDisplay = {
-            if (!_debugModeEnabled.value) {
+            if (activeTransport == Transport.DIRECT_CXR_M && !_debugModeEnabled.value) {
                 RokidSdkManager.wakeGlassesScreen()
             } else false
         }
@@ -116,21 +137,36 @@ class GlassesConnectionManager(private val context: Context) {
     private var _activeStreamMessageId: String? = null
 
     init {
+        HiRokidGlassesTransport.initialize(context)
         // Set up SDK callbacks first so any state transitions are captured
         setupSdkCallbacks()
+        setupHiRokidCallbacks()
 
         // Check if the SDK singleton is already connected (e.g. Activity was recreated
         // while the process and Bluetooth connection are still alive). This prevents the
         // new manager instance from starting at Disconnected and killing the foreground
         // service + BT connection.
-        if (RokidSdkManager.isReady() && RokidSdkManager.isConnected()) {
+        if (HiRokidGlassesTransport.isConnected()) {
+            activeTransport = Transport.HI_ROKID_CXR_L
+            _connectionState.value = ConnectionState.Connected(
+                "Rokid Glasses via Hi Rokid",
+                Transport.HI_ROKID_CXR_L,
+            )
+            wakeSignalManager.handleGlassesConnected()
+        } else if (
+            activeTransport == Transport.DIRECT_CXR_M &&
+            RokidSdkManager.isReady() &&
+            RokidSdkManager.isConnected()
+        ) {
+            activeTransport = Transport.DIRECT_CXR_M
             _connectionState.value = ConnectionState.Connected("Rokid Glasses")
             Log.i(TAG, "SDK already connected on init - restored Connected state (device name redacted)")
         }
     }
 
     private fun setupSdkCallbacks() {
-        RokidSdkManager.onGlassesConnected = {
+        RokidSdkManager.onGlassesConnected = directConnected@{
+            if (activeTransport != Transport.DIRECT_CXR_M) return@directConnected
             _connectionState.value = ConnectionState.Connected("Rokid Glasses")
             // Reset reconnect state on successful connection
             reconnectAttempts = 0
@@ -143,7 +179,8 @@ class GlassesConnectionManager(private val context: Context) {
             Log.d(TAG, "SDK: Glasses connected")
         }
 
-        RokidSdkManager.onGlassesDisconnected = {
+        RokidSdkManager.onGlassesDisconnected = directDisconnected@{
+            if (activeTransport != Transport.DIRECT_CXR_M) return@directDisconnected
             _connectionState.value = ConnectionState.Disconnected
             // Notify wake signal manager of disconnection
             wakeSignalManager.handleGlassesDisconnected()
@@ -158,7 +195,8 @@ class GlassesConnectionManager(private val context: Context) {
             }
         }
 
-        RokidSdkManager.onBluetoothFailed = { error ->
+        RokidSdkManager.onBluetoothFailed = directFailed@{ error ->
+            if (activeTransport != Transport.DIRECT_CXR_M) return@directFailed
             Log.e(TAG, "SDK: Bluetooth failed (redacted)")
 
             // Schedule reconnect if this wasn't user-initiated.
@@ -173,33 +211,62 @@ class GlassesConnectionManager(private val context: Context) {
         }
 
         RokidSdkManager.onMessageFromGlasses = handleGlassesMsg@{ cmd, caps ->
-            // Notify wake signal manager of activity (glasses is responsive)
-            wakeSignalManager.handleGlassesActivity()
-
-            // Check for wake_ack message
-            try {
-                val json = JSONObject(cmd)
-                if (json.optString("type") == "wake_ack") {
-                    val ready = json.optBoolean("ready", true)
-                    wakeSignalManager.handleWakeAck(ready)
-                    Log.d(TAG, "Received wake_ack from glasses: ready=$ready")
-                    return@handleGlassesMsg
-                }
-            } catch (_: Exception) { }
-
-            // Forward messages from SDK to our callback
-            onMessageFromGlasses?.invoke(cmd)
+            if (activeTransport == Transport.DIRECT_CXR_M) handleIncomingMessage(cmd)
         }
 
         // AI scene events (glasses long-press triggers voice input)
-        RokidSdkManager.onAiKeyDown = {
+        RokidSdkManager.onAiKeyDown = directAiKey@{
+            if (activeTransport != Transport.DIRECT_CXR_M) return@directAiKey
             Log.d(TAG, "SDK: AI key down (voice activation)")
             onAiKeyDown?.invoke()
         }
-        RokidSdkManager.onAiExit = {
+        RokidSdkManager.onAiExit = directAiExit@{
+            if (activeTransport != Transport.DIRECT_CXR_M) return@directAiExit
             Log.d(TAG, "SDK: AI scene exited")
             onAiExit?.invoke()
         }
+    }
+
+    private fun setupHiRokidCallbacks() {
+        HiRokidGlassesTransport.onConnected = hiConnected@{
+            if (activeTransport != Transport.HI_ROKID_CXR_L) return@hiConnected
+            _connectionState.value = ConnectionState.Connected(
+                "Rokid Glasses via Hi Rokid",
+                Transport.HI_ROKID_CXR_L,
+            )
+            wakeSignalManager.handleGlassesConnected()
+            Log.i(TAG, "CXR-L: glasses connected through Hi Rokid")
+        }
+        HiRokidGlassesTransport.onDisconnected = hiDisconnected@{
+            if (activeTransport != Transport.HI_ROKID_CXR_L) return@hiDisconnected
+            _connectionState.value = ConnectionState.Disconnected
+            wakeSignalManager.handleGlassesDisconnected()
+            Log.i(TAG, "CXR-L: Hi Rokid/glasses link disconnected")
+        }
+        HiRokidGlassesTransport.onFailure = { message ->
+            if (activeTransport == Transport.HI_ROKID_CXR_L) {
+                _connectionState.value = ConnectionState.Error(message)
+            }
+        }
+        HiRokidGlassesTransport.onMessageFromGlasses = { message ->
+            if (activeTransport == Transport.HI_ROKID_CXR_L) handleIncomingMessage(message)
+        }
+    }
+
+    private fun handleIncomingMessage(message: String) {
+        wakeSignalManager.handleGlassesActivity()
+        try {
+            val json = JSONObject(message)
+            if (json.optString("type") == "wake_ack") {
+                val ready = json.optBoolean("ready", true)
+                wakeSignalManager.handleWakeAck(ready)
+                Log.d(TAG, "Received wake_ack from glasses: ready=$ready")
+                return
+            }
+        } catch (_: Exception) {
+            // Non-JSON messages are forwarded unchanged for compatibility.
+        }
+        onMessageFromGlasses?.invoke(message)
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -246,6 +313,8 @@ class GlassesConnectionManager(private val context: Context) {
             Log.d(TAG, "Debug mode enabled - skipping BLE scan")
             return
         }
+
+        switchToDirectTransport()
 
         if (bluetoothAdapter?.isEnabled != true) {
             _connectionState.value = ConnectionState.Error("Bluetooth is not enabled")
@@ -304,6 +373,7 @@ class GlassesConnectionManager(private val context: Context) {
      * Connect to a specific device from the discovered list
      */
     fun connectToDevice(device: DiscoveredDevice) {
+        switchToDirectTransport()
         stopScanning()
         userInitiatedDisconnect = false
         _connectionState.value = ConnectionState.Connecting
@@ -318,6 +388,7 @@ class GlassesConnectionManager(private val context: Context) {
      * Requires both socketUuid and macAddress from previous connection.
      */
     fun connectWithSavedInfo(socketUuid: String, macAddress: String) {
+        switchToDirectTransport()
         userInitiatedDisconnect = false
         _connectionState.value = ConnectionState.Connecting
         Log.d(TAG, "Reconnecting with saved connection info")
@@ -329,6 +400,7 @@ class GlassesConnectionManager(private val context: Context) {
      * Attempt to reconnect using saved connection info
      */
     fun reconnect(): Boolean {
+        switchToDirectTransport()
         userInitiatedDisconnect = false
         _connectionState.value = ConnectionState.Connecting
         return RokidSdkManager.reconnect()
@@ -347,6 +419,14 @@ class GlassesConnectionManager(private val context: Context) {
     fun tryAutoReconnectOnStartup(): Boolean {
         if (_debugModeEnabled.value) {
             Log.d(TAG, "Auto-reconnect skipped: debug mode enabled")
+            return false
+        }
+        if (HiRokidGlassesTransport.isConnected()) {
+            Log.d(TAG, "Auto-reconnect skipped: Hi Rokid transport is connected")
+            return false
+        }
+        if (preferredTransport() == Transport.HI_ROKID_CXR_L) {
+            Log.d(TAG, "Auto-reconnect skipped: Hi Rokid is the selected transport")
             return false
         }
 
@@ -391,6 +471,8 @@ class GlassesConnectionManager(private val context: Context) {
         resetReconnectState()
         if (_debugModeEnabled.value) {
             stopDebugServer()
+        } else if (activeTransport == Transport.HI_ROKID_CXR_L) {
+            HiRokidGlassesTransport.disconnect()
         } else {
             RokidSdkManager.disconnect()
         }
@@ -398,6 +480,39 @@ class GlassesConnectionManager(private val context: Context) {
         // Explicitly stop the foreground service on user-initiated disconnect.
         // The LaunchedEffect won't stop it because hasSavedConnectionInfo() is still true.
         com.jsos.phone.service.GlassesConnectionService.stop(context)
+    }
+
+    fun isHiRokidInstalled(): Boolean = HiRokidGlassesTransport.isHiRokidInstalled()
+
+    fun createHiRokidAuthorizationIntent(): Intent? =
+        HiRokidGlassesTransport.createAuthorizationIntent()
+
+    fun connectViaHiRokid(resultCode: Int, data: Intent?) {
+        stopScanning()
+        resetReconnectState()
+        userInitiatedDisconnect = true
+        activeTransport = Transport.HI_ROKID_CXR_L
+        transportPrefs.edit().putString(TRANSPORT_KEY, TRANSPORT_HI_ROKID).apply()
+        _connectionState.value = ConnectionState.Connecting
+        RokidSdkManager.disconnect()
+        HiRokidGlassesTransport.handleAuthorizationResult(resultCode, data)
+    }
+
+    private fun switchToDirectTransport() {
+        if (activeTransport == Transport.HI_ROKID_CXR_L) {
+            HiRokidGlassesTransport.disconnect()
+        }
+        activeTransport = Transport.DIRECT_CXR_M
+        transportPrefs.edit().putString(TRANSPORT_KEY, TRANSPORT_DIRECT).apply()
+        userInitiatedDisconnect = false
+    }
+
+    private fun preferredTransport(): Transport {
+        return if (transportPrefs.getString(TRANSPORT_KEY, TRANSPORT_DIRECT) == TRANSPORT_HI_ROKID) {
+            Transport.HI_ROKID_CXR_L
+        } else {
+            Transport.DIRECT_CXR_M
+        }
     }
 
     /**
@@ -465,7 +580,7 @@ class GlassesConnectionManager(private val context: Context) {
     }
 
     /**
-     * Retry reconnect immediately — cancel the current backoff wait and attempt now.
+     * Retry reconnect immediately - cancel the current backoff wait and attempt now.
      */
     fun retryReconnectNow() {
         reconnectJob?.cancel()
@@ -517,6 +632,10 @@ class GlassesConnectionManager(private val context: Context) {
             return
         }
 
+        if (activeTransport == Transport.HI_ROKID_CXR_L) {
+            HiRokidGlassesTransport.disconnect()
+        }
+        activeTransport = Transport.DEBUG_WEBSOCKET
         Log.i(TAG, "Enabling debug mode - starting WebSocket server on port ${DebugGlassesServer.DEFAULT_PORT}")
         _debugModeEnabled.value = true
 
@@ -543,6 +662,7 @@ class GlassesConnectionManager(private val context: Context) {
     fun disableDebugMode() {
         stopDebugServer()
         _debugModeEnabled.value = false
+        activeTransport = preferredTransport()
         _connectionState.value = ConnectionState.Disconnected
         Log.i(TAG, "Debug mode disabled")
     }
@@ -550,14 +670,6 @@ class GlassesConnectionManager(private val context: Context) {
     private fun stopDebugServer() {
         debugServer?.stop()
         debugServer = null
-    }
-
-    /**
-     * Wake glasses from a ring input without forwarding the first gesture.
-     * Returns true if the caller should consume this ring event.
-     */
-    fun wakeFromRingOnly(): Boolean {
-        return wakeSignalManager.wakeOnlyIfNeeded("ring")
     }
 
     /**
@@ -638,6 +750,9 @@ class GlassesConnectionManager(private val context: Context) {
             if (!sent) {
                 Log.w(TAG, "sendRawMessageDirect: debugServer.sendToGlasses returned false (no client?)")
             }
+        } else if (activeTransport == Transport.HI_ROKID_CXR_L) {
+            val sent = HiRokidGlassesTransport.send(jsonMessage)
+            if (!sent) Log.w(TAG, "CXR-L message send failed")
         } else {
             RokidSdkManager.sendToGlasses(jsonMessage)
         }
