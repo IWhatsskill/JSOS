@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.SystemClock
 import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -21,6 +22,7 @@ class JsosRingAccessibilityService : AccessibilityService() {
     private var commandReceiverRegistered = false
     private var tripleTapAction = R08RingTapAction.ROKID_AI
     private var quadrupleTapAction = R08RingTapAction.PHOTO
+    private var suppressNativeAiUntilMs = 0L
 
     private val commandReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -38,6 +40,13 @@ class JsosRingAccessibilityService : AccessibilityService() {
                     val submitted = r08BleController?.forgetBondedR08()
                         ?: R08BleController(this@JsosRingAccessibilityService).forgetBondedR08()
                     Log.i(TAG, "command forget submitted=$submitted")
+                }
+                COMMAND_SUPPRESS_NATIVE_AI_ONCE -> {
+                    suppressNativeAiUntilMs =
+                        SystemClock.uptimeMillis() + NATIVE_AI_SUPPRESSION_WINDOW_MS
+                    if (!closeNativeAiOpenedByHardwareVoice()) {
+                        Log.i(TAG, "armed one-shot native AI suppression for JSOS hardware voice")
+                    }
                 }
                 COMMAND_SYNC_ACTIONS -> {
                     tripleTapAction = R08RingTapAction.fromId(
@@ -89,6 +98,11 @@ class JsosRingAccessibilityService : AccessibilityService() {
                 packageName = event.packageName?.toString().orEmpty(),
                 className = event.className?.toString().orEmpty()
             )
+            if (SystemClock.uptimeMillis() <= suppressNativeAiUntilMs &&
+                closeNativeAiOpenedByHardwareVoice()
+            ) {
+                return
+            }
         }
     }
 
@@ -173,6 +187,18 @@ class JsosRingAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun closeNativeAiOpenedByHardwareVoice(): Boolean {
+        if (!::navigator.isInitialized ||
+            !navigator.isNativeRokidAssistantDialogActive()
+        ) {
+            return false
+        }
+        suppressNativeAiUntilMs = 0L
+        navigator.back()
+        Log.i(TAG, "closed native AI opened by JSOS hardware voice hold")
+        return true
+    }
+
     private fun executeMappedTapAction(tapCount: Int) {
         val action = if (tapCount >= 4) quadrupleTapAction else tripleTapAction
         val sent = R08RingActionSettings.executeGlobal(this, action)
@@ -209,10 +235,12 @@ class JsosRingAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "JSOSRingSvc"
+        private const val NATIVE_AI_SUPPRESSION_WINDOW_MS = 2_000L
         const val ACTION_COMMAND = "com.jsos.glasses.R08_COMMAND"
         const val EXTRA_COMMAND = "command"
         const val COMMAND_RECONNECT = "reconnect"
         const val COMMAND_FORGET = "forget"
+        const val COMMAND_SUPPRESS_NATIVE_AI_ONCE = "suppress_native_ai_once"
         const val COMMAND_SYNC_ACTIONS = "sync_actions"
         const val EXTRA_TRIPLE_TAP_ACTION = "triple_tap_action"
         const val EXTRA_QUADRUPLE_TAP_ACTION = "quadruple_tap_action"

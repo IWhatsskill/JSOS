@@ -76,6 +76,11 @@ class GlassesConnectionManager(private val context: Context) {
         val device: BluetoothDevice
     )
 
+    data class PhotoCaptureResult(
+        val photoBytes: ByteArray? = null,
+        val errorMessage: String? = null,
+    )
+
     sealed class ConnectionState {
         object Disconnected : ConnectionState()
         object Scanning : ConnectionState()
@@ -502,6 +507,49 @@ class GlassesConnectionManager(private val context: Context) {
         _connectionState.value = ConnectionState.Connecting
         RokidSdkManager.disconnect()
         HiRokidGlassesTransport.handleAuthorizationResult(resultCode, data)
+    }
+
+    /** Captures one photo through the transport that currently owns the glasses link. */
+    fun takeGlassPhoto(
+        width: Int = 1280,
+        height: Int = 720,
+        quality: Int = 75,
+        onResult: (PhotoCaptureResult) -> Unit,
+    ): Boolean {
+        if (_debugModeEnabled.value) return false
+        return when (activeTransport) {
+            Transport.HI_ROKID_CXR_L -> HiRokidGlassesTransport.takePhoto(
+                width = width,
+                height = height,
+                quality = quality,
+            ) { photoBytes, errorMessage ->
+                onResult(
+                    PhotoCaptureResult(
+                        photoBytes = photoBytes,
+                        errorMessage = errorMessage,
+                    ),
+                )
+            }
+            Transport.DIRECT_CXR_M -> {
+                val status = RokidSdkManager.takeGlassPhotoGlobal(
+                    width = width,
+                    height = height,
+                    quality = quality,
+                ) { directStatus, photoBytes ->
+                    onResult(
+                        if (photoBytes != null && photoBytes.isNotEmpty()) {
+                            PhotoCaptureResult(photoBytes = photoBytes)
+                        } else {
+                            PhotoCaptureResult(
+                                errorMessage = "Rokid photo failed: ${directStatus ?: "unknown"}",
+                            )
+                        },
+                    )
+                }
+                status != null
+            }
+            Transport.DEBUG_WEBSOCKET -> false
+        }
     }
 
     private fun switchToDirectTransport() {

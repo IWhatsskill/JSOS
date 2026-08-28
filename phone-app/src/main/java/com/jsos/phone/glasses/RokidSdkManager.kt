@@ -847,6 +847,40 @@ object RokidSdkManager {
         return cxrApi?.takeGlassPhotoGlobal(width, height, quality, photoResultCallback)
     }
 
+    /**
+     * Takes one global glasses photo with a callback owned by this request.
+     *
+     * Unlike [onPhotoResult], this overload does not use mutable global callback state. Callers
+     * must still serialize their own requests because the Rokid camera transport does not expose
+     * request identifiers.
+     */
+    fun takeGlassPhotoGlobal(
+        width: Int = 1280,
+        height: Int = 720,
+        quality: Int = 75,
+        onResult: (status: ValueUtil.CxrStatus?, photoBytes: ByteArray?) -> Unit,
+    ): ValueUtil.CxrStatus? {
+        if (!isConnected()) {
+            Log.w(TAG, "Cannot take scoped glass photo: glasses not connected")
+            return null
+        }
+
+        val scopedCallback = object : PhotoResultCallback {
+            override fun onPhotoResult(status: ValueUtil.CxrStatus?, photo: ByteArray?) {
+                Log.d(TAG, "Scoped photo result: status=$status, bytes=${photo?.size}")
+                onResult(status, photo)
+            }
+        }
+
+        return try {
+            Log.d(TAG, "Taking scoped glass photo (global): ${width}x${height} quality=$quality")
+            cxrApi?.takeGlassPhotoGlobal(width, height, quality, scopedCallback)
+        } catch (error: Exception) {
+            Log.e(TAG, "Scoped glass photo request failed (redacted)", error)
+            null
+        }
+    }
+
     fun setAiEventHandlingEnabled(enabled: Boolean) {
         if (aiEventHandlingEnabled == enabled && isInitialized) return
 

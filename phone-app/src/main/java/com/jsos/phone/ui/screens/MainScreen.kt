@@ -1070,9 +1070,13 @@ fun MainScreen() {
     fun capturePendingPhoto() {
         android.util.Log.d("MainScreen", "Taking photo from glasses camera")
         android.widget.Toast.makeText(context, "Capturing photo...", android.widget.Toast.LENGTH_SHORT).show()
-        RokidSdkManager.onPhotoResult = { status, photoBytes ->
+        val started = glassesManager.takeGlassPhoto(640, 480, 75) { result ->
             mainHandler.post {
-                android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
+                val photoBytes = result.photoBytes
+                android.util.Log.d(
+                    "MainScreen",
+                    "Photo callback: error=${result.errorMessage}, bytes=${photoBytes?.size}",
+                )
                 if (photoBytes != null && photoBytes.isNotEmpty()) {
                     val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
                     pendingPhotos = listOf(base64)
@@ -1087,19 +1091,28 @@ fun MainScreen() {
                     }
                     glassesManager.sendRawMessage(resultMsg.toString())
                 } else {
-                    android.util.Log.e("MainScreen", "Photo capture failed: status=$status")
-                    android.widget.Toast.makeText(context, "Photo failed: $status", android.widget.Toast.LENGTH_LONG).show()
+                    val error = result.errorMessage ?: "unknown error"
+                    android.util.Log.e("MainScreen", "Photo capture failed: $error")
+                    android.widget.Toast.makeText(context, "Photo failed: $error", android.widget.Toast.LENGTH_LONG).show()
                     val resultMsg = org.json.JSONObject().apply {
                         put("type", "photo_result")
                         put("status", "error")
-                        put("message", "Capture failed")
+                        put("message", error)
                     }
                     glassesManager.sendRawMessage(resultMsg.toString())
                 }
-                RokidSdkManager.onPhotoResult = null
             }
         }
-        RokidSdkManager.takeGlassPhotoGlobal(640, 480, 75)
+        if (!started) {
+            android.widget.Toast.makeText(
+                context,
+                "Photo capture unavailable",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            glassesManager.sendRawMessage(
+                """{"type":"photo_result","status":"error","message":"Photo capture unavailable"}""",
+            )
+        }
     }
     fun submitAgentWakeMessage(session: SessionInfo, message: String) {
         if (message.isBlank()) return
@@ -2011,9 +2024,13 @@ fun MainScreen() {
                     }
                     "take_photo" -> {
                         android.util.Log.d("MainScreen", "Glasses requested photo capture")
-                        RokidSdkManager.onPhotoResult = { status, photoBytes ->
+                        val started = glassesManager.takeGlassPhoto(640, 480, 75) { result ->
                             mainHandler.post {
-                                android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
+                                val photoBytes = result.photoBytes
+                                android.util.Log.d(
+                                    "MainScreen",
+                                    "Photo callback: error=${result.errorMessage}, bytes=${photoBytes?.size}",
+                                )
                                 if (photoBytes != null && photoBytes.isNotEmpty()) {
                                     val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
                                     pendingPhotos = listOf(base64)
@@ -2026,18 +2043,22 @@ fun MainScreen() {
                                     }
                                     glassesManager.sendRawMessage(resultMsg.toString())
                                 } else {
-                                    android.util.Log.e("MainScreen", "Photo capture failed: status=$status")
+                                    val error = result.errorMessage ?: "unknown error"
+                                    android.util.Log.e("MainScreen", "Photo capture failed: $error")
                                     val resultMsg = org.json.JSONObject().apply {
                                         put("type", "photo_result")
                                         put("status", "error")
-                                        put("message", "Capture failed: $status")
+                                        put("message", error)
                                     }
                                     glassesManager.sendRawMessage(resultMsg.toString())
                                 }
-                                RokidSdkManager.onPhotoResult = null
                             }
                         }
-                        RokidSdkManager.takeGlassPhotoGlobal(640, 480, 75)
+                        if (!started) {
+                            glassesManager.sendRawMessage(
+                                """{"type":"photo_result","status":"error","message":"Photo capture unavailable"}""",
+                            )
+                        }
                     }
                     "remove_photo" -> {
                         val all = json.optBoolean("all", false)
@@ -2152,9 +2173,13 @@ fun MainScreen() {
                     onClick = {
                         android.util.Log.d("MainScreen", "Taking photo from glasses camera")
                         android.widget.Toast.makeText(context, "Capturing photo...", android.widget.Toast.LENGTH_SHORT).show()
-                        RokidSdkManager.onPhotoResult = { status, photoBytes ->
+                        val started = glassesManager.takeGlassPhoto(640, 480, 75) { result ->
                             mainHandler.post {
-                                android.util.Log.d("MainScreen", "Photo callback: status=$status, bytes=${photoBytes?.size}")
+                                val photoBytes = result.photoBytes
+                                android.util.Log.d(
+                                    "MainScreen",
+                                    "Photo callback: error=${result.errorMessage}, bytes=${photoBytes?.size}",
+                                )
                                 if (photoBytes != null && photoBytes.isNotEmpty()) {
                                     val base64 = android.util.Base64.encodeToString(photoBytes, android.util.Base64.NO_WRAP)
                                     pendingPhotos = listOf(base64)
@@ -2169,13 +2194,19 @@ fun MainScreen() {
                                     }
                                     glassesManager.sendRawMessage(resultMsg.toString())
                                 } else {
-                                    android.util.Log.e("MainScreen", "Photo capture failed: status=$status")
-                                    android.widget.Toast.makeText(context, "Photo failed: $status", android.widget.Toast.LENGTH_LONG).show()
+                                    val error = result.errorMessage ?: "unknown error"
+                                    android.util.Log.e("MainScreen", "Photo capture failed: $error")
+                                    android.widget.Toast.makeText(context, "Photo failed: $error", android.widget.Toast.LENGTH_LONG).show()
                                 }
-                                RokidSdkManager.onPhotoResult = null
                             }
                         }
-                        RokidSdkManager.takeGlassPhotoGlobal(640, 480, 75)
+                        if (!started) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Photo capture unavailable",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                        }
                     },
                     enabled = glassesState is GlassesConnectionManager.ConnectionState.Connected
                 ) {

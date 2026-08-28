@@ -14,6 +14,7 @@ import com.rokid.cxr.Caps
 import com.rokid.cxr.link.CXRLink
 import com.rokid.cxr.link.callbacks.ICustomCmdCbk
 import com.rokid.cxr.link.callbacks.ICXRLinkCbk
+import com.rokid.cxr.link.callbacks.IImageStreamCbk
 import com.rokid.cxr.link.utils.CxrDefs
 import com.rokid.sprite.aiapp.externalapp.auth.AuthResult
 import com.rokid.sprite.aiapp.externalapp.auth.AuthorizationHelper
@@ -30,6 +31,7 @@ object HiRokidGlassesTransport {
     private const val AUTH_PACKAGE_EXTRA = "auth_package"
     private const val GLASSES_PACKAGE = "com.jsos.glasses"
     private const val CONNECT_TIMEOUT_MS = 25_000L
+    private const val PHOTO_TIMEOUT_MS = 20_000L
 
     private lateinit var appContext: Context
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -39,6 +41,14 @@ object HiRokidGlassesTransport {
     private var cxrlConnected = false
     private var glassBtConnected = false
     private var readyNotified = false
+    private val photoLock = Any()
+    private var nextPhotoRequestId = 0L
+    private var pendingPhoto: PendingPhoto? = null
+
+    private data class PendingPhoto(
+        val id: Long,
+        val callback: (photoBytes: ByteArray?, errorMessage: String?) -> Unit,
+    )
 
     var onConnected: (() -> Unit)? = null
     var onDisconnected: (() -> Unit)? = null
@@ -85,6 +95,7 @@ object HiRokidGlassesTransport {
 
     fun disconnect() {
         val notify = readyNotified
+        failPendingPhoto("Hi Rokid/glasses link disconnected")
         generation += 1
         disconnectActiveLink()
         link = null
@@ -111,6 +122,40 @@ object HiRokidGlassesTransport {
             Log.e(TAG, "CXR-L custom command failed (redacted)")
             false
         }
+    }
+
+    fun takePhoto(
+        width: Int,
+        height: Int,
+        quality: Int,
+        onResult: (photoBytes: ByteArray?, errorMessage: String?) -> Unit,
+    ): Boolean {
+        val activeLink = link ?: return false
+        if (!isConnected()) return false
+
+        val request = synchronized(photoLock) {
+            if (pendingPhoto != null) return false
+            PendingPhoto(++nextPhotoRequestId, onResult).also { pendingPhoto = it }
+        }
+        val started = runCatching {
+            activeLink.takePhoto(width, height, quality)
+        }.getOrElse {
+            Log.e(TAG, "CXR-L photo request failed (redacted)")
+            false
+        }
+        if (!started) {
+            clearPendingPhoto(request.id)
+            return false
+        }
+
+        mainHandler.postDelayed({
+            finishPendingPhoto(
+                requestId = request.id,
+                photoBytes = null,
+                errorMessage = "Hi Rokid photo capture timed out",
+            )
+        }, PHOTO_TIMEOUT_MS)
+        return true
     }
 
     private fun connect() {
@@ -176,6 +221,34 @@ object HiRokidGlassesTransport {
             fail("Failed to configure Hi Rokid CUSTOMAPP session")
             return
         }
+        // Rokid client-l silently ignores setCXRImageCbk while the session is NONE.
+        // Register only after CUSTOMAPP is configured so received image bytes reach JSOS.
+        newLink.setCXRImageCbk(object : IImageStreamCbk {
+            override fun onImageReceived(data: ByteArray?) {
+                mainHandler.post {
+                    if (currentGeneration != generation) return@post
+                    if (data == null || data.isEmpty()) {
+                        finishPendingPhoto(
+                            photoBytes = null,
+                            errorMessage = "Hi Rokid returned an empty photo",
+                        )
+                    } else {
+                        finishPendingPhoto(photoBytes = data, errorMessage = null)
+                    }
+                }
+            }
+
+            override fun onImageError(errorCode: Int, message: String?) {
+                mainHandler.post {
+                    if (currentGeneration != generation) return@post
+                    Log.e(TAG, "CXR-L photo failed code=$errorCode")
+                    finishPendingPhoto(
+                        photoBytes = null,
+                        errorMessage = "Hi Rokid photo failed ($errorCode)",
+                    )
+                }
+            }
+        })
         if (!bindGlobalHiRokidService(newLink, authToken)) {
             fail("Hi Rokid service bind failed. Open Hi Rokid and reconnect the glasses")
             return
@@ -194,6 +267,7 @@ object HiRokidGlassesTransport {
             onConnected?.invoke()
         } else if (!ready && readyNotified) {
             readyNotified = false
+            failPendingPhoto("Hi Rokid/glasses link disconnected")
             onDisconnected?.invoke()
         }
     }
@@ -236,6 +310,7 @@ object HiRokidGlassesTransport {
     }
 
     private fun fail(message: String) {
+        failPendingPhoto(message)
         generation += 1
         disconnectActiveLink()
         link = null
@@ -250,5 +325,29 @@ object HiRokidGlassesTransport {
         val activeLink = link ?: return
         CxrLinkAiEventGuard.uninstall(activeLink)
         runCatching { activeLink.disconnect() }
+    }
+
+    private fun clearPendingPhoto(requestId: Long) {
+        synchronized(photoLock) {
+            if (pendingPhoto?.id == requestId) pendingPhoto = null
+        }
+    }
+
+    private fun failPendingPhoto(message: String) {
+        finishPendingPhoto(photoBytes = null, errorMessage = message)
+    }
+
+    private fun finishPendingPhoto(
+        requestId: Long? = null,
+        photoBytes: ByteArray?,
+        errorMessage: String?,
+    ) {
+        val callback = synchronized(photoLock) {
+            val request = pendingPhoto ?: return
+            if (requestId != null && request.id != requestId) return
+            pendingPhoto = null
+            request.callback
+        }
+        mainHandler.post { callback(photoBytes, errorMessage) }
     }
 }

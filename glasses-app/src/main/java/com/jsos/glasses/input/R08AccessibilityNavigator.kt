@@ -157,6 +157,23 @@ internal class R08AccessibilityNavigator(
             currentClassName == ROKID_LAUNCHER_MUSIC_PAGE_CLASS
     }
 
+    fun isRokidAssistantDialogActive(): Boolean {
+        return currentPackageName == ROKID_ASSISTSERVER_PACKAGE &&
+            currentClassName == ROKID_AI_ASSISTANT_DIALOG_CLASS
+    }
+
+    fun isNativeRokidAssistantDialogActive(): Boolean {
+        if (!isRokidAssistantDialogActive()) return false
+        val root = service.rootInActiveWindow ?: return false
+        if (root.packageName?.toString() != ROKID_ASSISTSERVER_PACKAGE) return false
+        // The native assistant and JS AIUI share this dialog; their root view IDs distinguish them.
+        val jsAiuiVisible = root.findAccessibilityNodeInfosByViewId(ROKID_JS_AIUI_ROOT_VIEW_ID)
+            .any { node -> node.isVisibleToUser && node.isEnabled }
+        if (jsAiuiVisible) return false
+        return root.findAccessibilityNodeInfosByViewId(ROKID_NATIVE_ASSISTANT_ROOT_VIEW_ID)
+            .any { node -> node.isVisibleToUser && node.isEnabled }
+    }
+
     fun isRokidCameraPageActive(): Boolean {
         if (currentPackageName != ROKID_ASSISTSERVER_PACKAGE) return false
         if (currentClassName == ROKID_CAMERA_PAGE_CLASS) return true
@@ -656,6 +673,12 @@ internal class R08AccessibilityNavigator(
         private const val ROKID_LAUNCHER_MUSIC_PAGE_CLASS =
             "com.rokid.os.sprite.launcher.page.music.MusicPageActivity"
         private const val ROKID_ASSISTSERVER_PACKAGE = "com.rokid.os.sprite.assistserver"
+        private const val ROKID_AI_ASSISTANT_DIALOG_CLASS =
+            "com.rokid.sprite.bluetooth.dialog.AiAssistantDialog"
+        private const val ROKID_NATIVE_ASSISTANT_ROOT_VIEW_ID =
+            "com.rokid.os.sprite.assistserver:id/id_fl_ai"
+        private const val ROKID_JS_AIUI_ROOT_VIEW_ID =
+            "com.rokid.os.sprite.assistserver:id/id_fl_jsui"
         private const val ROKID_ASSIST_COMMAND_ACTION = "com.rokid.os.master.assist.server.cmd"
         private const val ROKID_SCENE_TAKE_PICTURE = "take_picture"
         private const val ROKID_CAMERA_PAGE_CLASS =

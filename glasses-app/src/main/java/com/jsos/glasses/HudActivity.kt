@@ -4,8 +4,11 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -33,6 +36,7 @@ import com.jsos.glasses.input.JsosRingAccessibilityService
 import com.jsos.glasses.input.R08BleController
 import com.jsos.glasses.input.R08RingActionSettings
 import com.jsos.glasses.input.R08RingTapAction
+import com.jsos.glasses.input.RokidHardwareVoiceKeyRouter
 import com.jsos.glasses.input.RingMediaKeyHandler
 import com.jsos.glasses.input.RingMediaKeyHandler.RingGesture
 import com.jsos.glasses.input.GestureHandler.Gesture
@@ -89,6 +93,9 @@ import java.util.Locale
 class HudActivity : ComponentActivity() {
 
     companion object {
+        private const val ACTION_ROKID_AI_START = "com.android.action.ACTION_AI_START"
+        private const val ROKID_AI_START_RECEIVER_PRIORITY = 999
+
         val DEBUG_MODE = BuildConfig.DEBUG && isEmulator()
 
         const val DEBUG_HOST = "10.0.2.2"
@@ -144,6 +151,21 @@ class HudActivity : ComponentActivity() {
 
     // Coroutine to clear newPrependCount after fade-in animations complete
     private var clearPrependJob: Job? = null
+    private var hardwareVoiceCandidateJob: Job? = null
+    private var rokidAiStartReceiverRegistered = false
+
+    private val rokidAiStartReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_ROKID_AI_START) return
+            if (hardwareVoiceCandidateJob?.isActive != true) return
+            if (!isOrderedBroadcast) {
+                Log.w(GlassesApp.TAG, "Rokid ACTION_AI_START was not ordered; fallback suppression remains armed")
+                return
+            }
+            abortBroadcast()
+            Log.i(GlassesApp.TAG, "Blocked Rokid ACTION_AI_START before AssistServer")
+        }
+    }
 
     // Debug keyboard input mode
     private var isCapturingKeyboardInput = false
@@ -348,7 +370,13 @@ class HudActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        registerRokidAiStartReceiver()
         refreshRingSetupStatus()
+    }
+
+    override fun onPause() {
+        unregisterRokidAiStartReceiver()
+        super.onPause()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -377,9 +405,24 @@ class HudActivity : ComponentActivity() {
             return handleKeyboardCapture(keyCode, event)
         }
 
-        if (event?.repeatCount ?: 0 > 0) return true
+        val action = event?.action ?: KeyEvent.ACTION_DOWN
+        val repeatCount = event?.repeatCount ?: 0
+        if (RokidHardwareVoiceKeyRouter.cancelsCandidate(keyCode, action, repeatCount)) {
+            cancelHardwareVoiceCandidate("navigation")
+        }
+
+        if (repeatCount > 0) return true
 
         when (keyCode) {
+            KeyEvent.KEYCODE_NOTIFICATION -> {
+                if (RokidHardwareVoiceKeyRouter.startsCandidate(keyCode, action, repeatCount)) {
+                    sendRingServiceCommand(
+                        JsosRingAccessibilityService.COMMAND_SUPPRESS_NATIVE_AI_ONCE,
+                    )
+                    scheduleHardwareVoiceCandidate()
+                }
+                return true
+            }
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_VOLUME_UP -> {
                 handleGesture(Gesture.SWIPE_FORWARD)
                 return true
@@ -411,6 +454,49 @@ class HudActivity : ComponentActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    private fun scheduleHardwareVoiceCandidate() {
+        hardwareVoiceCandidateJob?.cancel()
+        hardwareVoiceCandidateJob = lifecycleScope.launch {
+            delay(RokidHardwareVoiceKeyRouter.HOLD_DELAY_MS)
+            hardwareVoiceCandidateJob = null
+            sendRingServiceCommand(
+                JsosRingAccessibilityService.COMMAND_SUPPRESS_NATIVE_AI_ONCE,
+            )
+            Log.d(GlassesApp.TAG, "Rokid hardware hold -> JSOS voice")
+            handleRingRemoteGesture(Gesture.DOUBLE_TAP)
+        }
+    }
+
+    private fun cancelHardwareVoiceCandidate(reason: String) {
+        val candidate = hardwareVoiceCandidateJob ?: return
+        candidate.cancel()
+        hardwareVoiceCandidateJob = null
+        Log.d(GlassesApp.TAG, "Rokid hardware voice candidate cancelled: $reason")
+    }
+
+    private fun registerRokidAiStartReceiver() {
+        if (rokidAiStartReceiverRegistered) return
+        val filter = IntentFilter(ACTION_ROKID_AI_START).apply {
+            priority = ROKID_AI_START_RECEIVER_PRIORITY
+        }
+        ContextCompat.registerReceiver(
+            this,
+            rokidAiStartReceiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+        rokidAiStartReceiverRegistered = true
+    }
+
+    private fun unregisterRokidAiStartReceiver() {
+        if (!rokidAiStartReceiverRegistered) return
+        try {
+            unregisterReceiver(rokidAiStartReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
+        rokidAiStartReceiverRegistered = false
     }
 
     private fun startKeyboardCapture(initialChar: Char? = null) {
