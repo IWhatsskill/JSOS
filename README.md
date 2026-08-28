@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.40-hi-rokid-ai-coexist"><strong>Download the preview</strong></a>
+  <a href="https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.41-cxrl-photo-jsos-voice"><strong>Download the preview</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
   <a href="docs/videos/JSOS-showcase.mp4"><strong>Watch the demo</strong></a>
   &nbsp;&nbsp;&middot;&nbsp;&nbsp;
@@ -106,9 +106,9 @@ coordinated phone, glasses, and wrist experience.
 ## Quick start
 
 1. Download JSOS Core and JSOS HUD from the
-   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.40-hi-rokid-ai-coexist).
+   [current preview release](https://github.com/IWhatsskill/JSOS/releases/tag/v2.0.41-cxrl-photo-jsos-voice).
    JSOS Watch remains available in source, but is unchanged and not repackaged
-   in v2.0.40.
+   in v2.0.41.
 2. Install JSOS Core on the Android phone and configure the OpenClaw Gateway.
 3. Pair the Rokid glasses through Hi Rokid.
 4. Deploy and launch JSOS HUD on the glasses.
@@ -117,10 +117,11 @@ coordinated phone, glasses, and wrist experience.
 6. Connect the optional user-managed Codex workflow when you want coding
    sessions in the same spatial interface.
 
-The v2.0.40 preview (JSOS Core `2.0.14`, JSOS HUD `2.0.37`) keeps the explicit
-**Connect via Hi Rokid** path over CXR-L while preserving the native Hi Rokid
-assistant. JSOS owns glasses AI-key events only on the direct Bluetooth CXR-M
-path.
+The v2.0.41 preview (JSOS Core `2.0.15`, JSOS HUD `2.0.38`) supports photo
+capture through the active CXR-M or Hi Rokid CXR-L connection. While JSOS HUD
+is active, holding the glasses hardware button for about 1.3 seconds starts
+JSOS Voice and suppresses the native Rokid assistant only for that action. The
+normal Rokid assistant remains available outside an active JSOS voice hold.
 
 For requirements, signing notes, and the complete connection flow, see
 [docs/INSTALL.md](docs/INSTALL.md).
