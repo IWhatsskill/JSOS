@@ -9,9 +9,26 @@ JSOS currently uses the Rokid CXR split-app model:
 | Module | Role | Dependency |
 | --- | --- | --- |
 | `phone-app` | JSOS Core, phone-side bridge | `com.rokid.cxr:client-m:1.2.1` |
+| `phone-app` | Hi Rokid / CXR-L compatibility path | `client-l-1.0.1-jsos-stripped.aar`, derived from `com.rokid.cxr:client-l:1.0.1` |
 | `glasses-app` | JSOS HUD, glasses-side bridge | `com.rokid.cxr:cxr-service-bridge:1.0` |
 
 Both apps currently use `minSdk = 28`.
+
+### Version baseline
+
+Verified on 2026-08-29, the versions above are the versions actually pinned by
+the current JSOS Public source.
+
+Rokid's Maven metadata currently lists `client-m:1.2.2` as the latest release.
+JSOS intentionally remains on its existing, hardware-proven `client-m:1.2.1`
+baseline for now. The newer version has an open Wi-Fi Direct regression report
+for the tested Pixel 9 Pro and Rokid Glasses combination. An update therefore
+requires a separate isolated build and device proof; availability alone is not
+treated as compatibility proof.
+
+The files under `docs/rokid-sdk/` and `docs/rokid-sdk-zh/` are vendor reference
+snapshots. Version strings in their import examples are not JSOS dependency
+declarations. The Gradle files and this table are the current project baseline.
 
 ## Runtime Credentials
 
@@ -80,5 +97,7 @@ Runtime pairing, gateway, and Rokid credential values are stored locally by JSOS
 - [Rokid GitHub](https://github.com/rokid)
 - [RokidGlass GitHub](https://github.com/RokidGlass)
 - [Rokid Maven repository](https://maven.rokid.com/repository/maven-public/)
+- [Rokid `client-m` Maven metadata](https://maven.rokid.com/repository/maven-public/com/rokid/cxr/client-m/maven-metadata.xml)
+- [Open `client-m:1.2.2` Wi-Fi Direct regression report](https://github.com/rokid/community/issues/18)
 - [Rokid developer portal](https://ar.rokid.com)
 - [Rokid-APKs by Anezium](https://github.com/Anezium/Rokid-APKs)
